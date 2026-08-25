@@ -147,4 +147,1916 @@ Now a browser application can highlight the exact region in the PDF.
 
 That's considerably more powerful than an OCR package.
 
-So yes: I'd make it content-aware, but keep the underlying representation generic. PDF parsing → vision → semantic content should be separate layers. That lets you start lightweight and progressively add AI without forcing every user to download a huge model.
+So yes: I'd make it content-aware, but keep the underlying representation generic. PDF parsing → vision → semantic content should be separate layers. That lets you start lightweight and progressively add AI without forcing every user to download a huge model. 
+
+Vectors Absolutely. Vectors are one of the most important pieces if you're making a content-aware PDF vision library.
+
+In fact, I'd make vector understanding a first-class feature, not treat vectors as images.
+
+Why vectors matter
+
+PDFs often contain meaning that OCR/vision would completely miss:
+
+lines and borders → table structure
+rectangles → form fields/cards
+paths → diagrams
+arrows → relationships
+circles → checkboxes/radio buttons
+curves → logos/charts
+text converted to outlines → text that OCR may struggle with
+coordinate geometry → layout
+
+So instead of:
+
+PDF → render → pixels → vision
+
+you want:
+
+                    PDF
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+      Text        Vectors       Images
+        │            │            │
+        └────────────┼────────────┘
+                     ▼
+              Content model
+Vector → semantic content
+
+Imagine the PDF contains:
+
+{
+  type: "path",
+  points: [...],
+  stroke: "#000",
+  width: 1
+}
+
+Your library could recognize that several paths form:
+
+{
+  type: "table",
+  bbox: [50, 200, 550, 500],
+  rows: 8,
+  columns: 4
+}
+
+Or:
+
+{
+  type: "arrow",
+  from: { x: 120, y: 200 },
+  to: { x: 300, y: 200 }
+}
+
+Or:
+
+{
+  type: "checkbox",
+  checked: true,
+  bbox: [...]
+}
+This creates a really interesting concept
+
+You could build a PDF scene graph.
+
+Something like:
+
+document.pages[0].scene
+
+containing:
+
+[
+  {
+    type: "text",
+    content: "Invoice",
+    bbox: [...]
+  },
+  {
+    type: "rect",
+    bbox: [...]
+  },
+  {
+    type: "line",
+    from: [...],
+    to: [...]
+  },
+  {
+    type: "image",
+    bbox: [...]
+  },
+  {
+    type: "table",
+    children: [...]
+  }
+]
+
+Then your semantic layer operates on the scene graph.
+
+That's powerful because you can combine evidence:
+
+TEXT + VECTOR GEOMETRY + IMAGE + POSITION
+                  ↓
+           semantic inference
+
+For example, you don't need an AI model to recognize a table if the PDF already contains perfectly aligned horizontal/vertical lines and text cells.
+
+You could also preserve the original vectors
+
+This is important.
+
+Don't just convert vectors into semantic objects and throw the originals away.
+
+Keep:
+
+{
+  type: "table",
+
+  source: {
+    vectors: [...],
+    text: [...]
+  },
+
+  geometry: {...},
+
+  semantics: {...}
+}
+
+Then users can go both ways:
+
+element.semanticType
+element.sourceVectors
+element.bbox
+element.render()
+This could differentiate your library
+
+There are plenty of PDF/OCR tools.
+
+A library that combines:
+
+PDF primitives + vectors + text + images + spatial relationships + optional ML
+
+into a unified, queryable content graph is much more interesting.
+
+I'd potentially call the core abstraction something like:
+
+PDF Semantic Scene Graph
+
+Then your vision layer becomes only one way of constructing that graph.
+
+And there's a big advantage to doing this in the browser: for native PDFs, you can often extract a lot of semantic information from the original PDF without sending the document anywhere or running expensive vision models.
+
+blob extract 
+
+Yes — but I’d separate Base64 as a transport format from image knowledge/understanding.
+
+If by “Base64 knowledge” you mean having the library understand images embedded in a PDF, that fits very well into the architecture.
+
+Don't make Base64 the core representation
+
+Instead of:
+
+{
+  image: "data:image/png;base64,iVBOR..."
+}
+
+use something like:
+
+{
+  type: "image",
+  id: "img_42",
+  bbox: [100, 200, 500, 600],
+
+  source: {
+    format: "jpeg",
+    width: 1200,
+    height: 800,
+    bytes: 245000
+  }
+}
+
+Then expose the actual data only when requested:
+
+const image = await document.image("img_42");
+
+const base64 = await image.toBase64();
+const blob = await image.toBlob();
+const bitmap = await image.toBitmap();
+
+That gives you much better memory behavior.
+
+But the interesting part is image knowledge
+
+Your image object could have progressively richer information:
+
+{
+  type: "image",
+
+  geometry: {
+    bbox: [...]
+  },
+
+  source: {
+    format: "jpeg",
+    width: 1200,
+    height: 800
+  },
+
+  vision: {
+    objects: [
+      { type: "logo", bbox: [...] },
+      { type: "person", bbox: [...] }
+    ],
+
+    text: [
+      {
+        text: "ACME",
+        bbox: [...]
+      }
+    ],
+
+    description: "...",
+    embeddings: [...]
+  }
+}
+
+So you get:
+
+PDF
+ │
+ ├── Text
+ ├── Vectors
+ ├── Images
+ │    ├── pixels
+ │    ├── OCR
+ │    ├── objects
+ │    ├── embeddings
+ │    └── semantic meaning
+ │
+ └── relationships
+Base64 can be useful for AI models
+
+This becomes particularly useful if you want your library to support multimodal APIs:
+
+const image = await page.images[0];
+
+await vision.analyze(image);
+
+Internally, the adapter could convert it to whatever the model needs:
+
+PDF image
+   ↓
+Blob / ImageBitmap
+   ↓
+model adapter
+   ↓
+Base64 / URL / binary / tensor
+
+The user shouldn't need to know whether the underlying model uses Base64.
+
+I'd go one step further
+
+Have a unified Asset abstraction:
+
+const asset = document.assets[0];
+
+asset.kind       // "image"
+asset.width
+asset.height
+asset.bbox
+
+await asset.blob()
+await asset.bitmap()
+await asset.base64()
+await asset.tensor()
+await asset.embed()
+await asset.analyze()
+
+That lets the same architecture eventually support:
+
+raster images
+vector graphics
+charts
+diagrams
+scanned pages
+extracted figures
+
+So yes, image/Base64 support belongs in the library—but Base64 should be an output/transport adapter, not your internal “knowledge” representation. The internal representation should ideally be structured around content + geometry + relationships + optional visual/semantic features.
+
+Yes. Accessibility could be one of the strongest differentiators for this library.
+
+And PDFs contain quite a bit more than text, vectors, and images. If you're aiming for a genuinely content-aware PDF engine, I'd think of the PDF as a document with multiple layers of information.
+
+What is commonly missed
+Layer	Examples	What your library could expose
+Text	characters, fonts, spans	text + semantic roles + coordinates
+Vectors	paths, lines, rectangles, curves	geometry + inferred meaning
+Images	photos, scans, logos	pixels + OCR + visual semantics
+Annotations	links, highlights, comments	interactive elements
+Forms	text fields, checkboxes, dropdowns	form schema + values
+Structure	headings, paragraphs, lists	semantic document tree
+Tables	cells, borders, columns	structured rows/columns
+Metadata	title, author, dates	document metadata
+Bookmarks	outline/navigation	navigation tree
+Layers	optional content groups	visibility/state
+Attachments	embedded files	asset relationships
+Signatures	digital signatures	signature metadata/validation
+Colors	RGB/CMYK/ICC	color information
+Fonts	embedded/subset fonts	font + encoding information
+Reading order	visual vs logical order	reconstructed reading sequence
+Accessibility	tags, alt text, language	accessibility tree + audit
+Security	permissions/encryption	security metadata
+
+And there's another particularly interesting one:
+
+Relationships
+
+Instead of treating everything as independent objects:
+
+Text
+Image
+Vector
+Text
+Table
+
+you can model relationships:
+
+Heading
+  ↓
+Paragraph
+  ↓
+Figure ──→ Caption
+  ↓
+Table
+  ↓
+Footnote
+
+That is where your content-aware idea becomes substantially more powerful.
+
+Accessibility is a great feature
+
+I'd actually make accessibility a dedicated subsystem:
+
+const report = await document.accessibility.audit();
+
+Output:
+
+{
+  score: 82,
+
+  issues: [
+    {
+      type: "missing_alt_text",
+      page: 3,
+      element: "image_17",
+      severity: "warning"
+    },
+    {
+      type: "missing_heading_structure",
+      page: 5,
+      severity: "error"
+    },
+    {
+      type: "reading_order",
+      page: 7,
+      severity: "warning"
+    }
+  ]
+}
+
+But don't stop at auditing.
+
+Accessibility generation
+
+This is where it gets really interesting.
+
+Your engine could infer:
+
+PDF
+ ↓
+Content graph
+ ↓
+Accessibility analysis
+ ↓
+Suggested structure
+
+For example:
+
+{
+  type: "image",
+  bbox: [...],
+  accessibility: {
+    alt: "Company logo",
+    decorative: false
+  }
+}
+
+Or:
+
+{
+  type: "heading",
+  level: 2,
+  text: "Financial Results"
+}
+
+Or:
+
+{
+  type: "table",
+  accessibility: {
+    caption: "Quarterly revenue",
+    headers: [...]
+  }
+}
+You could provide an accessibility tree
+
+Something conceptually similar to the browser's accessibility tree:
+
+document.accessibility.tree()
+Document
+ ├── Heading: Annual Report 2026
+ ├── Paragraph
+ ├── Heading: Financial Results
+ │    ├── Table
+ │    │    ├── Header
+ │    │    ├── Row
+ │    │    └── Row
+ │    └── Figure
+ │         └── Caption
+ └── Heading: Conclusion
+
+Then developers could query it:
+
+document.accessibility.find("heading");
+document.accessibility.find("table");
+document.accessibility.find("unlabeled-image");
+Even better: accessibility remediation
+
+Don't just say:
+
+❌ Image has no alt text.
+
+Offer:
+
+Suggested: “Bar chart showing revenue increasing from $2.1M in Q1 to $3.4M in Q4.”
+
+Then:
+
+await document.accessibility.fix({
+  issue: "missing_alt_text",
+  strategy: "vision"
+});
+
+Potentially producing a new accessible PDF.
+
+Your overall architecture starts looking very compelling
+
+I'd structure it roughly like:
+
+                    PDF
+                     │
+        ┌────────────┼────────────┐
+        │            │            │
+      Text        Vectors       Images
+        │            │            │
+        └────────────┼────────────┘
+                     │
+              PDF Content Graph
+                     │
+        ┌────────────┼─────────────┐
+        │            │             │
+     Semantic    Accessibility   Vision
+        │            │             │
+        └────────────┼─────────────┘
+                     │
+              Developer API
+
+And the killer APIs could be:
+
+document.content()
+document.scene()
+document.accessibility.audit()
+document.accessibility.tree()
+document.accessibility.remediate()
+document.find(...)
+document.images()
+document.vectors()
+document.tables()
+document.forms()
+document.annotations()
+One important distinction
+
+I'd call the feature accessibility, not “assessability.” If you mean evaluating how accessible a PDF is, “Accessibility Audit” or “Accessibility Checker” is the clearer product terminology.
+
+And I'd make the accessibility engine standards-aware rather than purely AI-based. AI can infer missing semantics, but the library should also inspect actual PDF structure/tags, reading order, alt text, language, form labels, table structure, contrast/color issues, etc.
+
+That combination—native PDF structure + geometry + vision + semantic understanding + accessibility auditing/remediation—could be much more interesting than another PDF.js wrapper.
+
+Yes. I looked specifically at the PDF features that tend to disappear when people reduce a PDF to text + images + vectors, and there is a much bigger opportunity here.
+
+If your goal is:
+
+PDF → one portable JSON representation → JSON → recreate the PDF as closely as possible
+
+then I would not design this as a “PDF vision library.” I'd design it as a PDF document model / intermediate representation (IR) with vision and accessibility layered on top.
+
+PDF has logical structure, marked-content sequences, artifacts, reading order, annotations/forms, embedded/associated files, structure IDs, rich actions, 3D, output intents, signatures, etc.
+
+The things I'd add that are easy to miss
+1. The actual PDF graphics state
+
+This is a huge one.
+
+Don't just store:
+
+{
+  "type": "line",
+  "x1": 10,
+  "y1": 20
+}
+
+You need the graphics state at the time the object was painted:
+
+{
+  "type": "path",
+  "transform": [1, 0, 0, 1, 50, 100],
+  "stroke": {
+    "color": "#000000",
+    "width": 0.5,
+    "cap": "round",
+    "join": "miter",
+    "dash": [3, 2]
+  },
+  "fill": null,
+  "clip": "...",
+  "opacity": 0.8,
+  "blendMode": "Normal"
+}
+
+Otherwise you won't be able to faithfully reconstruct the document.
+
+2. Transforms
+
+This deserves its own first-class representation.
+
+PDF objects aren't necessarily positioned with simple x/y coordinates.
+
+You have:
+
+translation
+rotation
+scaling
+skew
+nested transforms
+page transforms
+image transforms
+form XObject transforms
+
+So:
+
+{
+  "transform": [a, b, c, d, e, f]
+}
+
+should probably be everywhere.
+
+3. Clipping paths
+
+Very easy to overlook.
+
+A PDF can draw a huge object and then clip it to a specific shape.
+
+For example:
+
+Huge image
+     ↓
+┌─────────────┐
+│   CLIP      │
+│   ╭─────╮   │
+│   │image│   │
+│   ╰─────╯   │
+└─────────────┘
+
+If your JSON doesn't preserve clipping paths, reconstruction can look completely different.
+
+4. Transparency / blend modes
+
+Not just opacity.
+
+You need things such as:
+
+alpha
+soft masks
+transparency groups
+blend modes
+knockout/isolated groups
+
+PDF 2.0 specifically expanded graphics/transparency capabilities.
+
+5. Patterns and shadings
+
+This is another big omission.
+
+PDF fills aren't necessarily:
+
+"fill": "#FF0000"
+
+They can be:
+
+tiling patterns
+gradients
+axial shadings
+radial shadings
+mesh shadings
+
+So I'd have:
+
+{
+  "paint": {
+    "type": "gradient",
+    "kind": "radial",
+    "stops": [...]
+  }
+}
+6. Fonts need much more than font names
+
+Store:
+
+font identity
+embedded font
+subset information
+encoding
+Unicode mapping
+glyph IDs
+glyph widths
+character spacing
+word spacing
+horizontal/vertical writing
+rendering mode
+text matrix
+
+This is particularly important because the visible glyph and the extracted Unicode character are not necessarily the same thing. PDF accessibility guidance specifically calls out Unicode mapping and cases where visible graphics/text don't have usable Unicode mappings.
+
+I'd represent text at the glyph level:
+
+{
+  "type": "text",
+  "glyphs": [
+    {
+      "gid": 42,
+      "unicode": "A",
+      "advance": 7.2,
+      "transform": [...]
+    }
+  ]
+}
+
+That gives you much better reconstruction.
+
+7. Marked content
+
+This is probably one of the most important things missing from your current model.
+
+PDF can associate page content with the logical structure tree using marked-content sequences.
+
+That relationship is critical for accessibility, reuse, extraction, and semantic understanding.
+
+Your JSON should preserve:
+
+{
+  "type": "markedContent",
+  "id": "mc_123",
+  "tag": "P",
+  "properties": {},
+  "children": [...]
+}
+
+And then separately:
+
+{
+  "structure": {
+    "type": "P",
+    "children": [
+      { "ref": "mc_123" }
+    ]
+  }
+}
+
+That separation is important.
+
+8. Artifacts
+
+This is subtle and extremely valuable.
+
+A page number, header, footer, decorative line, etc. might visually exist but not be part of the document's semantic reading order.
+
+PDF accessibility explicitly distinguishes real content from artifacts.
+
+So:
+
+{
+  "type": "text",
+  "text": "Page 4",
+  "role": "artifact",
+  "artifactType": "pagination"
+}
+
+This lets your system answer:
+
+"Give me the actual content without headers and footers."
+
+9. The structure tree
+
+This should become the semantic backbone of your JSON.
+
+Something like:
+
+{
+  "structure": {
+    "type": "Document",
+    "children": [
+      {
+        "type": "H1",
+        "children": ["Introduction"]
+      },
+      {
+        "type": "P",
+        "children": [
+          { "ref": "text_31" }
+        ]
+      },
+      {
+        "type": "Table",
+        "children": [...]
+      },
+      {
+        "type": "Figure",
+        "children": [...]
+      }
+    ]
+  }
+}
+
+Tagged PDF is specifically intended to represent logical structure, reading order, headings, lists, tables, figures, etc.
+
+10. Structure attributes
+
+Don't stop at tags.
+
+Store attributes such as:
+
+{
+  "type": "Table",
+  "attributes": {
+    "rowSpan": 2,
+    "colSpan": 3,
+    "headers": [...]
+  }
+}
+
+Also:
+
+language
+alternate descriptions
+expansion
+actual text
+table headers
+list numbering
+pronunciation
+MathML-related information
+
+PDF 2.0 expanded the structure/tagging model and added things including namespaces, MathML support and pronunciation hints.
+
+11. Reading order
+
+Don't assume:
+
+top → bottom → left → right
+
+is correct.
+
+You want to preserve both:
+
+{
+  "visualOrder": [...],
+  "logicalOrder": [...]
+}
+
+This is crucial for:
+
+columns
+sidebars
+footnotes
+captions
+headers
+tables
+
+Logical content order is explicitly part of accessible PDF semantics.
+
+12. Annotations
+
+Huge category.
+
+Don't reduce annotations to links.
+
+You have things such as:
+
+links
+highlights
+underlines
+strikeouts
+free text
+stamps
+ink
+squares
+circles
+polygons
+lines
+popups
+file attachments
+widgets
+redactions
+multimedia-related annotations
+
+Your model should be:
+
+{
+  "type": "annotation",
+  "subtype": "highlight",
+  "rect": [...],
+  "quadPoints": [...],
+  "color": [...],
+  "opacity": 0.5,
+  "contents": "Important",
+  "action": {...}
+}
+13. Actions
+
+Another commonly forgotten category.
+
+A link isn't merely:
+
+{
+  "url": "https://..."
+}
+
+It might perform an action.
+
+I'd have:
+
+{
+  "action": {
+    "type": "URI",
+    "uri": "https://..."
+  }
+}
+
+but support other action types too:
+
+GoTo
+GoToR
+URI
+JavaScript
+Named
+SubmitForm
+ResetForm
+Launch
+etc.
+
+PDF 2.0 also added richer navigation capabilities, including actions targeting structure elements.
+
+14. Forms
+
+This should be its own subsystem.
+
+Not just:
+
+{
+  "type": "input"
+}
+
+You need:
+
+{
+  "type": "formField",
+  "name": "customerName",
+  "fieldType": "text",
+  "value": "John",
+  "defaultValue": "",
+  "flags": [...],
+  "actions": {...},
+  "appearance": {...},
+  "widget": {...}
+}
+
+And:
+
+checkbox
+radio
+combo box
+list box
+signature field
+calculation order
+validation
+formatting
+appearance state
+
+The accessibility reference suite specifically includes complex interactive forms.
+
+15. Appearance streams
+
+Very important for reconstruction.
+
+Forms and annotations can have their own visual appearance.
+
+Don't assume:
+
+field value → renderer automatically creates appearance
+
+You need to preserve the actual appearance information where necessary.
+
+Otherwise:
+
+original PDF
+    ↓
+JSON
+    ↓
+recreated PDF
+
+can have a functionally identical form but visually different rendering.
+
+16. Optional Content Groups / layers
+
+Think:
+
+Photoshop layers, but PDF.
+
+{
+  "layers": [
+    {
+      "id": "english",
+      "name": "English",
+      "visible": true
+    },
+    {
+      "id": "french",
+      "name": "French",
+      "visible": false
+    }
+  ]
+}
+
+Objects then reference layers.
+
+17. Embedded files + associated files
+
+This is a major one if your goal is complete extraction.
+
+PDF 2.0 has an Associated Files framework allowing files to be semantically related to PDF objects—not merely attached generically.
+
+For example:
+
+{
+  "asset": {
+    "id": "data.csv",
+    "mime": "text/csv",
+    "data": "...",
+    "relationship": "Data"
+  }
+}
+
+You could associate it with:
+
+{
+  "type": "table",
+  "associatedFiles": ["data.csv"]
+}
+
+That's extremely useful for machine-readable PDFs.
+
+18. Document navigation
+
+Don't forget:
+
+bookmarks / outline
+named destinations
+page labels
+internal links
+structure destinations
+article threads
+
+Page labels are particularly interesting because the displayed page number doesn't necessarily equal the PDF page index. The PDF accessibility guidance explicitly discusses page labels.
+
+So:
+
+{
+  "page": 7,
+  "label": "A-3"
+}
+19. Metadata
+
+I'd capture both standard and extended metadata:
+
+{
+  "metadata": {
+    "title": "...",
+    "author": "...",
+    "subject": "...",
+    "keywords": [...],
+    "creator": "...",
+    "producer": "...",
+    "creationDate": "...",
+    "modifiedDate": "...",
+    "language": "en-US",
+    "xmp": {...}
+  }
+}
+
+And potentially object-level metadata as well. PDF 2.0 has an object metadata stream mechanism.
+
+20. Color management
+
+This is another reconstruction trap.
+
+Don't normalize everything to RGB.
+
+Preserve:
+
+DeviceRGB
+DeviceCMYK
+DeviceGray
+ICCBased
+CalGray
+CalRGB
+Lab
+Separation
+DeviceN
+Indexed
+Pattern
+
+plus:
+
+ICC profiles
+rendering intent
+output intents
+
+PDF 2.0 supports page-level and referenced output intents.
+
+21. Print-specific information
+
+If you're going for full fidelity, include:
+
+media box
+crop box
+bleed box
+trim box
+art box
+rotation
+page scaling
+viewer preferences
+output intent
+print settings
+
+This is where a “looks right on screen” recreation can fail when printed.
+
+22. Digital signatures
+
+Don't treat a signature as an image.
+
+You potentially need:
+
+{
+  "signature": {
+    "field": "...",
+    "certificate": {...},
+    "byteRange": [...],
+    "digestAlgorithm": "SHA-256",
+    "subFilter": "...",
+    "timestamp": {...}
+  }
+}
+
+And importantly, distinguish:
+
+visual signature
+digital signature
+
+PDF 2.0 has expanded signature capabilities.
+
+23. Security / encryption
+
+If you're extracting the document completely, your metadata model should know:
+
+{
+  "security": {
+    "encrypted": true,
+    "permissions": {...},
+    "encryptionAlgorithm": "..."
+  }
+}
+
+Don't necessarily put secrets/passwords into your JSON representation.
+
+PDF's security model is part of the document's technical state.
+
+24. Incremental revisions
+
+This is one I'd absolutely include if you're serious.
+
+PDF can be incrementally updated.
+
+That means the file can contain historical revisions.
+
+Instead of treating:
+
+PDF = current state
+
+you could expose:
+
+{
+  "revisions": [
+    {
+      "id": 0,
+      "objects": [...]
+    },
+    {
+      "id": 1,
+      "changes": [...]
+    }
+  ]
+}
+
+This could allow:
+
+“Show me what changed between revision 1 and revision 2.”
+
+That's a killer enterprise feature.
+
+25. Object identity
+
+This is fundamental to your JSON idea.
+
+Don't make your JSON purely hierarchical.
+
+Use IDs:
+
+{
+  "id": "obj_8392",
+  "type": "image"
+}
+
+and references:
+
+{
+  "type": "figure",
+  "content": ["obj_8392"]
+}
+
+Why?
+
+Because PDFs reuse objects.
+
+For example, one logo can be painted on 100 pages without storing 100 copies.
+
+Your JSON should preserve that relationship.
+
+26. Reusable XObjects
+
+Same concept.
+
+Represent:
+
+{
+  "resources": {
+    "xobjects": {
+      "logo": {...}
+    }
+  }
+}
+
+and then:
+
+{
+  "draw": {
+    "xobject": "logo",
+    "transform": [...]
+  }
+}
+
+This makes your JSON much smaller and makes exact reconstruction easier.
+
+27. Images should have two identities
+
+This is important given your earlier Base64 question.
+
+Don't just:
+
+{
+  "image": "base64..."
+}
+
+Instead:
+
+{
+  "id": "img_17",
+
+  "source": {
+    "encoding": "jpeg",
+    "bytes": "..."
+  },
+
+  "placement": {
+    "transform": [...]
+  },
+
+  "content": {
+    "ocr": [...],
+    "objects": [...],
+    "description": "..."
+  }
+}
+
+That separates:
+
+what the image is from how it is displayed.
+
+28. 3D / multimedia / rich media
+
+If your goal is genuinely “all PDF content,” don't forget these.
+
+PDF 2.0 includes 3D-related features and 3D measurements/viewing conditions.
+
+You don't necessarily need to implement them in v1, but your schema shouldn't make them impossible.
+
+29. Math
+
+This is another interesting content-aware opportunity.
+
+Instead of:
+
+∫ x² dx
+
+you could potentially have:
+
+{
+  "type": "math",
+  "mathml": "...",
+  "latex": "..."
+}
+
+PDF 2.0 expanded tagging with MathML-related support.
+
+30. Provenance
+
+I'd add something most PDF libraries don't expose well:
+
+{
+  "provenance": {
+    "source": "pdf",
+    "extraction": "native",
+    "ocr": false,
+    "vision": false,
+    "confidence": 1
+  }
+}
+
+For an OCR-derived object:
+
+{
+  "provenance": {
+    "source": "ocr",
+    "engine": "tesseract",
+    "confidence": 0.93
+  }
+}
+
+For AI-inferred semantics:
+
+{
+  "provenance": {
+    "source": "inference",
+    "model": "...",
+    "confidence": 0.87
+  }
+}
+
+This is extremely important.
+
+Your library should be able to distinguish:
+
+“The PDF explicitly said this.”
+
+from:
+
+“We inferred this from the pixels.”
+
+The JSON shouldn't actually be one giant JSON object
+
+I'd make the format an IR.
+
+Something like:
+
+{
+  "version": "1.0",
+
+  "document": {
+    "id": "doc_1",
+    "metadata": {},
+    "pages": ["page_1", "page_2"],
+    "structure": "struct_1",
+    "resources": "resources_1"
+  },
+
+  "pages": {},
+
+  "objects": {},
+
+  "resources": {},
+
+  "structure": {},
+
+  "annotations": {},
+
+  "forms": {},
+
+  "assets": {},
+
+  "navigation": {},
+
+  "security": {},
+
+  "provenance": {}
+}
+
+Then:
+
+                    PDF
+                     ↓
+             ┌───────────────┐
+             │  PDF Parser   │
+             └───────┬───────┘
+                     ↓
+             ┌───────────────┐
+             │   PDF-IR JSON │
+             └───────┬───────┘
+                     │
+       ┌─────────────┼─────────────┐
+       ↓             ↓             ↓
+    Renderer       Vision      Accessibility
+       ↓             ↓             ↓
+     PDF          Semantic      Audit/Fix
+
+And the same IR can go backward:
+
+JSON
+ ↓
+Renderer
+ ↓
+PDF
+
+That's the part I think is particularly compelling.
+
+The killer feature: round-trip fidelity
+
+You should make this a formal promise/test:
+
+const model = await PDFVision.extract(pdf);
+
+const pdf2 = await PDFVision.create(model);
+
+const model2 = await PDFVision.extract(pdf2);
+
+assertEquivalent(model, model2);
+
+Not necessarily byte-for-byte identical—that's often unrealistic because PDFs can be serialized differently—but semantically and visually equivalent.
+
+You could have three levels:
+
+LEVEL 1  Content equivalent
+         Text/images/forms/links preserved
+
+LEVEL 2  Semantic equivalent
+         Structure/reading order/accessibility preserved
+
+LEVEL 3  Visual equivalent
+         Geometry/colors/fonts/transparency preserved
+
+That is a much more ambitious and interesting product than “PDF OCR.”
+
+And the research backs up the direction: Tagged PDF was specifically designed to preserve richer context for extraction, reuse, navigation and accessibility, while modern PDF 2.0 adds things like associated files, structure-based navigation, MathML-related semantics, enhanced signatures and richer graphics.
+
+If I were building this, I'd call the core something like PDF-IR (PDF Intermediate Representation), and make vision, accessibility, search, editing, and reconstruction features that operate on that IR. That architecture gives you a path toward essentially turning a PDF into a queryable, editable, AI-readable document scene graph rather than just extracting its text.
+
+Ad
+i want both 
+
+Yes — and I think you should build both.
+
+The mistake would be making them two separate products. Make them two modes on top of the same underlying PDF representation:
+
+1. Fidelity mode — “Everything”
+
+Goal:
+
+Extract the PDF as completely as technically possible and recreate it.
+
+This preserves the low-level information:
+
+text/glyphs/fonts
+vectors/paths
+images
+transforms
+clipping
+transparency
+gradients/patterns
+colors/ICC profiles
+XObjects/resources
+annotations
+forms + appearance streams
+layers
+bookmarks
+destinations/actions
+embedded/associated files
+metadata
+page boxes/rotation
+signatures
+encryption information
+revisions
+object identity/reuse
+tagged PDF structure
+marked content
+artifacts
+
+The JSON is essentially a loss-minimizing PDF IR.
+
+2. Intelligence mode — “Understand”
+
+Goal:
+
+Understand what the PDF means, not merely what it contains.
+
+This adds:
+
+headings
+paragraphs
+lists
+tables
+figures
+captions
+entities
+dates
+addresses
+amounts
+charts
+diagrams
+signatures
+checkboxes
+reading order
+document type
+relationships
+OCR
+image descriptions
+semantic search
+embeddings
+accessibility analysis
+inferred alt text
+inferred structure
+
+The critical thing is that intelligence never destroys fidelity information.
+
+The architecture I'd use
+                         PDF
+                          │
+                  ┌───────▼───────┐
+                  │   PDF Parser   │
+                  └───────┬───────┘
+                          │
+                          ▼
+               ┌─────────────────────┐
+               │      PDF-IR          │
+               │                     │
+               │ Text                │
+               │ Glyphs              │
+               │ Vectors             │
+               │ Images              │
+               │ Resources           │
+               │ Structure            │
+               │ Forms               │
+               │ Annotations         │
+               │ Metadata            │
+               │ etc.                │
+               └──────────┬──────────┘
+                          │
+              ┌───────────┴───────────┐
+              │                       │
+              ▼                       ▼
+      ┌─────────────────┐    ┌──────────────────┐
+      │ Fidelity Engine │    │ Intelligence     │
+      │                 │    │ Engine           │
+      │ reconstruct     │    │                  │
+      │ edit            │    │ OCR              │
+      │ render          │    │ vision           │
+      │ validate        │    │ semantics        │
+      └────────┬────────┘    │ accessibility    │
+               │             └────────┬─────────┘
+               ▼                      ▼
+              PDF              semantic JSON
+And I'd make the JSON support both
+
+For example:
+
+{
+  "id": "page_1",
+
+  "content": [
+    {
+      "id": "obj_42",
+      "type": "text",
+
+      "raw": {
+        "glyphs": [...],
+        "font": "font_3",
+        "transform": [...]
+      },
+
+      "semantic": {
+        "role": "heading",
+        "level": 1,
+        "text": "Annual Report"
+      },
+
+      "accessibility": {
+        "role": "H1"
+      }
+    }
+  ]
+}
+
+The raw layer tells you exactly how to reconstruct it.
+
+The semantic layer tells you what it means.
+
+The accessibility layer tells you how it should be exposed to assistive technology.
+
+One feature I'd strongly recommend
+
+Make every extracted object have provenance.
+
+{
+  "semantic": {
+    "role": "table"
+  },
+
+  "provenance": {
+    "method": "native",
+    "confidence": 1.0,
+    "source": [
+      "vector_41",
+      "vector_42",
+      "text_87"
+    ]
+  }
+}
+
+If you detect something with AI:
+
+{
+  "semantic": {
+    "role": "figure"
+  },
+
+  "provenance": {
+    "method": "vision",
+    "model": "…",
+    "confidence": 0.91,
+    "source": ["image_14"]
+  }
+}
+
+That makes your system much more trustworthy.
+
+Your API could become extremely clean
+const pdf = await PDFVision.load(file);
+
+// Everything
+const ir = await pdf.extract();
+
+// Understand it
+const semantic = await pdf.analyze();
+
+// Accessibility
+const audit = await pdf.accessibility.audit();
+
+// Search meaning
+const results = await pdf.find("invoice total");
+
+// Reconstruct
+const output = await PDFVision.create(ir);
+
+// Edit
+ir.objects["obj_42"].semantic.role = "H1";
+
+// Recreate again
+const edited = await PDFVision.create(ir);
+
+And perhaps:
+
+await pdf.optimize();
+await pdf.redact(...);
+await pdf.remediateAccessibility();
+await pdf.reorder();
+await pdf.toHTML();
+await pdf.toMarkdown();
+await pdf.toJSON();
+The really ambitious version
+
+Eventually your PDF becomes a bidirectional document model:
+
+PDF
+ ↕
+PDF-IR
+ ↕
+HTML
+ ↕
+Accessible document
+ ↕
+Markdown
+ ↕
+AI semantic representation
+
+So you're not just extracting PDFs.
+
+You're creating a universal intermediate representation for documents.
+
+That's the direction I'd pursue.
+
+Fidelity is the foundation. Intelligence is the layer on top. If you get the IR right, you can support both without having to redesign the library later.
+
+
+Yes. That would be a very strong feature, and I’d make it a separate “Accessible HTML / Document Replica” mode rather than mixing it into the PDF parser.
+
+The goal becomes:
+
+Take any PDF → reconstruct its document model → generate an accessible HTML representation that can visually mimic the PDF while exposing a proper semantic/accessibility tree.
+
+And importantly, the user can toggle between PDF-faithful mode and AI-accessible mode.
+
+The feature set
+PDF
+ │
+ ▼
+PDF-IR
+ │
+ ├───────────────┐
+ ▼               ▼
+Fidelity      AI/Accessibility
+Renderer       Interpretation
+ │               │
+ ▼               ▼
+PDF replica    Accessible HTML
+                  │
+          ┌───────┼────────┐
+          ▼       ▼        ▼
+        Visual   Semantic  A11y
+        mimic    structure controls
+HTML output could have two modes
+
+Visual mode
+
+Attempts to look like the original PDF:
+
+<div class="pdf-page">
+  <div class="pdf-text">Annual Report</div>
+  <img ...>
+  <div class="pdf-table">...</div>
+</div>
+
+Accessible mode
+
+Transforms it into meaningful HTML:
+
+<main>
+  <h1>Annual Report</h1>
+
+  <section>
+    <h2>Financial Results</h2>
+
+    <p>...</p>
+
+    <figure>
+      <img alt="Revenue increased from ...">
+      <figcaption>...</figcaption>
+    </figure>
+
+    <table>
+      <caption>Quarterly Revenue</caption>
+      <thead>...</thead>
+      <tbody>...</tbody>
+    </table>
+  </section>
+</main>
+And then provide a toggle
+
+Something like:
+
+const html = await pdf.toHTML({
+  mode: "accessible",
+  visualFidelity: "high",
+  ai: true
+});
+
+Or in a viewer:
+
+┌─────────────────────────────────────────┐
+│ PDF                                      │
+│                                         │
+│ [ Original ] [ Accessible ] [ AI View ] │
+└─────────────────────────────────────────┘
+“Full suite” should include the surrounding UI too
+
+This is where your idea gets interesting.
+
+Don't only convert the document body. Generate a complete accessible application shell:
+
+Navigation
+table of contents
+bookmarks
+previous/next page
+page navigation
+document sections
+search results
+Viewer controls
+zoom
+page selection
+fullscreen
+print
+download
+rotate
+text selection
+search
+Accessibility controls
+increase/decrease text size
+high contrast
+dyslexia-friendly font option
+reading mode
+simplified layout
+focus mode
+reduced motion
+keyboard navigation
+screen-reader optimized mode
+AI controls
+“Explain this page”
+“Summarize section”
+“Find tables”
+“Find figures”
+“Ask about this document”
+“Read this section”
+“Simplify language”
+“Show important information”
+
+But these should be optional enhancements, not assumptions about what the user needs.
+
+The wrapper/menu system should be customizable
+
+I'd expose a component API:
+
+PDFVisionViewer({
+  document,
+
+  mode: "accessible",
+
+  toolbar: {
+    search: true,
+    navigation: true,
+    zoom: true,
+    print: true,
+    download: true,
+    accessibility: true,
+    ai: true
+  },
+
+  accessibility: {
+    screenReader: true,
+    keyboardNavigation: true,
+    highContrast: true,
+    simplifiedView: true
+  }
+});
+
+And allow developers to replace the UI entirely:
+
+PDFVisionViewer({
+  toolbar: MyToolbar,
+  sidebar: MySidebar,
+  pageControls: MyPageControls
+});
+
+So your library isn't locked to one visual design.
+
+But I'd add something even more important
+The HTML should retain a mapping back to the PDF.
+
+For example:
+
+<h2
+  data-pdf-page="4"
+  data-pdf-object="obj_382"
+>
+  Financial Results
+</h2>
+
+Then:
+
+htmlElement → PDF object
+PDF object → HTML element
+
+You could expose:
+
+viewer.focusPdfObject("obj_382");
+viewer.focusHtmlElement("obj_382");
+
+So a screen-reader user could navigate the accessible HTML and the visual PDF viewer could simultaneously highlight the corresponding region.
+
+That's a really compelling interaction.
+
+Even better: two synchronized representations
+             PDF-IR
+                │
+       ┌────────┴────────┐
+       ▼                 ▼
+   PDF Renderer      HTML Renderer
+       │                 │
+       ▼                 ▼
+   Visual PDF      Accessible HTML
+       │                 │
+       └───────┬─────────┘
+               ▼
+          Synchronizer
+
+Now clicking a table cell in the PDF can move focus to the corresponding <td> in HTML.
+
+And navigating with a screen reader can highlight the corresponding PDF region.
+
+I would also support “AI remediation”
+
+For a bad PDF:
+
+const accessible = await pdf.toHTML({
+  accessibility: "enhance",
+  ai: true
+});
+
+The engine could infer:
+
+Unstructured PDF
+       ↓
+Heading detection
+Reading order
+Table recognition
+Figure recognition
+Caption association
+Alt-text generation
+Form labeling
+Link semantics
+Language detection
+       ↓
+Accessible HTML
+
+But never silently replace authoritative PDF data with AI guesses.
+
+Your provenance system becomes important:
+
+<img
+  alt="AI-generated description: ..."
+  data-source="vision"
+  data-confidence="0.94"
+/>
+
+And perhaps expose a UI indicator:
+
+✨ AI-generated description
+
+I'd name the feature something like
+
+PDF → Accessible Document
+
+or
+
+AI Accessibility Mode
+
+with three output modes:
+
+1. Faithful
+   └── Maximum visual similarity
+
+2. Accessible
+   └── Semantic HTML + WCAG-oriented UI
+
+3. Intelligent
+   └── Accessible HTML + AI interpretation
+
+And because you're already planning the complete PDF-IR, you don't need to modify the original PDF at all. The HTML becomes another rendering of the same underlying document model.
+
+That gives you a very clean product story:
+
+One document model. Multiple representations: PDF, pixel-faithful HTML, semantic HTML, accessible HTML, Markdown, structured JSON, and AI-readable content.
