@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>CodbDocs — Document Brain Demo</title>
+<title>CodbDocs — Content-Aware Document Brain</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #f8f9fa; color: #1a1a2e; }
@@ -14,9 +14,7 @@
   .upload-zone:hover { border-color: #4361ee; background: #f0f4ff; }
   .upload-zone.dragover { border-color: #4361ee; background: #e8edff; }
   .upload-zone input { display: none; }
-  .upload-zone h3 { margin-bottom: 8px; }
-  .upload-zone p { color: #666; font-size: 14px; }
-  .progress-bar { height: 4px; background: #e0e0e0; border-radius: 2px; margin: 16px 0; overflow: hidden; }
+  .progress-bar { height: 4px; background: #e0e0e0; border-radius: 2px; margin: 16px 0; overflow: hidden; display: none; }
   .progress-bar .fill { height: 100%; background: #4361ee; transition: width 0.3s; }
   #status { font-family: ui-monospace, monospace; font-size: 13px; color: #666; margin: 8px 0; }
   .results { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
@@ -29,22 +27,25 @@
   .entity-list li { padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
   .entity-list li:last-child { border: none; }
   .entity-type { font-weight: 600; color: #4361ee; }
+  .entity-bbox { color: #999; font-size: 11px; font-family: monospace; }
   .query-box { display: flex; gap: 8px; margin-top: 12px; }
   .query-box input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
   .query-box button { padding: 8px 16px; background: #4361ee; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
   .query-box button:hover { background: #3651d4; }
   .full-text { grid-column: 1 / -1; }
-  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-  .tag-native { background: #d4edda; color: #155724; }
-  .tag-ocr { background: #fff3cd; color: #856404; }
-  .tag-error { background: #f8d7da; color: #721c24; }
+  .answer-box { background: #f0f4ff; border-left: 4px solid #4361ee; padding: 12px 16px; border-radius: 0 8px 8px 0; margin-top: 12px; font-size: 14px; line-height: 1.6; }
+  .answer-box .confidence { color: #999; font-size: 12px; margin-top: 4px; }
+  .content-graph { font-family: monospace; font-size: 12px; }
+  .content-graph .block { padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #f8f9fa; border-left: 3px solid #4361ee; }
+  .content-graph .entity { padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #fff3cd; border-left: 3px solid #ffc107; }
+  .doc-type { font-size: 28px; font-weight: 700; color: #4361ee; text-align: center; padding: 20px; }
 </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <h1>CodbDocs — Offline Document Brain</h1>
-    <p>No server. No CDN. No APIs. Pure browser AI understanding.</p>
+    <h1>CodbDocs — Content-Aware Document Brain</h1>
+    <p>3-layer architecture: PDF-aware → Vision-aware → Content-aware. No server. No CDN. No APIs.</p>
   </header>
 
   <div class="upload-zone" id="dropZone">
@@ -53,39 +54,55 @@
     <p>Processes entirely in your browser — nothing leaves your machine</p>
   </div>
 
-  <div class="progress-bar" id="progressBar" style="display:none"><div class="fill" id="progressFill"></div></div>
+  <div class="progress-bar" id="progressBar"><div class="fill" id="progressFill"></div></div>
   <div id="status"></div>
 
   <div class="results" id="results" style="display:none">
-    <!-- Summary card -->
+    <!-- Document Type -->
+    <div class="card" id="docTypeCard">
+      <h3>Document Type</h3>
+      <div class="doc-type" id="docTypeContent"></div>
+    </div>
+
+    <!-- Summary -->
     <div class="card" id="summaryCard">
-      <h3>Document Summary</h3>
+      <h3>Content Graph Summary</h3>
       <div id="summaryContent"></div>
     </div>
 
-    <!-- Entities card -->
+    <!-- Content Blocks -->
+    <div class="card" id="blocksCard">
+      <h3>Content Blocks</h3>
+      <div id="blocksContent" class="content-graph"></div>
+    </div>
+
+    <!-- Entities -->
     <div class="card" id="entitiesCard">
-      <h3>Extracted Entities</h3>
-      <div id="entitiesContent"></div>
+      <h3>Extracted Entities (with BBox)</h3>
+      <div id="entitiesContent" class="content-graph"></div>
     </div>
 
-    <!-- Structure card -->
-    <div class="card" id="structureCard">
-      <h3>Document Structure</h3>
-      <div id="structureContent"></div>
-    </div>
-
-    <!-- Query card -->
-    <div class="card" id="queryCard">
-      <h3>Query the Document</h3>
+    <!-- Ask -->
+    <div class="card" id="askCard">
+      <h3>Ask the Document</h3>
       <div class="query-box">
-        <input type="text" id="queryInput" placeholder="e.g. what dates are mentioned?">
-        <button onclick="runQuery()">Ask</button>
+        <input type="text" id="askInput" placeholder="e.g. What is the total amount?">
+        <button onclick="runAsk()">Ask</button>
       </div>
-      <div id="queryResult" style="margin-top: 12px;"></div>
+      <div id="askResult"></div>
     </div>
 
-    <!-- Full text card -->
+    <!-- Find -->
+    <div class="card" id="findCard">
+      <h3>Spatial Search (with BBox)</h3>
+      <div class="query-box">
+        <input type="text" id="findInput" placeholder="e.g. invoice number">
+        <button onclick="runFind()">Find</button>
+      </div>
+      <div id="findResult"></div>
+    </div>
+
+    <!-- Full Text -->
     <div class="card full-text" id="fullTextCard">
       <h3>Full Extracted Text</h3>
       <pre id="fullTextContent"></pre>
@@ -132,12 +149,10 @@
 
     try {
       const doc = await CodbDocs.load(file);
-
       statusEl.textContent = `Processing ${doc.pageCount} pages...`;
 
       currentGraph = await doc.analyze({
         ocr: true,
-        visual: false,
         onProgress: (info) => {
           const pct = Math.round((info.page / info.total) * 100);
           progressFill.style.width = pct + '%';
@@ -146,14 +161,14 @@
         },
       });
 
-      // Render results
+      renderDocType(currentGraph);
       renderSummary(currentGraph);
+      renderBlocks(currentGraph);
       renderEntities(currentGraph);
-      renderStructure(currentGraph);
       renderFullText(currentGraph);
 
       resultsEl.style.display = 'grid';
-      statusEl.textContent = `Done — ${currentGraph.pageCount} pages, ${currentGraph.wordCount} words`;
+      statusEl.textContent = `Done — ${currentGraph.pageCount} pages analyzed`;
       progressBar.style.display = 'none';
 
     } catch (err) {
@@ -162,100 +177,82 @@
     }
   }
 
+  function renderDocType(graph) {
+    const dt = graph.getDocumentType();
+    document.getElementById('docTypeContent').innerHTML = dt
+      ? `${dt.type} <span style="font-size:14px;color:#666">(confidence: ${Math.round(dt.confidence * 100)}%)</span>`
+      : 'Unknown';
+  }
+
   function renderSummary(graph) {
-    const s = graph.getSummary();
+    const s = graph.getSummary().results;
     document.getElementById('summaryContent').innerHTML = `
       <div>
-        <span class="stat">${s.pageCount} pages</span>
-        <span class="stat">${s.wordCount} words</span>
-        <span class="stat">${s.headings.length} headings</span>
-        <span class="stat">${s.tables} tables</span>
-        <span class="stat">${s.forms} form fields</span>
-        <span class="stat">${s.lists} lists</span>
-      </div>
-      <div style="margin-top: 12px;">
-        <strong>Page Types:</strong>
-        ${Object.entries(s.pageTypes).map(([t, c]) =>
+        ${Object.entries(s.blockTypes || {}).map(([t, c]) =>
           `<span class="stat">${t}: ${c}</span>`
+        ).join('')}
+      </div>
+      <div style="margin-top: 8px;">
+        ${Object.entries(s.entityTypes || {}).map(([t, c]) =>
+          `<span class="stat" style="background:#fff3cd;color:#856404">${t}: ${c}</span>`
         ).join('')}
       </div>
     `;
   }
 
-  function renderEntities(graph) {
-    const dates = graph.allDates.map(d => `<li><span class="entity-type">Date:</span> ${d.raw}</li>`).join('');
-    const phones = graph.allPhones.map(p => `<li><span class="entity-type">Phone:</span> ${p.raw}</li>`).join('');
-    const emails = graph.allEmails.map(e => `<li><span class="entity-type">Email:</span> ${e.raw}</li>`).join('');
-    const amounts = graph.allAmounts.map(a => `<li><span class="entity-type">Amount:</span> ${a.raw}</li>`).join('');
-    const addresses = graph.allAddresses.map(a => `<li><span class="entity-type">Address:</span> ${a.raw}</li>`).join('');
-
-    document.getElementById('entitiesContent').innerHTML = `
-      <ul class="entity-list">
-        ${dates || phones || emails || amounts || addresses
-          ? dates + phones + emails + amounts + addresses
-          : '<li>No entities detected</li>'}
-      </ul>
-    `;
+  function renderBlocks(graph) {
+    const blocks = graph.getBlocks();
+    document.getElementById('blocksContent').innerHTML = blocks.length > 0
+      ? blocks.map(b => `<div class="block"><strong>${b.type}</strong>: ${b.text.substring(0, 80)}${b.bbox ? ` <span class="entity-bbox">[${b.bbox.map(v => Math.round(v)).join(', ')}]</span>` : ''}</div>`).join('')
+      : '<p style="color:#999">No blocks detected</p>';
   }
 
-  function renderStructure(graph) {
-    const headings = graph.allHeadings.map(h =>
-      `<li style="margin-left: ${(h.level - 1) * 16}px"><strong>H${h.level}:</strong> ${h.text} <span style="color:#999">(p${h.page})</span></li>`
-    ).join('');
-
-    const tables = graph.allTables.length > 0
-      ? graph.allTables.map(t => `<li>Table: ${t.rowCount} rows x ${t.colCount} cols (p${t.page})</li>`).join('')
-      : '<li>No tables detected</li>';
-
-    const forms = graph.allForms.length > 0
-      ? graph.allForms.map(f => `<li><span class="entity-type">Field:</span> ${f.label} (p${f.page})</li>`).join('')
-      : '<li>No form fields detected</li>';
-
-    document.getElementById('structureContent').innerHTML = `
-      <strong>Headings:</strong>
-      <ul class="entity-list">${headings || '<li>No headings detected</li>'}</ul>
-      <strong style="margin-top:8px;display:block">Tables:</strong>
-      <ul class="entity-list">${tables}</ul>
-      <strong style="margin-top:8px;display:block">Form Fields:</strong>
-      <ul class="entity-list">${forms}</ul>
-    `;
+  function renderEntities(graph) {
+    const entities = graph.getEntities();
+    document.getElementById('entitiesContent').innerHTML = entities.length > 0
+      ? entities.map(e => `<div class="entity"><strong>${e.type}</strong>: ${e.value || e.text} <span class="entity-bbox">[${e.bbox ? e.bbox.map(v => Math.round(v)).join(', ') : 'no bbox'}]</span></div>`).join('')
+      : '<p style="color:#999">No entities detected</p>';
   }
 
   function renderFullText(graph) {
     document.getElementById('fullTextContent').textContent = graph.fullText;
   }
 
-  function runQuery() {
+  function runAsk() {
     if (!currentGraph) return;
-    const query = document.getElementById('queryInput').value.trim();
-    if (!query) return;
+    const q = document.getElementById('askInput').value.trim();
+    if (!q) return;
 
-    const result = currentGraph.query(query);
-    const el = document.getElementById('queryResult');
-
-    if (result.results.length === 0) {
-      el.innerHTML = '<p style="color:#999">No results found</p>';
-      return;
-    }
-
-    if (result.type === 'summary') {
-      el.innerHTML = '<pre>' + JSON.stringify(result.results, null, 2) + '</pre>';
-    } else if (result.type === 'text-search') {
-      el.innerHTML = result.results.map(r =>
-        `<div style="margin-bottom:8px"><span class="tag tag-native">Page ${r.page}</span> ${r.text}</div>`
-      ).join('');
-    } else {
-      el.innerHTML = '<ul class="entity-list">' +
-        result.results.map(r =>
-          `<li><span class="entity-type">${r.raw || r.text || JSON.stringify(r)}</span> <span style="color:#999">(p${r.page})</span></li>`
-        ).join('') + '</ul>';
-    }
+    const result = currentGraph.ask(q);
+    document.getElementById('askResult').innerHTML = `
+      <div class="answer-box">
+        ${result.answer.replace(/\n/g, '<br>')}
+        <div class="confidence">Confidence: ${Math.round(result.confidence * 100)}%</div>
+      </div>
+      ${result.evidence.length > 0 ? `
+        <div style="margin-top: 8px; font-size: 12px; color: #666;">
+          <strong>Evidence:</strong>
+          ${result.evidence.map(e => `<div>Page ${e.page}: ${e.text}${e.bbox ? ` <span class="entity-bbox">[${e.bbox.map(v => Math.round(v)).join(', ')}]</span>` : ''}</div>`).join('')}
+        </div>
+      ` : ''}
+    `;
   }
 
-  // Enter key support for query
-  document.getElementById('queryInput').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') runQuery();
-  });
+  function runFind() {
+    if (!currentGraph) return;
+    const q = document.getElementById('findInput').value.trim();
+    if (!q) return;
+
+    const result = currentGraph.find(q);
+    document.getElementById('findResult').innerHTML = result.results.length > 0
+      ? `<div style="font-size:12px;color:#666;margin-bottom:8px">Found ${result.count} result(s) for "${q}"</div>` +
+        result.results.map(r => `<div class="entity"><strong>${r.type || 'match'}</strong>: ${r.text || r.value || JSON.stringify(r)} <span class="entity-bbox">page ${r.page || '?'} [${r.bbox ? r.bbox.map(v => Math.round(v)).join(', ') : 'no bbox'}]</span></div>`).join('')
+      : '<p style="color:#999">No results found</p>';
+  }
+
+  // Enter key support
+  document.getElementById('askInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') runAsk(); });
+  document.getElementById('findInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') runFind(); });
 </script>
 </body>
 </html>
