@@ -1,0 +1,150 @@
+Yes — content-aware is probably the more valuable direction if you're building a browser PDF vision library.
+
+Instead of making it just:
+
+“PDF → pixels → OCR”
+
+make it:
+
+“PDF → understand what each piece of content is → expose meaningful structure.”
+
+What “content-aware” could mean
+
+For example, given a PDF page:
+
+┌──────────────────────────────┐
+│ ACME CORPORATION             │ ← heading
+│ Invoice #10492               │ ← metadata
+│                              │
+│ Bill To: John Smith          │ ← entity
+│                              │
+│ ┌────────┬───────┬─────────┐ │
+│ │ Item   │ Qty   │ Price   │ │ ← table
+│ ├────────┼───────┼─────────┤ │
+│ │ Laptop │ 2     │ $2,000  │ │
+│ └────────┴───────┴─────────┘ │
+│                              │
+│ Total: $4,000                │ ← monetary value
+│                              │
+│ [signature]                  │ ← signature
+└──────────────────────────────┘
+
+Your library could understand:
+
+{
+  type: "invoice",
+  elements: [
+    { type: "heading", text: "ACME CORPORATION" },
+    { type: "metadata", key: "invoice_number", value: "10492" },
+    { type: "person", text: "John Smith" },
+    { type: "table", rows: [...] },
+    { type: "currency", value: 4000 },
+    { type: "signature", bbox: [...] }
+  ]
+}
+
+That's much more useful than returning raw OCR text.
+
+I'd design it as 3 layers
+
+1. PDF-aware
+
+Understand native PDF objects when they're available:
+
+text
+fonts
+vectors
+images
+links
+annotations
+coordinates
+
+This is cheap and extremely accurate.
+
+2. Vision-aware
+
+For scanned/image PDFs:
+
+OCR
+document layout
+tables
+handwriting
+figures
+signatures
+charts
+
+3. Content-aware
+
+Turn those primitives into semantic objects:
+
+heading
+paragraph
+table
+invoice
+receipt
+form
+address
+person
+date
+currency
+checkbox
+signature
+chart
+citation
+etc.
+
+That third layer is where your library could become really interesting.
+
+An important design decision
+
+I wouldn't hard-code the library around “AI-generated answers.”
+
+Instead, make the core output a content graph:
+
+document.pages[0].blocks
+document.pages[0].tables
+document.pages[0].entities
+document.pages[0].regions
+document.pages[0].relationships
+
+Then users can build things on top:
+
+const invoices = document.find({
+  type: "invoice"
+});
+
+const totals = document.find({
+  type: "currency",
+  near: "invoice_total"
+});
+
+Or even:
+
+document.ask("What is the total amount?");
+
+The second API can be an optional AI layer.
+
+The killer feature could be spatial + semantic search
+
+For example:
+
+document.find("invoice number")
+document.find("total")
+document.find("signature")
+document.find("table")
+document.find("dates")
+
+and return:
+
+{
+  text: "$4,000",
+  page: 1,
+  bbox: [421, 682, 493, 701],
+  confidence: 0.97
+}
+
+Now a browser application can highlight the exact region in the PDF.
+
+That's considerably more powerful than an OCR package.
+
+So yes: I'd make it content-aware, but keep the underlying representation generic. PDF parsing → vision → semantic content should be separate layers. That lets you start lightweight and progressively add AI without forcing every user to download a huge model.
