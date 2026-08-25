@@ -64,6 +64,12 @@ import {
   addVectorObject,
   addObject,
   extractVectors,
+  extractStructureTree,
+  extractAnnotations,
+  extractFormFields,
+  detectReadingOrder,
+  getReadingOrderSequence,
+  validateReadingOrder,
   auditAccessibility,
   generateAccessibilityTree,
   exportHTML,
@@ -253,6 +259,18 @@ class CodbDoc {
           } catch (e) { /* vector extraction may fail on some PDFs */ }
         }
 
+        // Extract structure tree (tagged PDF)
+        let structureTree = null;
+        try {
+          structureTree = await extractStructureTree(page);
+        } catch (e) { /* not all PDFs have structure trees */ }
+
+        // Extract annotations
+        let annotations = [];
+        try {
+          annotations = await extractAnnotations(page);
+        } catch (e) { /* annotations extraction may fail */ }
+
         // Build PDF-IR page
         const irPage = addPage(ir, num, {
           width: pageSize.width,
@@ -260,6 +278,7 @@ class CodbDoc {
           rotation: page.rotate,
           mediaBox: page.mediaBox,
           cropBox: page.cropBox,
+          labels: page.labels || null,
         });
 
         // Add vectors to IR
@@ -280,6 +299,23 @@ class CodbDoc {
           }
         }
 
+        // Add annotations to IR
+        if (annotations.length > 0) {
+          irPage.annotations = annotations;
+          ir.annotations[`page_${num}`] = annotations;
+        }
+
+        // Add structure tree to IR
+        if (structureTree) {
+          ir.structure[`page_${num}`] = structureTree;
+        }
+
+        // Detect reading order
+        let readingOrder = [];
+        try {
+          readingOrder = detectReadingOrder(ir, num);
+        } catch (e) { /* reading order detection may fail */ }
+
         // Build page result
         const pageResult = {
           num, text, source, confidence, pageSize,
@@ -288,6 +324,9 @@ class CodbDoc {
           contentBlocks: contentPageGraph ? contentPageGraph.blocks.length : 0,
           contentEntities: contentPageGraph ? contentPageGraph.entities.length : 0,
           vectors: vectors.length,
+          annotations: annotations.length,
+          hasStructureTree: !!structureTree,
+          readingOrder: readingOrder.length,
         };
 
         graph.addPageResult(pageResult);
@@ -346,6 +385,17 @@ class CodbDoc {
       const pageId = `page_${pageNum}`;
       return ir.pages[pageId]?.vectors?.map(id => ir.vectors[id]) || [];
     };
+    graph.getStructureTree = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.structure[pageId] || null;
+    };
+    graph.getAnnotations = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.annotations[pageId] || [];
+    };
+    graph.getFormFields = () => ir.forms?.fields || [];
+    graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
+    graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
 
     return graph;
   }

@@ -115,6 +115,24 @@
       <div id="accessContent"></div>
     </div>
 
+    <!-- Structure Tree -->
+    <div class="card" id="structureCard">
+      <h3>Structure Tree (Tagged PDF)</h3>
+      <div id="structureContent" class="content-graph"></div>
+    </div>
+
+    <!-- Annotations -->
+    <div class="card" id="annotationsCard">
+      <h3>Annotations</h3>
+      <div id="annotationsContent" class="content-graph"></div>
+    </div>
+
+    <!-- Reading Order -->
+    <div class="card" id="readingOrderCard">
+      <h3>Reading Order</h3>
+      <div id="readingOrderContent" class="content-graph"></div>
+    </div>
+
     <!-- HTML Export -->
     <div class="card" id="htmlCard">
       <h3>HTML Export</h3>
@@ -190,6 +208,9 @@
       renderBlocks(currentGraph);
       renderEntities(currentGraph);
       renderVectors(currentGraph);
+      renderStructureTree(currentGraph);
+      renderAnnotations(currentGraph);
+      renderReadingOrder(currentGraph);
       renderAccessibility(currentGraph);
       renderFullText(currentGraph);
 
@@ -287,6 +308,38 @@
         </div>
       ` : '<p style="color:#28a745;margin-top:12px">No accessibility issues found!</p>'}
     `;
+  }
+
+  function renderStructureTree(graph) {
+    const tree = graph.getStructureTree(1);
+    document.getElementById('structureContent').innerHTML = tree
+      ? `<div class="block"><strong>Tagged PDF detected</strong></div>
+         <pre style="font-size:11px;max-height:300px;overflow-y:auto">${JSON.stringify(tree, null, 2).substring(0, 1000)}...</pre>`
+      : '<p style="color:#999">No structure tree (PDF is not tagged)</p>';
+  }
+
+  function renderAnnotations(graph) {
+    const annotations = graph.getAnnotations(1);
+    document.getElementById('annotationsContent').innerHTML = annotations.length > 0
+      ? annotations.slice(0, 10).map(a => `
+          <div class="block">
+            <strong>${a.type}</strong>: ${a.contents || a.title || a.url || 'No content'}
+            ${a.rect ? `<span class="entity-bbox">[${a.rect.map(v => Math.round(v)).join(', ')}]</span>` : ''}
+          </div>
+        `).join('')
+      : '<p style="color:#999">No annotations found</p>';
+  }
+
+  function renderReadingOrder(graph) {
+    const order = graph.getReadingOrder(1);
+    document.getElementById('readingOrderContent').innerHTML = order.length > 0
+      ? `<div style="margin-bottom:8px"><span class="stat">${order.length} elements in reading order</span></div>` +
+        order.slice(0, 15).map(item => `
+          <div class="block">
+            <strong>${item.readingOrder}</strong>: ${item.type} — ${item.text.substring(0, 50)}${item.text.length > 50 ? '...' : ''}
+          </div>
+        `).join('')
+      : '<p style="color:#999">No reading order detected</p>';
   }
 
   function exportHTML(mode) {

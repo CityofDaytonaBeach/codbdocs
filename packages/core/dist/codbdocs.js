@@ -820,6 +820,14 @@
         try { vectors = await extractVectors(page); } catch (e) {}
       }
 
+      // Extract structure tree
+      var structureTree = null;
+      try { structureTree = await extractStructureTree(page); } catch (e) {}
+
+      // Extract annotations
+      var annotations = [];
+      try { annotations = await extractAnnotations(page); } catch (e) {}
+
       // Build PDF-IR page
       var irPage = addPage(ir, num, { width: pageSize.width, height: pageSize.height, rotation: page.rotate, mediaBox: page.mediaBox, cropBox: page.cropBox });
       vectors.forEach(function(vec) { addVectorObject(ir, 'page_' + num, vec); });
@@ -829,10 +837,26 @@
         }
       });
 
+      // Add annotations to IR
+      if (annotations.length > 0) {
+        irPage.annotations = annotations;
+        ir.annotations['page_' + num] = annotations;
+      }
+
+      // Add structure tree to IR
+      if (structureTree) {
+        ir.structure['page_' + num] = structureTree;
+      }
+
+      // Detect reading order
+      var readingOrder = [];
+      try { readingOrder = detectReadingOrder(ir, num); } catch (e) {}
+
       graph.addPageResult({
         num: num, text: text, source: source, confidence: confidence, pageSize: pageSize,
         spatial: spatial, structures: structures, metadata: metadata,
         classification: classification, visual: visualRegions, vectors: vectors.length,
+        annotations: annotations.length, hasStructureTree: !!structureTree, readingOrder: readingOrder.length,
       });
 
       if (onPageComplete) onPageComplete(graph.pages[graph.pages.length - 1]);
@@ -870,6 +894,18 @@
     graph.getVectors = function (pageNum) {
       var pageId = 'page_' + pageNum;
       return ir.pages[pageId] && ir.pages[pageId].vectors ? ir.pages[pageId].vectors.map(function(id) { return ir.vectors[id]; }) : [];
+    };
+    graph.getStructureTree = function (pageNum) {
+      var pageId = 'page_' + pageNum;
+      return ir.structure[pageId] || null;
+    };
+    graph.getAnnotations = function (pageNum) {
+      var pageId = 'page_' + pageNum;
+      return ir.annotations[pageId] || [];
+    };
+    graph.getReadingOrder = function (pageNum) { return detectReadingOrder(ir, pageNum); };
+    graph.getReadingOrderSequence = function (pageNum) {
+      return detectReadingOrder(ir, pageNum).map(function(item) { return item.id; });
     };
 
     return graph;
@@ -1221,6 +1257,109 @@
     return html;
   }
 
+  // ─── Structure Tree Extraction ─────────────────────────────────────────
+
+  function extractStructureTree(page) {
+    return page.getStructTree().then(function(structTree) {
+      if (!structTree) return null;
+      return convertStructTreeNode(structTree);
+    }).catch(function() { return null; });
+  }
+
+  function convertStructTreeNode(node) {
+    if (!node) return null;
+    var result = { type: node.type || 'Unknown', role: node.role || node.type, children: [] };
+    if (node.alt) result.alt = node.alt;
+    if (node.lang) result.lang = node.lang;
+    if (node.altText) result.altText = node.altText;
+    if (node.children) {
+      node.children.forEach(function(child) {
+        if (typeof child === 'string') {
+          result.children.push({ type: 'Text', content: child });
+        } else {
+          var converted = convertStructTreeNode(child);
+          if (converted) result.children.push(converted);
+        }
+      });
+    }
+    return result;
+  }
+
+  // ─── Annotations Extraction ────────────────────────────────────────────
+
+  function extractAnnotations(page) {
+    return page.getAnnotations().then(function(annotations) {
+      if (!annotations || annotations.length === 0) return [];
+      return annotations.map(function(ann) {
+        return {
+          id: ann.id, type: mapAnnotationType(ann.subtype), subtype: ann.subtype,
+          rect: ann.rect, color: ann.color, contents: ann.contents || '',
+          title: ann.title || '', fieldType: ann.fieldType, fieldValue: ann.fieldValue,
+          url: ann.url, dest: ann.dest,
+        };
+      });
+    }).catch(function() { return []; });
+  }
+
+  function mapAnnotationType(subtype) {
+    var typeMap = {
+      'Text': 'note', 'Link': 'link', 'FreeText': 'free_text', 'Line': 'line',
+      'Square': 'square', 'Circle': 'circle', 'Highlight': 'highlight',
+      'Underline': 'underline', 'Stamp': 'stamp', 'Ink': 'ink',
+      'Widget': 'form_field', 'Popup': 'popup', 'FileAttachment': 'file_attachment',
+    };
+    return typeMap[subtype] || subtype || 'unknown';
+  }
+
+  // ─── Reading Order Detection ───────────────────────────────────────────
+
+  function detectReadingOrder(ir, pageNum) {
+    var pageId = 'page_' + pageNum;
+    var page = ir.pages[pageId];
+    if (!page) return [];
+
+    var objects = [];
+    page.content.forEach(function(objId) {
+      var obj = ir.objects[objId];
+      if (obj && obj.bbox) {
+        objects.push({
+          id: objId, type: obj.type, bbox: obj.bbox,
+          text: (obj.semantic && obj.semantic.text) || '',
+          centerX: obj.bbox[0] + obj.bbox[2] / 2,
+          centerY: obj.bbox[1] + obj.bbox[3] / 2,
+        });
+      }
+    });
+
+    (page.vectors || []).forEach(function(vecId) {
+      var vec = ir.vectors[vecId];
+      if (vec && vec.bbox && vec.semantic && vec.semantic.role) {
+        objects.push({
+          id: vecId, type: 'vector', bbox: vec.bbox, text: vec.semantic.role,
+          centerX: vec.bbox[0] + vec.bbox[2] / 2,
+          centerY: vec.bbox[1] + vec.bbox[3] / 2,
+        });
+      }
+    });
+
+    if (objects.length === 0) return [];
+
+    objects.sort(function(a, b) {
+      var yDiff = a.centerY - b.centerY;
+      if (Math.abs(yDiff) > 10) return yDiff;
+      return a.centerX - b.centerX;
+    });
+
+    return objects.map(function(obj, index) {
+      obj.readingOrder = index;
+      return obj;
+    });
+  }
+
+  function getReadingOrderSequence(ir, pageNum) {
+    return detectReadingOrder(ir, pageNum).map(function(item) { return item.id; });
+  }
+
   // ─── Public API ────────────────────────────────────────────────────────
 
   return {
@@ -1232,5 +1371,6 @@
     createIR: createIR,
     auditAccessibility: auditAccessibility,
     exportHTML: exportHTML,
+    detectReadingOrder: detectReadingOrder,
   };
 });

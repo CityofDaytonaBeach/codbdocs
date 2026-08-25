@@ -771,6 +771,291 @@ function generateAccessibleStyles() {
   </style>\n`;
 }
 
+// ─── Structure Tree Extraction (Tagged PDF) ──────────────────────────────────
+
+/**
+ * Extract structure tree from a tagged PDF.
+ * PDF.js provides getStructTree() for tagged PDFs.
+ */
+export async function extractStructureTree(page) {
+  try {
+    const structTree = await page.getStructTree();
+    if (!structTree) return null;
+
+    return convertStructTreeNode(structTree);
+  } catch (e) {
+    // PDF is not tagged or structure tree unavailable
+    return null;
+  }
+}
+
+function convertStructTreeNode(node) {
+  if (!node) return null;
+
+  const result = {
+    type: node.type || 'Unknown',
+    role: node.role || node.type,
+    children: [],
+  };
+
+  // Add properties if available
+  if (node.alt) result.alt = node.alt;
+  if (node.lang) result.lang = node.lang;
+  if (node.altText) result.altText = node.altText;
+
+  // Recursively convert children
+  if (node.children) {
+    for (const child of node.children) {
+      if (typeof child === 'string') {
+        result.children.push({ type: 'Text', content: child });
+      } else {
+        const converted = convertStructTreeNode(child);
+        if (converted) result.children.push(converted);
+      }
+    }
+  }
+
+  return result;
+}
+
+// ─── Annotations Extraction ──────────────────────────────────────────────────
+
+/**
+ * Extract annotations from a PDF page.
+ */
+export async function extractAnnotations(page) {
+  try {
+    const annotations = await page.getAnnotations();
+    if (!annotations || annotations.length === 0) return [];
+
+    return annotations.map(ann => ({
+      id: ann.id,
+      type: mapAnnotationType(ann.subtype),
+      subtype: ann.subtype,
+      rect: ann.rect, // [x1, y1, x2, y2]
+      color: ann.color,
+      contents: ann.contents || '',
+      title: ann.title || '',
+      modificationDate: ann.modDate,
+      creationDate: ann.creationDate,
+      flags: ann.flags,
+      // Form-specific
+      fieldType: ann.fieldType,
+      fieldValue: ann.fieldValue,
+      buttonWidgetType: ann.buttonWidgetType,
+      options: ann.options,
+      // Link-specific
+      url: ann.url,
+      dest: ann.dest,
+      // Markup-specific
+      strokeWidth: ann.strokeWidth,
+      strokeColor: ann.strokeColor,
+      fillColor: ann.fillColor,
+      opacity: ann.opacity,
+    }));
+  } catch (e) {
+    return [];
+  }
+}
+
+function mapAnnotationType(subtype) {
+  const typeMap = {
+    'Text': 'note',
+    'Link': 'link',
+    'FreeText': 'free_text',
+    'Line': 'line',
+    'Square': 'square',
+    'Circle': 'circle',
+    'Polygon': 'polygon',
+    'PolyLine': 'polyline',
+    'Highlight': 'highlight',
+    'Underline': 'underline',
+    'Squiggly': 'squiggly',
+    'StrikeOut': 'strikeout',
+    'Stamp': 'stamp',
+    'Caret': 'caret',
+    'Ink': 'ink',
+    'Popup': 'popup',
+    'FileAttachment': 'file_attachment',
+    'Sound': 'sound',
+    'Movie': 'movie',
+    'Widget': 'form_field',
+    'Screen': 'screen',
+    'PrinterMark': 'printer_mark',
+    'TrapNet': 'trap_net',
+    'Watermark': 'watermark',
+    '3D': '3d',
+    'Redact': 'redact',
+  };
+  return typeMap[subtype] || subtype || 'unknown';
+}
+
+// ─── Forms Extraction ────────────────────────────────────────────────────────
+
+/**
+ * Extract form fields from the entire document.
+ */
+export async function extractFormFields(pdf) {
+  try {
+    const form = await pdf.getAcroForm();
+    if (!form) return [];
+
+    const fields = [];
+    const fieldObjects = form.getFields();
+
+    for (const field of fieldObjects) {
+      const fieldData = {
+        id: field.id,
+        name: field.name,
+        type: field.type,
+        value: field.value,
+        defaultValue: field.defaultValue,
+        alternateFieldName: field.alternateFieldName,
+        fieldType: field.fieldType,
+        // Widget-specific
+        rect: field.rect,
+        page: field.page,
+        // Text field
+        maxLength: field.maxLen,
+        // Choice field
+        options: field.options,
+        // Signature field
+        lock: field.lock,
+      };
+
+      fields.push(fieldData);
+    }
+
+    return fields;
+  } catch (e) {
+    // PDF has no AcroForm
+    return [];
+  }
+}
+
+// ─── Reading Order Detection ─────────────────────────────────────────────────
+
+/**
+ * Detect reading order from content objects.
+ * Uses spatial analysis to determine the logical reading sequence.
+ */
+export function detectReadingOrder(ir, pageNum) {
+  const pageId = `page_${pageNum}`;
+  const page = ir.pages[pageId];
+  if (!page) return [];
+
+  // Collect all content objects with bounding boxes
+  const objects = [];
+  for (const objId of page.content) {
+    const obj = ir.objects[objId];
+    if (obj && obj.bbox) {
+      objects.push({
+        id: objId,
+        type: obj.type,
+        bbox: obj.bbox,
+        text: obj.semantic?.text || '',
+        // Calculate center point for sorting
+        centerX: obj.bbox[0] + obj.bbox[2] / 2,
+        centerY: obj.bbox[1] + obj.bbox[3] / 2,
+      });
+    }
+  }
+
+  // Also include vectors with semantic roles
+  for (const vecId of page.vectors || []) {
+    const vec = ir.vectors[vecId];
+    if (vec && vec.bbox && vec.semantic?.role) {
+      objects.push({
+        id: vecId,
+        type: 'vector',
+        bbox: vec.bbox,
+        text: vec.semantic.role,
+        centerX: vec.bbox[0] + vec.bbox[2] / 2,
+        centerY: vec.bbox[1] + vec.bbox[3] / 2,
+      });
+    }
+  }
+
+  if (objects.length === 0) return [];
+
+  // Sort by reading order (top-to-bottom, left-to-right)
+  const sorted = objects.sort((a, b) => {
+    // Primary sort: vertical position (top to bottom)
+    const yDiff = a.centerY - b.centerY;
+    if (Math.abs(yDiff) > 10) return yDiff;
+
+    // Secondary sort: horizontal position (left to right)
+    return a.centerX - b.centerX;
+  });
+
+  // Assign reading order indices
+  return sorted.map((obj, index) => ({
+    ...obj,
+    readingOrder: index,
+  }));
+}
+
+/**
+ * Get the reading order as a simple sequence of object IDs.
+ */
+export function getReadingOrderSequence(ir, pageNum) {
+  const order = detectReadingOrder(ir, pageNum);
+  return order.map(item => item.id);
+}
+
+/**
+ * Validate reading order against structure tree.
+ * Returns issues where visual order differs from logical order.
+ */
+export function validateReadingOrder(ir, pageNum, structureTree) {
+  const visualOrder = detectReadingOrder(ir, pageNum);
+  const issues = [];
+
+  if (!structureTree || !structureTree.children) return issues;
+
+  // Flatten structure tree to get logical order
+  const logicalOrder = flattenStructureTree(structureTree);
+
+  // Compare orders
+  for (let i = 0; i < Math.min(visualOrder.length, logicalOrder.length); i++) {
+    const visualItem = visualOrder[i];
+    const logicalItem = logicalOrder[i];
+
+    if (visualItem.id !== logicalItem.id) {
+      issues.push({
+        type: 'reading_order_mismatch',
+        visualIndex: i,
+        logicalIndex: logicalItem.index,
+        visualObject: visualItem,
+        logicalObject: logicalItem,
+        message: `Object "${visualItem.text.substring(0, 30)}" appears at visual position ${i} but logical position ${logicalItem.index}`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+function flattenStructureTree(node, result = [], index = { value: 0 }) {
+  if (!node) return result;
+
+  if (node.type === 'Text' && node.content) {
+    result.push({
+      id: `struct_${index.value}`,
+      text: node.content,
+      index: index.value++,
+    });
+  }
+
+  if (node.children) {
+    for (const child of node.children) {
+      flattenStructureTree(child, result, index);
+    }
+  }
+
+  return result;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 let idCounter = 0;
