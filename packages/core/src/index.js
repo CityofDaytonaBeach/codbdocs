@@ -2,18 +2,26 @@
  * @codbdocs/core
  *
  * Browser document-processing engine with offline AI understanding.
- * Uses PDF.js for text extraction, Tesseract.js for OCR fallback,
- * and a built-in Document Brain for semantic analysis.
+ * 3-layer architecture:
+ *   Layer 1: PDF-aware    — native text, fonts, vectors, images, links
+ *   Layer 2: Vision-aware — OCR, layout, tables, handwriting
+ *   Layer 3: Content-aware — semantic objects, entities, relationships
  *
  * No server. No CDN. No external APIs. Pure browser JavaScript.
  *
- * Architecture:
- *   CodbDocs.load(source)
- *     → CodbDoc
- *       → doc.analyze({ ocr, visual })
- *         → DocumentGraph (queryable)
- *           → .query("what dates are mentioned?")
- *           → .toJSON()
+ * Usage:
+ *   const doc = await CodbDocs.load(file);
+ *   const graph = await doc.analyze({ ocr: true });
+ *
+ *   // Spatial + semantic search
+ *   graph.find("invoice number")
+ *   graph.find({ type: "currency" })
+ *
+ *   // AI-like Q&A
+ *   graph.ask("What is the total amount?")
+ *
+ *   // Content graph
+ *   graph.toJSON()
  */
 
 import {
@@ -29,10 +37,23 @@ import {
 } from './layers.js';
 
 import {
+  analyzeContent,
+  classifyDocumentType,
+  DocumentContentGraph,
+  PageContentGraph,
+} from './content.js';
+
+import {
+  executeQuery,
+  executeAsk,
+  highlightResults,
+  createHighlightAnnotations,
+} from './query.js';
+
+import {
   canUseWorkers,
   createRenderWorker,
   createBrainWorker,
-  sendToWorker,
   terminateWorker,
 } from './workers.js';
 
@@ -42,10 +63,11 @@ const DEFAULTS = {
   nativeTextMinLength: 20,
   ocrScale: 2,
   ocrLang: 'eng',
-  enableVisual: false,       // enable canvas-based visual analysis
-  enableBrain: true,         // enable document brain (structure, metadata)
-  useWorkers: true,          // use OffscreenCanvas + Workers when available
-  concurrency: 1,            // parallel page processing (1 = sequential)
+  enableVisual: false,
+  enableBrain: true,
+  enableContent: true,
+  useWorkers: true,
+  concurrency: 1,
 };
 
 let config = { ...DEFAULTS };
@@ -107,20 +129,11 @@ class CodbDoc {
   constructor(pdf) {
     this._pdf = pdf;
     this.pageCount = pdf.numPages;
-    this._workers = [];
   }
 
   /**
    * Run the full analysis pipeline.
-   *
-   * @param {Object} opts
-   * @param {boolean} opts.ocr - Enable OCR for scan-only pages (default: true)
-   * @param {boolean} opts.visual - Enable visual analysis (default: false)
-   * @param {Function} opts.onPageComplete - Called when each page is done
-   * @param {Function} opts.onProgress - Called with progress updates
-   * @param {Function} opts.onLayer - Called when each semantic layer is updated
-   *
-   * @returns {Promise<DocumentGraph>} Rich, queryable document graph
+   * Returns a DocumentGraph with spatial search, content graph, and ask().
    */
   async analyze(opts = {}) {
     const {
@@ -132,30 +145,25 @@ class CodbDoc {
     } = opts;
 
     const graph = new DocumentGraph();
+    const contentGraph = new DocumentContentGraph();
     const useWorkers = config.useWorkers && canUseWorkers();
     let renderWorker = null;
     let brainWorker = null;
 
-    // Set up workers if available
     if (useWorkers) {
       try {
         renderWorker = createRenderWorker();
         brainWorker = createBrainWorker();
-      } catch (e) {
-        // Workers not available, fall back to main thread
-      }
+      } catch (e) { /* fallback */ }
     }
 
     try {
       for (let num = 1; num <= this.pageCount; num++) {
         onProgress && onProgress({ page: num, total: this.pageCount, status: 'reading' });
 
-        // Get PDF page
         const page = await this._pdf.getPage(num);
         const viewport = page.getViewport({ scale: 1 });
         const pageSize = { width: viewport.width, height: viewport.height };
-
-        // Extract text content
         const content = await page.getTextContent();
         const nativeText = content.items
           .map(it => it.str)
@@ -168,10 +176,9 @@ class CodbDoc {
         let confidence = null;
         let canvas = null;
 
-        // OCR fallback for scan pages
+        // OCR fallback
         if (nativeText.length <= config.nativeTextMinLength && ocr) {
           onProgress && onProgress({ page: num, total: this.pageCount, status: 'ocr', progress: 0 });
-
           try {
             canvas = await renderPageToCanvas(page, config.ocrScale);
             const Tesseract = getTesseract();
@@ -194,7 +201,7 @@ class CodbDoc {
           text = '';
         }
 
-        // Run Document Brain analysis
+        // Brain analysis (Layer 2: Vision-aware)
         let spatial = null;
         let structures = null;
         let metadata = null;
@@ -203,50 +210,36 @@ class CodbDoc {
 
         if (config.enableBrain) {
           onProgress && onProgress({ page: num, total: this.pageCount, status: 'analyzing' });
-
-          // Spatial analysis
           spatial = analyzeSpatialLayout(content.items, pageSize);
-
-          // Structure detection
           structures = detectStructure(spatial, pageSize);
-
-          // Metadata extraction
           metadata = extractMetadata(text);
-
-          // Page classification
           classification = classifyPage(text, spatial);
         }
 
-        // Visual analysis (requires rendering)
+        // Visual analysis
         if (visual || config.enableVisual) {
-          if (!canvas) {
-            canvas = await renderPageToCanvas(page, config.ocrScale);
-          }
-          try {
-            visualRegions = analyzeVisualRegions(canvas);
-          } catch (e) {
-            // Visual analysis failed, skip
-          }
+          if (!canvas) canvas = await renderPageToCanvas(page, config.ocrScale);
+          try { visualRegions = analyzeVisualRegions(canvas); } catch (e) {}
+        }
+
+        // Content-aware analysis (Layer 3)
+        let contentPageGraph = null;
+        if (config.enableContent) {
+          onProgress && onProgress({ page: num, total: this.pageCount, status: 'content' });
+          contentPageGraph = analyzeContent(num, text, spatial, metadata);
+          contentGraph.addPageGraph(contentPageGraph);
         }
 
         // Build page result
         const pageResult = {
-          num,
-          text,
-          source,
-          confidence,
-          pageSize,
-          spatial,
-          structures,
-          metadata,
-          classification,
+          num, text, source, confidence, pageSize,
+          spatial, structures, metadata, classification,
           visual: visualRegions,
+          contentBlocks: contentPageGraph ? contentPageGraph.blocks.length : 0,
+          contentEntities: contentPageGraph ? contentPageGraph.entities.length : 0,
         };
 
-        // Add to graph
         graph.addPageResult(pageResult);
-
-        // Callbacks
         onPageComplete && onPageComplete(pageResult);
         onLayer && onLayer({
           page: num,
@@ -254,20 +247,48 @@ class CodbDoc {
           structure: !!structures,
           metadata: !!metadata,
           classification: classification?.type,
+          contentBlocks: pageResult.contentBlocks,
+          contentEntities: pageResult.contentEntities,
         });
       }
     } finally {
-      // Clean up workers
       terminateWorker(renderWorker);
       terminateWorker(brainWorker);
     }
+
+    // Classify document type
+    if (config.enableContent) {
+      contentGraph.documentType = classifyDocumentType(contentGraph);
+    }
+
+    // Attach content graph and query methods to the document graph
+    graph._contentGraph = contentGraph;
+    graph._doc = this;
+
+    // Add content-aware methods
+    graph.find = (query) => executeQuery(contentGraph, query);
+    graph.findOne = (query) => {
+      const results = contentGraph.find(query);
+      return results.length > 0 ? results[0] : null;
+    };
+    graph.ask = (question) => executeAsk(contentGraph, question);
+    graph.getEntities = (type) => contentGraph.getEntities(type);
+    graph.getBlocks = (type) => contentGraph.getBlocks(type);
+    graph.getDocumentType = () => contentGraph.documentType;
+    graph.highlight = (canvas, query, options) => {
+      const results = contentGraph.find(query);
+      return highlightResults(canvas, results, options);
+    };
+    graph.getHighlights = (query, options) => {
+      const results = contentGraph.find(query);
+      return createHighlightAnnotations(results, options);
+    };
 
     return graph;
   }
 
   /**
-   * Quick text-only extraction (no brain analysis).
-   * Faster than analyze() when you just need raw text.
+   * Quick text-only extraction (no analysis).
    */
   async extractText(opts = {}) {
     const { ocr = true, onProgress } = opts;
@@ -275,7 +296,6 @@ class CodbDoc {
 
     for (let num = 1; num <= this.pageCount; num++) {
       onProgress && onProgress({ page: num, total: this.pageCount, status: 'reading' });
-
       const page = await this._pdf.getPage(num);
       const content = await page.getTextContent();
       const nativeText = content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
@@ -291,40 +311,26 @@ class CodbDoc {
           const { data } = await Tesseract.recognize(canvas, config.ocrLang);
           text = (data.text || '').trim();
           source = 'ocr';
-        } catch {
-          text = '';
-          source = 'error';
-        }
+        } catch { text = ''; source = 'error'; }
       } else if (nativeText.length <= config.nativeTextMinLength) {
-        source = 'skipped';
-        text = '';
+        source = 'skipped'; text = '';
       }
-
       pages.push({ num, text, source });
     }
 
     return {
-      pageCount: this.pageCount,
-      pages,
+      pageCount: this.pageCount, pages,
       fullText: pages.map(p => `--- page ${p.num} (${p.source}) ---\n${p.text}`).join('\n\n'),
     };
   }
 
-  /**
-   * Render a page to a canvas element (for display).
-   */
   async renderPage(pageNum, scale = 1.5) {
     const page = await this._pdf.getPage(pageNum);
     return renderPageToCanvas(page, scale);
   }
 
-  /**
-   * Clean up resources.
-   */
   destroy() {
-    if (this._pdf) {
-      this._pdf.destroy();
-    }
+    if (this._pdf) this._pdf.destroy();
   }
 }
 
@@ -345,6 +351,8 @@ async function renderPageToCanvas(page, scale) {
 export const CodbDocs = { load, configure, canUseWorkers };
 export default CodbDocs;
 
-// Also export classes for advanced usage
-export { DocumentGraph, TextLayer, LayoutLayer, StructureLayer, MetadataLayer, VisualLayer } from './layers.js';
+// Export classes for advanced usage
+export { DocumentGraph } from './layers.js';
+export { DocumentContentGraph, PageContentGraph, ContentBlock, BlockTypes, EntityTypes } from './content.js';
 export { analyzeSpatialLayout, detectStructure, extractMetadata, classifyPage, analyzeVisualRegions } from './brain.js';
+export { executeQuery, executeAsk, highlightResults, createHighlightAnnotations } from './query.js';
