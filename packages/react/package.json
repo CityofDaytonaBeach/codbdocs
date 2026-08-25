@@ -1,0 +1,14 @@
+{
+  "name": "@codbdocs/react",
+  "version": "0.1.0",
+  "description": "React bindings for @codbdocs/core (useCodbDocs hook).",
+  "main": "src/index.js",
+  "type": "module",
+  "dependencies": {
+    "@codbdocs/core": "0.1.0"
+  },
+  "peerDependencies": {
+    "react": ">=17.0.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CodbDocs — vanilla example</title>
+<style>
+  body{ font-family:system-ui,sans-serif; max-width:680px; margin:60px auto; padding:0 20px; color:#101826; }
+  #status{ font-family:ui-monospace,monospace; font-size:13px; color:#57616F; margin-top:16px; white-space:pre-wrap; }
+  #out{ margin-top:20px; white-space:pre-wrap; font-size:14px; line-height:1.6; }
+</style>
+</head>
+<body>
+  <h1>CodbDocs — vanilla JS, no build step</h1>
+  <input type="file" id="file" accept="application/pdf">
+  <div id="status"></div>
+  <div id="out"></div>
+
+  <!-- 1. PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  </script>
+  <!-- 2. Tesseract.js -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+  <!-- 3. CodbDocs core -->
+  <script src="../../packages/core/dist/codbdocs.js"></script>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const outEl = document.getElementById('out');
+
+    document.getElementById('file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      outEl.textContent = '';
+      statusEl.textContent = 'loading pdf…';
+
+      const doc = await CodbDocs.load(file);
+      const result = await doc.analyze({
+        ocr: true,
+        onProgress: (info) => {
+          statusEl.textContent = `page ${info.page}: ${info.status}` +
+            (info.progress != null ? ` ${Math.round(info.progress * 100)}%` : '');
+        },
+      });
+
+      statusEl.textContent = `done — ${result.stats.nativeCount} native, ${result.stats.ocrCount} ocr'd, ${result.stats.wordCount} words`;
+      outEl.textContent = result.fullText;
+    });
+  </script>
+</body>
+</html>

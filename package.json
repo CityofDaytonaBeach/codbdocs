@@ -1,0 +1,10 @@
+{
+  "name": "codbdocs",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser document-processing platform: PDF text extraction + OCR, framework-agnostic core with React bindings.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "license": "MIT"
+}
