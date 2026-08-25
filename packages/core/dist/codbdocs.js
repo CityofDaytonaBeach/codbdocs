@@ -753,11 +753,13 @@
     opts = opts || {};
     var ocr = opts.ocr !== false;
     var visual = opts.visual === true;
+    var extractVecs = opts.extractVectors !== false;
     var onPageComplete = opts.onPageComplete;
     var onProgress = opts.onProgress;
 
     var graph = new DocumentGraph();
     var contentGraph = new DocumentContentGraph();
+    var ir = createIR();
 
     for (var num = 1; num <= this.pageCount; num++) {
       if (onProgress) onProgress({ page: num, total: this.pageCount, status: 'reading' });
@@ -811,10 +813,26 @@
         contentGraph.addPageGraph(contentPageGraph);
       }
 
+      // Extract vectors
+      var vectors = [];
+      if (extractVecs) {
+        if (onProgress) onProgress({ page: num, total: this.pageCount, status: 'vectors' });
+        try { vectors = await extractVectors(page); } catch (e) {}
+      }
+
+      // Build PDF-IR page
+      var irPage = addPage(ir, num, { width: pageSize.width, height: pageSize.height, rotation: page.rotate, mediaBox: page.mediaBox, cropBox: page.cropBox });
+      vectors.forEach(function(vec) { addVectorObject(ir, 'page_' + num, vec); });
+      content.items.forEach(function(item) {
+        if (item.str && item.str.trim()) {
+          addTextObject(ir, 'page_' + num, { text: item.str, bbox: [item.transform[4], item.transform[5], item.width, item.height], font: item.fontName, fontSize: Math.abs(item.transform[0]) || 12, transform: item.transform });
+        }
+      });
+
       graph.addPageResult({
         num: num, text: text, source: source, confidence: confidence, pageSize: pageSize,
         spatial: spatial, structures: structures, metadata: metadata,
-        classification: classification, visual: visualRegions,
+        classification: classification, visual: visualRegions, vectors: vectors.length,
       });
 
       if (onPageComplete) onPageComplete(graph.pages[graph.pages.length - 1]);
@@ -828,6 +846,7 @@
     // Attach content-aware methods
     graph._contentGraph = contentGraph;
     graph._doc = this;
+    graph._ir = ir;
 
     graph.find = function (query) { return executeQuery(contentGraph, query); };
     graph.findOne = function (query) {
@@ -843,6 +862,14 @@
     };
     graph.getHighlights = function (query) {
       return createHighlightAnnotations(contentGraph.find(query));
+    };
+    graph.getIR = function () { return ir; };
+    graph.auditAccessibility = function () { return auditAccessibility(ir); };
+    graph.getAccessibilityTree = function () { return generateAccessibilityTree(ir); };
+    graph.toHTML = function (options) { return exportHTML(ir, options); };
+    graph.getVectors = function (pageNum) {
+      var pageId = 'page_' + pageNum;
+      return ir.pages[pageId] && ir.pages[pageId].vectors ? ir.pages[pageId].vectors.map(function(id) { return ir.vectors[id]; }) : [];
     };
 
     return graph;
@@ -893,6 +920,307 @@
     return new CodbDoc(pdf);
   }
 
+  // ─── PDF-IR (Intermediate Representation) ──────────────────────────────
+
+  function createIR() {
+    return {
+      version: '1.0',
+      document: {
+        id: generateId('doc'),
+        metadata: {},
+        pages: [],
+        structure: null,
+        resources: {},
+        navigation: {},
+        security: {},
+        provenance: { source: 'pdf', extraction: 'native' },
+      },
+      pages: {},
+      objects: {},
+      vectors: {},
+      resources: {},
+      structure: {},
+      annotations: {},
+      forms: {},
+      assets: {},
+    };
+  }
+
+  var idCounter = 0;
+  function generateId(prefix) {
+    return prefix + '_' + Date.now().toString(36) + '_' + (idCounter++).toString(36);
+  }
+
+  function addPage(ir, pageNum, data) {
+    var pageId = 'page_' + pageNum;
+    ir.pages[pageId] = {
+      id: pageId,
+      num: pageNum,
+      width: data.width || 0,
+      height: data.height || 0,
+      rotation: data.rotation || 0,
+      mediaBox: data.mediaBox || null,
+      cropBox: data.cropBox || null,
+      content: [],
+      vectors: [],
+      images: [],
+      annotations: [],
+      forms: [],
+    };
+    ir.document.pages.push(pageId);
+    return ir.pages[pageId];
+  }
+
+  function addTextObject(ir, pageId, data) {
+    var id = generateId('text');
+    ir.objects[id] = {
+      id: id,
+      type: 'text',
+      page: pageId,
+      raw: {
+        glyphs: data.glyphs || [],
+        font: data.font || null,
+        fontSize: data.fontSize || 12,
+        transform: data.transform || [1, 0, 0, 1, 0, 0],
+        text: data.text || '',
+      },
+      semantic: {
+        role: data.role || 'paragraph',
+        level: data.level || null,
+        text: data.text || '',
+      },
+      accessibility: { role: data.accessRole || 'P' },
+      provenance: { method: 'native', confidence: 1.0 },
+      bbox: data.bbox || null,
+    };
+    if (ir.pages[pageId]) ir.pages[pageId].content.push(id);
+    return ir.objects[id];
+  }
+
+  function addVectorObject(ir, pageId, data) {
+    var id = generateId('vec');
+    ir.vectors[id] = {
+      id: id,
+      type: data.type || 'path',
+      page: pageId,
+      points: data.points || [],
+      from: data.from || null,
+      to: data.to || null,
+      bbox: data.bbox || null,
+      graphicsState: {
+        stroke: data.stroke || null,
+        fill: data.fill || null,
+        lineWidth: data.lineWidth || 1,
+        lineCap: data.lineCap || 'butt',
+        lineJoin: data.lineJoin || 'miter',
+        dash: data.dash || null,
+        opacity: data.opacity || 1,
+        blendMode: data.blendMode || 'Normal',
+        transform: data.transform || [1, 0, 0, 1, 0, 0],
+        clip: data.clip || null,
+      },
+      semantic: { role: data.semanticRole || null },
+      provenance: { method: 'native', confidence: 1.0 },
+    };
+    if (ir.pages[pageId]) ir.pages[pageId].vectors.push(id);
+    return ir.vectors[id];
+  }
+
+  // Vector extraction from PDF.js operator list
+  function extractVectors(page) {
+    return page.getOperatorList().then(function(opList) {
+      var vectors = [];
+      var FN = (typeof pdfjsLib !== 'undefined' && pdfjsLib.OPS) || {};
+      var currentStroke = null, currentFill = null, currentLineWidth = 1;
+      var currentTransform = [1, 0, 0, 1, 0, 0];
+      var pathPoints = [];
+
+      for (var i = 0; i < opList.fnArray.length; i++) {
+        var fn = opList.fnArray[i];
+        var args = opList.argsArray[i];
+
+        if (fn === (FN.transform || 8) && args) {
+          currentTransform = args.slice(0, 6);
+        } else if (fn === (FN.moveTo || 13) && args) {
+          pathPoints.push({ op: 'moveTo', x: args[0], y: args[1] });
+        } else if (fn === (FN.lineTo || 14) && args) {
+          pathPoints.push({ op: 'lineTo', x: args[0], y: args[1] });
+        } else if (fn === (FN.curveTo || 15) && args) {
+          pathPoints.push({ op: 'curveTo', x1: args[0], y1: args[1], x2: args[2], y2: args[3], x3: args[4], y3: args[5] });
+        } else if (fn === (FN.rectangle || 19) && args && args.length >= 4) {
+          var w = args[2] - args[0], h = args[3] - args[1];
+          vectors.push({
+            type: 'rect', bbox: [args[0], args[1], w, h],
+            stroke: currentStroke, fill: currentFill, lineWidth: currentLineWidth,
+            transform: currentTransform,
+            semanticRole: classifyVectorType('rect', w, h),
+          });
+        } else if (fn === (FN.closePath || 16)) {
+          pathPoints.push({ op: 'closePath' });
+        } else if ((fn === (FN.stroke || 20) || fn === (FN.fill || 21) || fn === (FN.fillStroke || 23)) && pathPoints.length > 0) {
+          vectors.push({
+            type: 'path', points: pathPoints.slice(),
+            stroke: fn === (FN.fill || 21) ? null : currentStroke,
+            fill: fn === (FN.stroke || 20) ? null : currentFill,
+            lineWidth: currentLineWidth, transform: currentTransform,
+            semanticRole: classifyVectorType('path', 0, 0),
+          });
+          pathPoints = [];
+        } else if (fn === (FN.setStrokeRGBColor || 43) && args) {
+          currentStroke = 'rgb(' + args[0] + ',' + args[1] + ',' + args[2] + ')';
+        } else if (fn === (FN.setFillRGBColor || 44) && args) {
+          currentFill = 'rgb(' + args[0] + ',' + args[1] + ',' + args[2] + ')';
+        } else if (fn === (FN.setLineWidth || 40) && args) {
+          currentLineWidth = args[0];
+        }
+      }
+      return vectors;
+    });
+  }
+
+  function classifyVectorType(type, w, h) {
+    if (type === 'rect') {
+      if (w > 8 && w < 20 && h > 8 && h < 20 && Math.abs(w - h) < 3) return 'checkbox';
+      if (h < 2 && w > 20) return 'separator';
+      if (w > 50 && h > 20) return 'table_border';
+      return 'border';
+    }
+    return null;
+  }
+
+  // Accessibility Audit
+  function auditAccessibility(ir) {
+    var issues = [], score = 100;
+
+    ir.document.pages.forEach(function(pageId) {
+      var page = ir.pages[pageId];
+      if (!page) return;
+      var pageNum = parseInt(pageId.split('_')[1]);
+
+      page.content.forEach(function(objId) {
+        var obj = ir.objects[objId];
+        if (obj && obj.type === 'image' && !(obj.accessibility && obj.accessibility.alt)) {
+          issues.push({ type: 'missing_alt_text', page: pageNum, severity: 'error', message: 'Image has no alternative text' });
+          score -= 5;
+        }
+      });
+
+      var headings = page.content.map(function(id) { return ir.objects[id]; }).filter(function(o) { return o && o.semantic && o.semantic.role === 'heading'; });
+      var prevLevel = 0;
+      headings.forEach(function(h) {
+        var level = (h.semantic && h.semantic.level) || 1;
+        if (level > prevLevel + 1 && prevLevel > 0) {
+          issues.push({ type: 'heading_skip', page: pageNum, severity: 'warning', message: 'Heading level skipped from H' + prevLevel + ' to H' + level });
+          score -= 2;
+        }
+        prevLevel = level;
+      });
+
+      page.vectors.forEach(function(vecId) {
+        var vec = ir.vectors[vecId];
+        if (vec && vec.semantic && vec.semantic.role === 'table_border') {
+          issues.push({ type: 'table_no_header', page: pageNum, severity: 'warning', message: 'Table may be missing header row' });
+          score -= 2;
+        }
+      });
+    });
+
+    if (!ir.document.metadata.language) {
+      issues.push({ type: 'missing_language', page: 1, severity: 'warning', message: 'Document language not specified' });
+      score -= 3;
+    }
+    if (!ir.document.metadata.title) {
+      issues.push({ type: 'missing_title', page: 1, severity: 'warning', message: 'Document has no title' });
+      score -= 2;
+    }
+
+    return { score: Math.max(0, score), issues: issues, summary: { errors: issues.filter(function(i) { return i.severity === 'error'; }).length, warnings: issues.filter(function(i) { return i.severity === 'warning'; }).length } };
+  }
+
+  function generateAccessibilityTree(ir) {
+    var tree = { type: 'Document', children: [] };
+    ir.document.pages.forEach(function(pageId) {
+      var page = ir.pages[pageId];
+      if (!page) return;
+      var pageNode = { type: 'Page', properties: { pageNumber: page.num }, children: [] };
+      page.content.forEach(function(objId) {
+        var obj = ir.objects[objId];
+        if (!obj) return;
+        var node = { type: (obj.accessibility && obj.accessibility.role) || (obj.semantic && obj.semantic.role) || 'Paragraph', children: [] };
+        if (obj.semantic && obj.semantic.text) node.children.push({ type: 'Text', content: obj.semantic.text });
+        pageNode.children.push(node);
+      });
+      tree.children.push(pageNode);
+    });
+    return tree;
+  }
+
+  function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function exportHTML(ir, options) {
+    options = options || {};
+    var mode = options.mode || 'accessible';
+    var lang = (ir.document.metadata && ir.document.metadata.language) || 'en';
+    var title = (ir.document.metadata && ir.document.metadata.title) || 'Document';
+
+    var html = '<!DOCTYPE html>\n<html lang="' + lang + '">\n<head>\n';
+    html += '<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+    html += '<title>' + escapeHTML(title) + '</title>\n';
+
+    if (mode === 'visual') {
+      html += '<style>body{margin:0;padding:20px;background:#f5f5f5;font-family:system-ui}.pdf-page{background:#fff;margin:20px auto;box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;position:relative}.pdf-text{white-space:pre-wrap}.pdf-rect{border:1px solid #000}</style>\n';
+    } else {
+      html += '<style>body{margin:0;padding:20px;font-family:system-ui;line-height:1.6;max-width:800px;margin:0 auto}.pdf-page{margin:40px 0;padding:20px 0;border-bottom:1px solid #eee}h1,h2,h3{margin:1em 0 .5em}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5}</style>\n';
+    }
+
+    html += '</head>\n<body>\n';
+
+    if (mode !== 'visual') html += '<main role="document">\n';
+
+    ir.document.pages.forEach(function(pageId) {
+      var page = ir.pages[pageId];
+      if (!page) return;
+      var attrs = ' data-pdf-page="' + page.num + '"';
+
+      if (mode === 'visual') {
+        html += '<div class="pdf-page"' + attrs + ' style="width:' + page.width + 'px;height:' + page.height + 'px;">\n';
+        page.content.forEach(function(objId) {
+          var obj = ir.objects[objId];
+          if (!obj) return;
+          if (obj.type === 'text' && obj.bbox) {
+            html += '<div class="pdf-text"' + attrs + ' style="position:absolute;left:' + obj.bbox[0] + 'px;top:' + obj.bbox[1] + 'px;font-size:' + (obj.raw ? obj.raw.fontSize : 12) + 'px;">' + escapeHTML(obj.semantic ? obj.semantic.text : '') + '</div>\n';
+          }
+        });
+        html += '</div>\n';
+      } else {
+        html += '<section class="pdf-page"' + attrs + ' aria-label="Page ' + page.num + '">\n';
+        page.content.forEach(function(objId) {
+          var obj = ir.objects[objId];
+          if (!obj || !obj.semantic) return;
+          var role = obj.semantic.role || 'paragraph';
+          if (role === 'heading') {
+            var level = obj.semantic.level || 2;
+            html += '<h' + level + '>' + escapeHTML(obj.semantic.text) + '</h' + level + '>\n';
+          } else if (obj.type === 'image') {
+            html += '<figure><img src="' + escapeHTML(obj.raw && obj.raw.src || '') + '" alt="' + escapeHTML(obj.accessibility && obj.accessibility.alt || 'Image') + '">';
+            if (obj.semantic.caption) html += '<figcaption>' + escapeHTML(obj.semantic.caption) + '</figcaption>';
+            html += '</figure>\n';
+          } else {
+            html += '<p>' + escapeHTML(obj.semantic.text) + '</p>\n';
+          }
+        });
+        html += '</section>\n';
+      }
+    });
+
+    if (mode !== 'visual') html += '</main>\n';
+    html += '</body>\n</html>';
+    return html;
+  }
+
   // ─── Public API ────────────────────────────────────────────────────────
 
   return {
@@ -901,5 +1229,8 @@
     canUseWorkers: canUseWorkersFn,
     BlockTypes: BlockTypes,
     EntityTypes: EntityTypes,
+    createIR: createIR,
+    auditAccessibility: auditAccessibility,
+    exportHTML: exportHTML,
   };
 });

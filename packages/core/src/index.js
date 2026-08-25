@@ -57,6 +57,18 @@ import {
   terminateWorker,
 } from './workers.js';
 
+import {
+  createIR,
+  addPage,
+  addTextObject,
+  addVectorObject,
+  addObject,
+  extractVectors,
+  auditAccessibility,
+  generateAccessibilityTree,
+  exportHTML,
+} from './pdfir.js';
+
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const DEFAULTS = {
@@ -139,6 +151,7 @@ class CodbDoc {
     const {
       ocr = true,
       visual = false,
+      extractVectors: extractVecs = true,
       onPageComplete,
       onProgress,
       onLayer,
@@ -146,6 +159,7 @@ class CodbDoc {
 
     const graph = new DocumentGraph();
     const contentGraph = new DocumentContentGraph();
+    const ir = createIR();
     const useWorkers = config.useWorkers && canUseWorkers();
     let renderWorker = null;
     let brainWorker = null;
@@ -230,6 +244,42 @@ class CodbDoc {
           contentGraph.addPageGraph(contentPageGraph);
         }
 
+        // Extract vectors from PDF (new)
+        let vectors = [];
+        if (extractVecs) {
+          onProgress && onProgress({ page: num, total: this.pageCount, status: 'vectors' });
+          try {
+            vectors = await extractVectors(page);
+          } catch (e) { /* vector extraction may fail on some PDFs */ }
+        }
+
+        // Build PDF-IR page
+        const irPage = addPage(ir, num, {
+          width: pageSize.width,
+          height: pageSize.height,
+          rotation: page.rotate,
+          mediaBox: page.mediaBox,
+          cropBox: page.cropBox,
+        });
+
+        // Add vectors to IR
+        for (const vec of vectors) {
+          addVectorObject(ir, `page_${num}`, vec);
+        }
+
+        // Add text objects to IR
+        for (const item of content.items) {
+          if (item.str && item.str.trim()) {
+            addTextObject(ir, `page_${num}`, {
+              text: item.str,
+              bbox: [item.transform[4], item.transform[5], item.width, item.height],
+              font: item.fontName,
+              fontSize: Math.abs(item.transform[0]) || 12,
+              transform: item.transform,
+            });
+          }
+        }
+
         // Build page result
         const pageResult = {
           num, text, source, confidence, pageSize,
@@ -237,6 +287,7 @@ class CodbDoc {
           visual: visualRegions,
           contentBlocks: contentPageGraph ? contentPageGraph.blocks.length : 0,
           contentEntities: contentPageGraph ? contentPageGraph.entities.length : 0,
+          vectors: vectors.length,
         };
 
         graph.addPageResult(pageResult);
@@ -249,6 +300,7 @@ class CodbDoc {
           classification: classification?.type,
           contentBlocks: pageResult.contentBlocks,
           contentEntities: pageResult.contentEntities,
+          vectors: pageResult.vectors,
         });
       }
     } finally {
@@ -264,6 +316,7 @@ class CodbDoc {
     // Attach content graph and query methods to the document graph
     graph._contentGraph = contentGraph;
     graph._doc = this;
+    graph._ir = ir;
 
     // Add content-aware methods
     graph.find = (query) => executeQuery(contentGraph, query);
@@ -282,6 +335,16 @@ class CodbDoc {
     graph.getHighlights = (query, options) => {
       const results = contentGraph.find(query);
       return createHighlightAnnotations(results, options);
+    };
+
+    // Add PDF-IR methods
+    graph.getIR = () => ir;
+    graph.auditAccessibility = () => auditAccessibility(ir);
+    graph.getAccessibilityTree = () => generateAccessibilityTree(ir);
+    graph.toHTML = (options) => exportHTML(ir, options);
+    graph.getVectors = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.vectors?.map(id => ir.vectors[id]) || [];
     };
 
     return graph;

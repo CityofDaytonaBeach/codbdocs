@@ -39,6 +39,7 @@
   .content-graph .block { padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #f8f9fa; border-left: 3px solid #4361ee; }
   .content-graph .entity { padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #fff3cd; border-left: 3px solid #ffc107; }
   .doc-type { font-size: 28px; font-weight: 700; color: #4361ee; text-align: center; padding: 20px; }
+  .query-box button { margin-right: 8px; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -100,6 +101,29 @@
         <button onclick="runFind()">Find</button>
       </div>
       <div id="findResult"></div>
+    </div>
+
+    <!-- Vectors -->
+    <div class="card" id="vectorsCard">
+      <h3>Extracted Vectors/Shapes</h3>
+      <div id="vectorsContent" class="content-graph"></div>
+    </div>
+
+    <!-- Accessibility Audit -->
+    <div class="card" id="accessCard">
+      <h3>Accessibility Audit</h3>
+      <div id="accessContent"></div>
+    </div>
+
+    <!-- HTML Export -->
+    <div class="card" id="htmlCard">
+      <h3>HTML Export</h3>
+      <div class="query-box" style="margin-bottom: 12px">
+        <button onclick="exportHTML('visual')">Visual Mode</button>
+        <button onclick="exportHTML('accessible')">Accessible Mode</button>
+        <button onclick="exportHTML('intelligent')">Intelligent Mode</button>
+      </div>
+      <div id="htmlResult"></div>
     </div>
 
     <!-- Full Text -->
@@ -165,6 +189,8 @@
       renderSummary(currentGraph);
       renderBlocks(currentGraph);
       renderEntities(currentGraph);
+      renderVectors(currentGraph);
+      renderAccessibility(currentGraph);
       renderFullText(currentGraph);
 
       resultsEl.style.display = 'grid';
@@ -212,6 +238,68 @@
     document.getElementById('entitiesContent').innerHTML = entities.length > 0
       ? entities.map(e => `<div class="entity"><strong>${e.type}</strong>: ${e.value || e.text} <span class="entity-bbox">[${e.bbox ? e.bbox.map(v => Math.round(v)).join(', ') : 'no bbox'}]</span></div>`).join('')
       : '<p style="color:#999">No entities detected</p>';
+  }
+
+  function renderVectors(graph) {
+    const vectors = graph.getVectors(1);
+    const rects = vectors.filter(v => v.type === 'rect');
+    const paths = vectors.filter(v => v.type === 'path');
+    const checkboxes = vectors.filter(v => v.semantic && v.semantic.role === 'checkbox');
+    const separators = vectors.filter(v => v.semantic && v.semantic.role === 'separator');
+    const tableBorders = vectors.filter(v => v.semantic && v.semantic.role === 'table_border');
+
+    document.getElementById('vectorsContent').innerHTML = `
+      <div>
+        <span class="stat">Total: ${vectors.length}</span>
+        <span class="stat">Rects: ${rects.length}</span>
+        <span class="stat">Paths: ${paths.length}</span>
+        <span class="stat">Checkboxes: ${checkboxes.length}</span>
+        <span class="stat">Separators: ${separators.length}</span>
+        <span class="stat">Table Borders: ${tableBorders.length}</span>
+      </div>
+      ${rects.slice(0, 5).map(r => `
+        <div class="block">
+          <strong>rect</strong> ${r.semantic && r.semantic.role ? '(' + r.semantic.role + ')' : ''}
+          ${r.bbox ? `<span class="entity-bbox">[${r.bbox.map(v => Math.round(v)).join(', ')}]</span>` : ''}
+          ${r.graphicsState && r.graphicsState.stroke ? `<span style="color:${r.graphicsState.stroke}">■</span>` : ''}
+          ${r.graphicsState && r.graphicsState.fill ? `<span style="color:${r.graphicsState.fill}">■</span>` : ''}
+        </div>
+      `).join('')}
+    `;
+  }
+
+  function renderAccessibility(graph) {
+    const audit = graph.auditAccessibility();
+    document.getElementById('accessContent').innerHTML = `
+      <div style="text-align:center;padding:16px">
+        <div style="font-size:48px;font-weight:700;color:${audit.score >= 80 ? '#28a745' : audit.score >= 60 ? '#ffc107' : '#dc3545'}">${audit.score}</div>
+        <div style="color:#666;font-size:14px">Accessibility Score</div>
+      </div>
+      ${audit.issues.length > 0 ? `
+        <div style="margin-top:12px">
+          <strong>Issues (${audit.issues.length}):</strong>
+          ${audit.issues.map(i => `
+            <div class="entity" style="border-left-color:${i.severity === 'error' ? '#dc3545' : i.severity === 'warning' ? '#ffc107' : '#17a2b8'}">
+              <strong>${i.severity.toUpperCase()}</strong>: ${i.message}
+              <span class="entity-bbox">Page ${i.page}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : '<p style="color:#28a745;margin-top:12px">No accessibility issues found!</p>'}
+    `;
+  }
+
+  function exportHTML(mode) {
+    if (!currentGraph) return;
+    const html = currentGraph.toHTML({ mode: mode });
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `document-${mode}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    document.getElementById('htmlResult').innerHTML = `<p style="color:#28a745;margin-top:8px">Downloaded ${mode} mode HTML</p>`;
   }
 
   function renderFullText(graph) {
