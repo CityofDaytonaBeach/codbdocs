@@ -1,39 +1,68 @@
 /**
  * @codbdocs/core
  *
- * Framework-agnostic browser engine for turning a PDF into searchable text.
- * Uses PDF.js to pull embedded text layers, and falls back to Tesseract.js
- * OCR for any page that doesn't have one (scans, photographed pages, etc).
+ * Browser document-processing engine with offline AI understanding.
+ * Uses PDF.js for text extraction, Tesseract.js for OCR fallback,
+ * and a built-in Document Brain for semantic analysis.
  *
- * This module does not bundle PDF.js or Tesseract.js. It expects them to be
- * present as globals (`window.pdfjsLib`, `window.Tesseract`) — load them via
- * <script> tags or your own bundler before calling CodbDocs.load().
- * This keeps @codbdocs/core small and lets consumers pin whichever versions
- * of those two libraries they want.
+ * No server. No CDN. No external APIs. Pure browser JavaScript.
+ *
+ * Architecture:
+ *   CodbDocs.load(source)
+ *     → CodbDoc
+ *       → doc.analyze({ ocr, visual })
+ *         → DocumentGraph (queryable)
+ *           → .query("what dates are mentioned?")
+ *           → .toJSON()
  */
 
+import {
+  analyzeSpatialLayout,
+  detectStructure,
+  extractMetadata,
+  classifyPage,
+  analyzeVisualRegions,
+} from './brain.js';
+
+import {
+  DocumentGraph,
+} from './layers.js';
+
+import {
+  canUseWorkers,
+  createRenderWorker,
+  createBrainWorker,
+  sendToWorker,
+  terminateWorker,
+} from './workers.js';
+
+// ─── Configuration ───────────────────────────────────────────────────────────
+
 const DEFAULTS = {
-  nativeTextMinLength: 20, // below this, a page is treated as "no text layer"
-  ocrScale: 2,              // render scale used before handing a page to Tesseract
+  nativeTextMinLength: 20,
+  ocrScale: 2,
   ocrLang: 'eng',
+  enableVisual: false,       // enable canvas-based visual analysis
+  enableBrain: true,         // enable document brain (structure, metadata)
+  useWorkers: true,          // use OffscreenCanvas + Workers when available
+  concurrency: 1,            // parallel page processing (1 = sequential)
 };
 
 let config = { ...DEFAULTS };
 
-/**
- * Override default behavior. Call before load() if you need to.
- * @param {Partial<typeof DEFAULTS>} opts
- */
 function configure(opts = {}) {
   config = { ...config, ...opts };
 }
+
+// ─── Library Detection ───────────────────────────────────────────────────────
 
 function getPdfjs() {
   const lib = (typeof window !== 'undefined') &&
     (window['pdfjs-dist/build/pdf'] || window.pdfjsLib);
   if (!lib) {
     throw new Error(
-      '[codbdocs] pdfjsLib not found. Load PDF.js before calling CodbDocs.load().'
+      '[codbdocs] pdfjsLib not found. Load PDF.js before calling CodbDocs.load().\n' +
+      '  <script src="vendor/pdf.js/pdf.min.js"></script>'
     );
   }
   return lib;
@@ -43,17 +72,15 @@ function getTesseract() {
   const lib = (typeof window !== 'undefined') && window.Tesseract;
   if (!lib) {
     throw new Error(
-      '[codbdocs] Tesseract not found. Load Tesseract.js before calling doc.analyze({ ocr: true }).'
+      '[codbdocs] Tesseract not found. Load Tesseract.js before calling doc.analyze({ ocr: true }).\n' +
+      '  <script src="vendor/tesseract.js/tesseract.min.js"></script>'
     );
   }
   return lib;
 }
 
-/**
- * Load a PDF from a File, Blob, ArrayBuffer, or URL string.
- * @param {File|Blob|ArrayBuffer|string} source
- * @returns {Promise<CodbDoc>}
- */
+// ─── Load ────────────────────────────────────────────────────────────────────
+
 async function load(source) {
   const pdfjsLib = getPdfjs();
 
@@ -62,81 +89,246 @@ async function load(source) {
     data = { url: source };
   } else if (source instanceof ArrayBuffer) {
     data = { data: source };
+  } else if (source instanceof Uint8Array) {
+    data = { data: source.buffer };
   } else if (source && typeof source.arrayBuffer === 'function') {
     data = { data: await source.arrayBuffer() };
   } else {
-    throw new Error('[codbdocs] Unsupported source. Pass a File, Blob, ArrayBuffer, or URL string.');
+    throw new Error('[codbdocs] Unsupported source. Pass a File, Blob, ArrayBuffer, Uint8Array, or URL string.');
   }
 
   const pdf = await pdfjsLib.getDocument(data).promise;
   return new CodbDoc(pdf);
 }
 
+// ─── CodbDoc ─────────────────────────────────────────────────────────────────
+
 class CodbDoc {
   constructor(pdf) {
     this._pdf = pdf;
     this.pageCount = pdf.numPages;
+    this._workers = [];
   }
 
   /**
-   * Run the extraction pipeline.
-   * @param {{ ocr?: boolean, onPageComplete?: (page: PageResult) => void, onProgress?: (info: {page:number, status:string, progress?:number}) => void }} opts
-   * @returns {Promise<DocumentGraph>}
+   * Run the full analysis pipeline.
+   *
+   * @param {Object} opts
+   * @param {boolean} opts.ocr - Enable OCR for scan-only pages (default: true)
+   * @param {boolean} opts.visual - Enable visual analysis (default: false)
+   * @param {Function} opts.onPageComplete - Called when each page is done
+   * @param {Function} opts.onProgress - Called with progress updates
+   * @param {Function} opts.onLayer - Called when each semantic layer is updated
+   *
+   * @returns {Promise<DocumentGraph>} Rich, queryable document graph
    */
   async analyze(opts = {}) {
-    const { ocr = true, onPageComplete, onProgress } = opts;
+    const {
+      ocr = true,
+      visual = false,
+      onPageComplete,
+      onProgress,
+      onLayer,
+    } = opts;
+
+    const graph = new DocumentGraph();
+    const useWorkers = config.useWorkers && canUseWorkers();
+    let renderWorker = null;
+    let brainWorker = null;
+
+    // Set up workers if available
+    if (useWorkers) {
+      try {
+        renderWorker = createRenderWorker();
+        brainWorker = createBrainWorker();
+      } catch (e) {
+        // Workers not available, fall back to main thread
+      }
+    }
+
+    try {
+      for (let num = 1; num <= this.pageCount; num++) {
+        onProgress && onProgress({ page: num, total: this.pageCount, status: 'reading' });
+
+        // Get PDF page
+        const page = await this._pdf.getPage(num);
+        const viewport = page.getViewport({ scale: 1 });
+        const pageSize = { width: viewport.width, height: viewport.height };
+
+        // Extract text content
+        const content = await page.getTextContent();
+        const nativeText = content.items
+          .map(it => it.str)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        let text = nativeText;
+        let source = 'native';
+        let confidence = null;
+        let canvas = null;
+
+        // OCR fallback for scan pages
+        if (nativeText.length <= config.nativeTextMinLength && ocr) {
+          onProgress && onProgress({ page: num, total: this.pageCount, status: 'ocr', progress: 0 });
+
+          try {
+            canvas = await renderPageToCanvas(page, config.ocrScale);
+            const Tesseract = getTesseract();
+            const { data } = await Tesseract.recognize(canvas, config.ocrLang, {
+              logger: (m) => {
+                if (m.status === 'recognizing text') {
+                  onProgress && onProgress({ page: num, total: this.pageCount, status: 'ocr', progress: m.progress });
+                }
+              },
+            });
+            text = (data.text || '').trim();
+            source = 'ocr';
+            confidence = data.confidence;
+          } catch (err) {
+            source = 'error';
+            text = '';
+          }
+        } else if (nativeText.length <= config.nativeTextMinLength && !ocr) {
+          source = 'skipped';
+          text = '';
+        }
+
+        // Run Document Brain analysis
+        let spatial = null;
+        let structures = null;
+        let metadata = null;
+        let classification = null;
+        let visualRegions = null;
+
+        if (config.enableBrain) {
+          onProgress && onProgress({ page: num, total: this.pageCount, status: 'analyzing' });
+
+          // Spatial analysis
+          spatial = analyzeSpatialLayout(content.items, pageSize);
+
+          // Structure detection
+          structures = detectStructure(spatial, pageSize);
+
+          // Metadata extraction
+          metadata = extractMetadata(text);
+
+          // Page classification
+          classification = classifyPage(text, spatial);
+        }
+
+        // Visual analysis (requires rendering)
+        if (visual || config.enableVisual) {
+          if (!canvas) {
+            canvas = await renderPageToCanvas(page, config.ocrScale);
+          }
+          try {
+            visualRegions = analyzeVisualRegions(canvas);
+          } catch (e) {
+            // Visual analysis failed, skip
+          }
+        }
+
+        // Build page result
+        const pageResult = {
+          num,
+          text,
+          source,
+          confidence,
+          pageSize,
+          spatial,
+          structures,
+          metadata,
+          classification,
+          visual: visualRegions,
+        };
+
+        // Add to graph
+        graph.addPageResult(pageResult);
+
+        // Callbacks
+        onPageComplete && onPageComplete(pageResult);
+        onLayer && onLayer({
+          page: num,
+          spatial: !!spatial,
+          structure: !!structures,
+          metadata: !!metadata,
+          classification: classification?.type,
+        });
+      }
+    } finally {
+      // Clean up workers
+      terminateWorker(renderWorker);
+      terminateWorker(brainWorker);
+    }
+
+    return graph;
+  }
+
+  /**
+   * Quick text-only extraction (no brain analysis).
+   * Faster than analyze() when you just need raw text.
+   */
+  async extractText(opts = {}) {
+    const { ocr = true, onProgress } = opts;
     const pages = [];
 
     for (let num = 1; num <= this.pageCount; num++) {
-      onProgress && onProgress({ page: num, status: 'reading' });
+      onProgress && onProgress({ page: num, total: this.pageCount, status: 'reading' });
+
       const page = await this._pdf.getPage(num);
       const content = await page.getTextContent();
-      const nativeText = content.items.map((it) => it.str).join(' ').replace(/\s+/g, ' ').trim();
+      const nativeText = content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
 
-      /** @type {PageResult} */
-      let result;
+      let text = nativeText;
+      let source = 'native';
 
-      if (nativeText.length > config.nativeTextMinLength) {
-        result = { num, text: nativeText, source: 'native', confidence: null };
-      } else if (ocr) {
-        onProgress && onProgress({ page: num, status: 'ocr', progress: 0 });
+      if (nativeText.length <= config.nativeTextMinLength && ocr) {
+        onProgress && onProgress({ page: num, total: this.pageCount, status: 'ocr' });
         try {
           const canvas = await renderPageToCanvas(page, config.ocrScale);
           const Tesseract = getTesseract();
-          const { data } = await Tesseract.recognize(canvas, config.ocrLang, {
-            logger: (m) => {
-              if (m.status === 'recognizing text') {
-                onProgress && onProgress({ page: num, status: 'ocr', progress: m.progress });
-              }
-            },
-          });
-          result = { num, text: (data.text || '').trim(), source: 'ocr', confidence: data.confidence };
-        } catch (err) {
-          result = { num, text: '', source: 'error', confidence: null, error: String(err) };
+          const { data } = await Tesseract.recognize(canvas, config.ocrLang);
+          text = (data.text || '').trim();
+          source = 'ocr';
+        } catch {
+          text = '';
+          source = 'error';
         }
-      } else {
-        result = { num, text: '', source: 'skipped', confidence: null };
+      } else if (nativeText.length <= config.nativeTextMinLength) {
+        source = 'skipped';
+        text = '';
       }
 
-      pages.push(result);
-      onPageComplete && onPageComplete(result);
+      pages.push({ num, text, source });
     }
-
-    const fullText = pages.map((p) => `--- page ${p.num} (${p.source}) ---\n${p.text}`).join('\n\n');
-    const wordCount = pages.reduce((sum, p) => sum + (p.text ? p.text.split(/\s+/).filter(Boolean).length : 0), 0);
 
     return {
       pageCount: this.pageCount,
       pages,
-      fullText,
-      stats: {
-        nativeCount: pages.filter((p) => p.source === 'native').length,
-        ocrCount: pages.filter((p) => p.source === 'ocr').length,
-        wordCount,
-      },
+      fullText: pages.map(p => `--- page ${p.num} (${p.source}) ---\n${p.text}`).join('\n\n'),
     };
   }
+
+  /**
+   * Render a page to a canvas element (for display).
+   */
+  async renderPage(pageNum, scale = 1.5) {
+    const page = await this._pdf.getPage(pageNum);
+    return renderPageToCanvas(page, scale);
+  }
+
+  /**
+   * Clean up resources.
+   */
+  destroy() {
+    if (this._pdf) {
+      this._pdf.destroy();
+    }
+  }
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function renderPageToCanvas(page, scale) {
   const viewport = page.getViewport({ scale });
@@ -148,19 +340,11 @@ async function renderPageToCanvas(page, scale) {
   return canvas;
 }
 
-export const CodbDocs = { load, configure };
+// ─── Exports ─────────────────────────────────────────────────────────────────
+
+export const CodbDocs = { load, configure, canUseWorkers };
 export default CodbDocs;
 
-/**
- * @typedef {Object} PageResult
- * @property {number} num
- * @property {string} text
- * @property {'native'|'ocr'|'error'|'skipped'} source
- * @property {number|null} confidence
- *
- * @typedef {Object} DocumentGraph
- * @property {number} pageCount
- * @property {PageResult[]} pages
- * @property {string} fullText
- * @property {{nativeCount:number, ocrCount:number, wordCount:number}} stats
- */
+// Also export classes for advanced usage
+export { DocumentGraph, TextLayer, LayoutLayer, StructureLayer, MetadataLayer, VisualLayer } from './layers.js';
+export { analyzeSpatialLayout, detectStructure, extractMetadata, classifyPage, analyzeVisualRegions } from './brain.js';
