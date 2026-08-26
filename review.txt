@@ -1,246 +1,2099 @@
-Quite a few. PDF is less a document format and more a box containing 30 years of questionable decisions. If you're building CODB Docs as a document-intelligence engine, these are exactly the failures worth targeting because many tools successfully "open" a PDF while extracting the wrong meaning.
+I pulled the current main tree and source, not just the old dist/codbdocs.js. There has been substantial work added. The source now has dedicated rag.js, advanced.js, extended.js, graphics.js, pdfir.js, workers, React support, PDF creation, and more.
 
-High-value PDF failures to detect
-Failure	What commonly happens	What CODB Docs should detect/do
-Wrong reading order	Multi-column text gets mixed together	Reconstruct order spatially and structurally
-Text exists but is invisible	Hidden OCR/text layer is extracted instead of visible content	Compare rendered page against text layer
-Bad OCR layer	PDF has searchable text, but it's garbage	Score native-text quality and automatically re-OCR
-Duplicate OCR text	Visible text + hidden OCR produces duplicates	Spatially deduplicate overlapping text
-Scanned pages mixed with native pages	Some pages work, others silently return nothing	Detect extraction quality per page
-Rotated scans	OCR produces nonsense	Detect orientation and normalize before OCR
-Skewed scans	OCR accuracy collapses	Deskew automatically
-Text encoded as glyphs	Viewer shows words, extraction gives garbage	Glyph/font mapping + visual/OCR fallback
-Missing ToUnicode map	Copy/paste produces nonsense	Detect invalid Unicode mappings
-Outlined text	Letters are vector paths, not text	Detect text-like vector geometry + OCR
-Flattened forms	Form looks completed but fields no longer exist	Visually recover labels/values
-Checkboxes/radio buttons	Extraction misses selected state	Detect marks spatially
-Signatures	Signature image gets ignored	Detect signature regions and associate them with nearby labels
-Tables without structure	Extractor returns a pile of words	Reconstruct rows/columns/cells geometrically
-Tables across pages	Each page becomes an unrelated table	Recognize continuation and merge logical table
-Merged cells	Column relationships get destroyed	Infer spanning cells geometrically
-Charts	Text extracted but actual values/trends lost	Chart-specific visual analysis
-Diagrams	Labels survive, relationships disappear	Build nodes + connectors + spatial relationships
-Maps/site plans	OCR gets street names but loses geographic meaning	Preserve labels, regions, legends and relationships
-Images without captions	Image is completely invisible to RAG	Extract image + infer context + optional vision
-Caption detached from image	Caption becomes unrelated paragraph	Associate caption spatially
-Headers/footers	Pollute every RAG chunk	Detect repeated page elements
-Watermarks	"DRAFT" appears 100 times in extraction	Detect repeated/background text
-Footnotes	Inserted randomly into main paragraphs	Preserve footnote references and relationships
-Hyphenation	govern- ment becomes separate terms	Reconstruct words intelligently
-Ligatures	fi, ff, etc. become bad Unicode	Normalize glyphs
-Clipped text	Text object exists but isn't actually visible	Compare clipping/render state
-Redactions	Hidden underlying text may still be extractable	Detect visual redaction vs underlying content
-Annotations	Comments/stamps aren't included	Extract annotations separately
-Attachments	Embedded files disappear	Enumerate embedded attachments
-Layers/OCGs	Hidden CAD/map layers confuse extraction	Understand visible/hidden layer state
-Broken tags	Claims to be accessible but structure is nonsense	Validate tags against actual page content
-Fake headings	Large bold text isn't tagged as heading	Infer semantic headings
-Incorrect language metadata	Screen readers/OCR use wrong language	Detect probable language
-Malformed PDFs	One library refuses to open them	Recovery/repair path
-Incremental updates	Old objects remain inside file	Distinguish active revision from stale objects
-One of the biggest failures: "searchable" doesn't mean correct
+The biggest issue is actually more mundane and more important:
 
-Imagine the page visibly says:
+Your source is significantly ahead of your built dist/codbdocs.js.
 
-Contract Amount: $2,475,000
+Your source packages/core/src/index.js is ~32 KB plus many modules, while dist/codbdocs.js is still the older ~59 KB monolithic build. So someone using your jsDelivr dist URL does not appear to be getting all the newer functionality.
 
-but its hidden OCR layer contains:
+What is already there now
 
-Contract Arnount: $2475OOO
+The source has gotten much closer to what we've been discussing:
 
-Most extractors see text and conclude:
+dedicated RAG module
+PDF image extraction
+image dataUrl
+image ArrayBuffer
+thumbnails
+smart chunking strategies
+fixed, semantic, page, section, table and hybrid chunking
+chunk metadata
+bounding boxes
+cross-page context
+entity relationships
+topic flow
+RAG JSON output
+JSONL/CSV export
+embedding-provider abstraction
+OpenAI embeddings
+custom embedding providers
+local embedding provider
+large-PDF batched processing
+signatures
+OCG/layer extraction
+embedded files
+actions
+appearance streams
+revisions
+graphics states
+glyph extraction
+marked content
+artifacts
+accessibility analysis/remediation
+PDF-IR
 
-✓ Native text available
+That's no longer a toy PDF wrapper.
 
-Then RAG indexes garbage.
+The remaining major gaps
 
-CODB Docs should calculate something like:
+1. Your local embedding is not actually an embedding model.
 
-page.quality = {
-  nativeText: 0.42,
-  unicode: 0.91,
-  readingOrder: 0.76,
-  visualAgreement: 0.38,
-  ocrRecommended: true
+This is probably the most important RAG issue.
+
+LocalEmbeddingProvider says:
+
+// This would integrate with @xenova/transformers or similar
+// For now, we'll use a simple hash-based embedding as placeholder
+
+It then creates vectors from character codes.
+
+So:
+
+"car"
+
+and:
+
+"automobile"
+
+have no genuine learned semantic relationship.
+
+You need the WebGPU/WASM semantic encoder we discussed.
+
+I would make this priority P0.
+
+2. Images are extracted, but they aren't understood.
+
+This has improved substantially. extractImages() now extracts the actual pixels and provides:
+
+dataUrl
+arrayBuffer
+thumbnail
+width
+height
+pageNumber
+bbox
+
+Excellent foundation.
+
+But it doesn't yet produce:
+
+{
+  type: "photo",
+  caption: "...",
+  description: "...",
+  objects: [],
+  ocr: [],
+  nearbyText: "...",
+  semanticText: "...",
+  embedding: [...]
+}
+
+So RAG can technically carry an image around, but doesn't understand that:
+
+"This photograph shows flooding across Atlantic Avenue."
+
+That's P0/P1.
+
+3. Images aren't actually populated during normal analyze().
+
+This one jumped out.
+
+You define:
+
+graph.getImages = (pageNum) => {
+  return graph._images?.filter(...) || [];
 };
 
-Instead of asking only:
+and:
 
-if (text.length > 20)
+graph.extractAllImages = ...
 
-which your current implementation essentially uses as the native-text/OCR decision threshold.
+But in the main analyze() loop I don't see:
 
-That is something I would change.
+graph._images.push(...)
 
-Use:
+So:
 
-Should OCR?
-    │
-    ├── no native text
-    ├── suspicious Unicode
-    ├── abnormal character distribution
-    ├── poor word formation
-    ├── broken reading order
-    ├── text/render disagreement
-    ├── missing expected visible regions
-    └── extremely low semantic coherence
-Another huge one: visible PDF vs internal PDF
+const graph = await doc.analyze();
 
-I'd make CODB Docs maintain two concepts:
+graph.getImages();
 
-PDF INTERNAL REPRESENTATION
-           │
-           │ compare
-           ▼
-RENDERED VISUAL REPRESENTATION
+may simply return:
 
-Then flag discrepancies.
+[]
+
+until someone explicitly runs extraction separately.
+
+I'd integrate image extraction into analysis:
+
+await doc.analyze({
+  images: true
+});
+
+4. Your OCR decision is still too primitive.
+
+This remains:
+
+if (
+  nativeText.length <=
+  config.nativeTextMinLength
+)
+
+Default:
+
+nativeTextMinLength: 20
+
+That's dangerous.
+
+A page containing 5,000 characters of garbage OCR passes because:
+
+5000 > 20
+
+CODB Docs concludes native text is acceptable.
+
+Instead calculate:
+
+page.textQuality = {
+  unicodeValidity,
+  wordValidity,
+  printableRatio,
+  duplicateRatio,
+  spatialCoherence,
+  visualAgreement,
+  languageConfidence,
+  semanticCoherence,
+  nativeConfidence
+};
+
+Then:
+
+if (page.textQuality.score < .75) {
+    OCR();
+}
+
+This is another P0.
+
+5. No native hybrid retrieval engine yet
+
+You create chunks and embeddings, but I don't see a proper local:
+
+index.search()
+
+architecture containing:
+
+BM25
++
+embedding similarity
++
+entity matching
++
+structural score
++
+spatial score
++
+metadata score
+
+You have the ingredients but not yet the oven. Tragic, given how many ingredients humans have already purchased.
+
+I'd add:
+
+const index =
+  await graph.createIndex();
+
+const results =
+  await index.search(query);
+
+6. No proper reranker
+
+After retrieval you need:
+
+1000 chunks
+ ↓
+candidate retrieval
+ ↓
+top 30
+ ↓
+reranking
+ ↓
+top 6
+ ↓
+LLM
+
+Otherwise semantic search gets decent candidates but not necessarily the best evidence.
+
+7. Your "semantic chunking" isn't really semantic
+
+Currently it primarily does:
+
+text.split(/\n\s*\n/)
+
+and groups paragraphs based on size.
+
+That's structurally sensible, but it isn't semantic-boundary detection.
+
+True semantic chunking should examine changes in meaning:
+
+paragraph embedding
+paragraph embedding
+paragraph embedding
+      ↓
+similarity drops sharply
+      ↓
+new chunk
+
+Even better for CODB Docs:
+
+semantic boundary
++
+heading boundary
++
+table boundary
++
+layout boundary
++
+page relationship
+
+8. Chunk sizes are character-based rather than token-aware
+
+You're using values such as:
+
+chunkSize = 1000
+maxChunkSize = 3000
+
+based on .length.
+
+Eventually this should become:
+
+targetTokens: 400,
+maxTokens: 650,
+overlapTokens: 60
+
+with model-aware tokenization.
+
+9. Cross-page references use an approximation
+
+I noticed:
+
+fromPage:
+  Math.ceil(
+    (match.index / fullText.length)
+    * summary.pageCount
+  )
+
+That's estimating the originating page based on the percentage through the entire document.
+
+That's clever as a temporary shortcut, but inaccurate.
+
+You already know every page's text offsets. Build a global offset map:
+
+0–1432       page 1
+1433–2911    page 2
+2912–4892    page 3
+
+Then resolve the exact page.
+
+10. Image bounding boxes need stronger handling
+
+The image extractor is attempting:
+
+const bbox =
+  args.length > 1
+    ? args[1]
+    : null;
+
+PDF image placement usually depends on the active graphics transformation matrix. You need to track the PDF graphics state / CTM while processing the operator list.
+
+Conveniently, you're already building graphics-state functionality elsewhere.
+
+Tie those together.
+
+Otherwise an image may be correctly extracted but have an incorrect or missing location.
+
+One potentially real browser bug
+
+Your extraction code creates a normal DOM canvas:
+
+const canvas =
+  document.createElement("canvas");
+
+then calls:
+
+canvas.convertToBlob(...)
+
+convertToBlob() belongs to OffscreenCanvas. A normal HTMLCanvasElement conventionally uses:
+
+canvas.toBlob(...)
+
+So this deserves immediate testing/fixing.
+
+You already use:
+
+canvas.toDataURL()
+
+correctly.
+
+I'd make a utility that handles both canvas types.
+
+The gap I care about most
+
+You've built:
+
+PDF
+ ↓
+Objects
+ ↓
+Text
+ ↓
+Structure
+ ↓
+Entities
+ ↓
+Images
+ ↓
+Chunks
+ ↓
+RAG Output
+
+Now build the Document Intelligence Index between extraction and AI:
+
+                CODB-IR
+                   │
+      ┌────────────┼────────────┐
+      │            │            │
+     TEXT        VISUAL      STRUCTURE
+      │            │            │
+      ▼            ▼            ▼
+   semantic      image        layout
+   embedding   understanding  fingerprint
+      │            │            │
+      └────────────┼────────────┘
+                   ▼
+             CODB Fingerprint
+                   │
+        ┌──────────┼───────────┐
+        │          │           │
+      BM25      Semantic    Structural
+        │          │           │
+        └──────────┼───────────┘
+                   ▼
+             Hybrid Search
+                   │
+                   ▼
+               Reranker
+                   │
+                   ▼
+               Evidence
+                   │
+           page + bbox + object
+                   │
+                   ▼
+                  LLM
+My priority order
+Priority	Gap
+P0	Rebuild dist from current source
+P0	Replace fake hash embeddings with real WebGPU/WASM embeddings
+P0	Replace text-length OCR decision with extraction-quality scoring
+P0	Integrate image extraction into analyze()
+P1	Image semantic understanding
+P1	Local hybrid search index
+P1	Reranker
+P1	Structural + semantic chunking
+P1	Exact image coordinates
+P1	Fix/test canvas.convertToBlob()
+P2	Token-aware chunking
+P2	Exact cross-page offset mapping
+P2	IndexedDB persistence
+P2	Model/index caching
+P2	React hooks around RAG/search
+P2	Multi-document workspace
+
+The encouraging part is that you don't need another architectural rewrite. The repository already has the right major pieces separated into rag.js, pdfir.js, brain.js, content.js, advanced.js, etc.
+
+The next stage is making those pieces actually cooperate as one retrieval/intelligence pipeline, rather than continuing to add isolated extraction features. That's the difference between a very capable PDF parser and the browser-native document intelligence system you're aiming for.
+
+That changes my assessment substantially. If no ML model is an intentional architectural constraint, then the hash-based LocalEmbeddingProvider shouldn't be judged as a placeholder for Transformers.js. The real question is whether you can make CODB Docs achieve embedding-like retrieval and document understanding algorithmically.
+
+And yes, that's a much more interesting project.
+
+Your goal should not be to imitate a neural embedding mathematically. Build a deterministic document semantic fingerprint that gets similar retrieval benefits from signals already available in the PDF.
+
+I'd rename the current concept
+
+Instead of:
+
+LocalEmbeddingProvider
+
+call it something like:
+
+CodbFingerprint
+
+because calling character hashing an embedding invites people to compare it to embedding models, which isn't really what you're building.
+
+A fingerprint could combine:
+
+CODB Semantic Fingerprint
+│
+├── lexical
+│   ├── words
+│   ├── stems
+│   ├── n-grams
+│   ├── phrases
+│   └── fuzzy terms
+│
+├── entities
+│   ├── money
+│   ├── dates
+│   ├── people
+│   ├── addresses
+│   ├── organizations
+│   └── identifiers
+│
+├── document structure
+│   ├── heading
+│   ├── paragraph
+│   ├── table
+│   ├── form
+│   └── list
+│
+├── spatial
+│   ├── page
+│   ├── bbox
+│   ├── nearby objects
+│   └── reading order
+│
+├── context
+│   ├── parent heading
+│   ├── previous block
+│   ├── next block
+│   └── page classification
+│
+└── relationships
+    ├── entity co-occurrence
+    ├── label → value
+    ├── heading → section
+    ├── table → row
+    └── image → caption
+
+That can become extremely powerful without downloading a model.
+
+Example
+
+Document says:
+
+Total Contract Value: $2,450,000
+
+User asks:
+
+How much is the agreement worth?
+
+Pure keyword search struggles because:
+
+query: agreement worth
+document: contract value
+
+Your engine needs deterministic semantic expansion.
 
 For example:
 
 {
-  page: 17,
+  agreement: [
+    "contract",
+    "agreement",
+    "deal",
+    "award"
+  ],
 
-  internal: {
-    textObjects: 482,
-    images: 3,
-    vectors: 912
-  },
+  worth: [
+    "value",
+    "amount",
+    "total",
+    "cost",
+    "price"
+  ]
+}
 
-  visual: {
-    textRegions: 31,
-    imageRegions: 4,
-    tableRegions: 1
-  },
+Now the normalized query becomes conceptually:
 
-  anomalies: [
+(contract OR agreement OR deal OR award)
+AND
+(value OR amount OR total OR cost OR price)
+
+Then entity detection sees:
+
+$2,450,000
+
+and identifies it as:
+
+{
+  type: "currency",
+  role: "value"
+}
+
+Suddenly:
+
+"How much is the agreement worth?"
+
+can rank that passage very highly without an embedding model.
+
+Go beyond synonyms
+
+This is where CODB Docs could become unusual.
+
+Create concept classes:
+
+Concepts.MONEY
+Concepts.DATE
+Concepts.PERSON
+Concepts.CONTRACT
+Concepts.APPROVAL
+Concepts.LOCATION
+Concepts.ACTION
+Concepts.QUANTITY
+Concepts.DURATION
+Concepts.VENDOR
+Concepts.PROJECT
+
+Then classify queries algorithmically.
+
+"What did the city pay?"
+
+becomes:
+
+{
+  intent: "lookup",
+  target: "money",
+  concepts: [
+    "payment",
+    "cost",
+    "amount"
+  ],
+  entityExpected: "currency"
+}
+
+Now your engine knows that a result containing a currency entity deserves a major ranking boost.
+
+Your current PDF structure gives you an advantage
+
+You've already extracted information conventional text search throws away.
+
+Suppose the PDF contains:
+
+                  FINANCIAL IMPACT
+
+Account Number                  Amount
+
+001-100-521000                 $325,000
+
+A text embedding sees mostly words.
+
+CODB Docs can see:
+
+heading
+   ↓
+FINANCIAL IMPACT
+   │
+   └── table
+        │
+        ├── Account Number
+        │      ↓
+        │   001-100-521000
+        │
+        └── Amount
+               ↓
+           $325,000
+
+That relationship is incredibly valuable.
+
+For a document-specific retrieval engine, structure can compensate for quite a bit of missing neural semantics.
+
+Replace one vector with multiple fingerprints
+
+Rather than:
+
+embedding: [
+  .382,
+  -.122,
+  ...
+]
+
+I'd generate something more interpretable:
+
+{
+  lexical: Uint32Array(...),
+
+  concepts: Uint32Array(...),
+
+  entities: Uint32Array(...),
+
+  structure: Uint16Array(...),
+
+  spatial: Uint16Array(...),
+
+  relationships: Uint32Array(...),
+
+  statistics: {
+    wordCount: 183,
+    currencyCount: 4,
+    dateCount: 2
+  }
+}
+
+You can still calculate similarity extremely quickly.
+
+Ranking
+
+Something like:
+
+score =
+    lexicalSimilarity   * 0.25 +
+    conceptSimilarity   * 0.25 +
+    entitySimilarity    * 0.15 +
+    phraseSimilarity    * 0.10 +
+    structureSimilarity * 0.10 +
+    contextSimilarity   * 0.10 +
+    spatialSimilarity   * 0.05;
+
+But make the weights query-dependent.
+
+If query is:
+
+$2,450,000
+
+favor exact/entity matching.
+
+If:
+
+Who approved the contract?
+
+favor:
+
+PERSON
++
+APPROVAL
++
+CONTRACT
++
+relationship
+
+If:
+
+Where is the project?
+
+favor:
+
+LOCATION
++
+PROJECT
+
+That's intent-aware deterministic retrieval.
+
+Images can follow the same philosophy
+
+This is harder without a vision model, but there's still quite a bit you can infer.
+
+You already have:
+
+image
+page
+bbox
+dimensions
+PDF objects
+nearby text
+document structure
+
+Add:
+
+caption detection
+OCR inside image
+surrounding paragraphs
+nearest heading
+figure numbering
+aspect ratio
+pixel statistics
+graphics relationships
+
+Then:
+
+{
+  type: "image",
+  page: 14,
+
+  inferredRole: "figure",
+
+  caption:
+    "Figure 4 - Proposed Project Area",
+
+  parentHeading:
+    "Project Location",
+
+  nearbyEntities: [
     {
-      type: "hidden_text",
-      severity: "warning"
+      type: "address",
+      value: "..."
+    }
+  ],
+
+  concepts: [
+    "project",
+    "location"
+  ]
+}
+
+You still cannot truthfully claim to know arbitrary visual content without a vision system. A photograph of a dog with no caption/context cannot magically become "dog" through Base64. Physics remains annoyingly employed.
+
+But for PDFs, surrounding context often tells you what an image represents.
+
+This makes your project more distinctive
+
+Instead of advertising:
+
+"Browser embeddings without a model"
+
+I'd describe the technology more precisely as:
+
+Model-free semantic document retrieval
+
+or:
+
+Deterministic document intelligence
+
+Architecture:
+
+PDF
+ ↓
+CODB-IR
+ ↓
+────────────────────────────
+Text        Structure
+Entities    Layout
+Tables      Forms
+Images      Captions
+Relations   Reading Order
+────────────────────────────
+ ↓
+Concept Normalization
+ ↓
+Semantic Fingerprinting
+ ↓
+Query Intent Analysis
+ ↓
+Hybrid Deterministic Retrieval
+ ↓
+Evidence Ranking
+ ↓
+Page + Object + Bounding Box
+
+No:
+
+model download
+GPU
+WebGPU requirement
+API
+vector database
+training
+inference
+
+And potentially:
+
+✓ offline
+✓ deterministic
+✓ explainable
+✓ tiny
+✓ fast
+✓ private
+✓ browser-only
+✓ reproducible
+
+That changes what I would prioritize in your remaining gaps. I would not add Transformers.js at all if preserving model-free operation is the invention you're pursuing. I'd focus the next work on concept expansion, query-intent parsing, semantic fingerprints, structural relationships, BM25-style lexical scoring, fuzzy matching, and adaptive evidence ranking. That is where your model-free approach either becomes genuinely impressive or remains fancy keyword search wearing a lab coat.
+
+could this be more advanced and better then a embedding model since it can use the same source
+
+Yes, within documents, it could outperform a generic embedding model on some important retrieval tasks. But I would not claim it is universally "better than embeddings." The stronger idea is to exploit information an embedding model usually never receives.
+
+A typical RAG pipeline destroys a surprising amount of PDF information:
+
+PDF
+ ↓
+extract text
+ ↓
+flatten
+ ↓
+chunk
+ ↓
+embedding model
+ ↓
+384/768-dimensional vector
+
+Your engine can retain the original source:
+
+PDF
+ ↓
+CODB-IR
+ │
+ ├─ exact text
+ ├─ glyphs/fonts
+ ├─ coordinates
+ ├─ headings
+ ├─ tables
+ ├─ forms
+ ├─ images
+ ├─ captions
+ ├─ annotations
+ ├─ entities
+ ├─ reading order
+ ├─ page relationships
+ ├─ PDF tags
+ └─ object relationships
+       ↓
+Deterministic retrieval
+
+That difference matters.
+
+Example: embeddings can lose exactness
+
+Question:
+
+What account funded the $425,000 expenditure?
+
+Suppose the PDF contains:
+
+FINANCIAL IMPACT
+
+Account                         Amount
+001-200-513000                  $425,000
+001-200-514000                  $125,000
+
+An embedding might know the chunk is about finances, but the critical answer depends on table geometry.
+
+CODB Docs can establish:
+
+$425,000
+   │
+same row
+   │
+001-200-513000
+   │
+inside
+   │
+Financial Impact
+
+That's stronger evidence than semantic similarity.
+
+I would push this much further
+
+Don't create a single replacement "fingerprint."
+
+Build a multi-signal evidence engine.
+
+For every document object:
+
+{
+  lexical,
+  concepts,
+  entities,
+  structure,
+  spatial,
+  relationships,
+  hierarchy,
+  typography,
+  source,
+  page,
+  bbox
+}
+
+Then queries become structured too.
+
+Question:
+
+"Who approved the $425,000 contract?"
+
+could become:
+
+{
+  intent: "find_relationship",
+
+  targets: {
+    person: true
+  },
+
+  anchors: {
+    money: 425000,
+    concept: "contract"
+  },
+
+  relationship: "approval"
+}
+
+Then don't simply search chunks.
+
+Traverse evidence:
+
+$425,000
+    ↓
+contract section
+    ↓
+approval block
+    ↓
+signature / approver
+    ↓
+PERSON
+
+That's closer to graph retrieval than vector retrieval.
+
+Exact + fuzzy + semantic + structural
+
+I'd build multiple retrieval channels:
+
+QUERY
+ │
+ ├── Exact Match
+ ├── Fuzzy Match
+ ├── BM25
+ ├── Phrase Match
+ ├── Concept Match
+ ├── Entity Match
+ ├── Structural Match
+ ├── Spatial Match
+ ├── Relationship Graph
+ └── Document Context
+          ↓
+     Evidence Fusion
+          ↓
+        Ranking
+
+No model required.
+
+You can even create semantic relationships automatically
+
+Instead of maintaining only a giant hand-written synonym dictionary, mine terminology from the document itself.
+
+Suppose a document repeatedly contains:
+
+Sufficiency of Funds Certificate
+SOF Certificate
+SOF
+Funding Certification
+
+CODB Docs can observe:
+
+phrases appear near each other,
+same heading hierarchy,
+same entities,
+acronym relationship,
+similar surrounding terminology,
+repeated label/value relationships.
+
+It can construct:
+
+conceptGraph = {
+  "sufficiency of funds": {
+    aliases: [
+      "SOF",
+      "SOF Certificate",
+      "Funding Certification"
+    ]
+  }
+}
+
+Now the document teaches the retrieval system its vocabulary without training a neural model.
+
+That's a particularly interesting direction.
+
+Build a document-derived knowledge graph
+
+Your PDF itself becomes the "training data," except nothing is trained.
+
+                 Contract #24-17
+                       │
+             ┌─────────┼─────────┐
+             │         │         │
+           vendor    amount    approvedBy
+             │         │         │
+             ▼         ▼         ▼
+         Acme Corp   $425K    Jane Smith
+             │
+          fundedBy
+             │
+             ▼
+       Account 001...
+
+Then:
+
+"Who approved the Acme purchase?"
+
+doesn't need to semantically resemble the source sentence.
+
+The engine resolves:
+
+Acme
+ ↓
+vendorOf
+ ↓
+Contract #24-17
+ ↓
+approvedBy
+ ↓
+Jane Smith
+
+That's something cosine similarity fundamentally isn't designed to do by itself.
+
+Another advantage: explainability
+
+Embedding search often gives:
+
+{
+  similarity: 0.82741
+}
+
+Wonderful. A decimal has spoken.
+
+Your engine could return:
+
+{
+  score: 0.94,
+
+  reasons: [
+    {
+      signal: "exact_entity",
+      value: "$425,000",
+      contribution: 0.28
     },
     {
-      type: "unrecognized_image",
-      bbox: [...]
+      signal: "concept",
+      query: "contract",
+      document: "agreement",
+      contribution: 0.18
+    },
+    {
+      signal: "table_relationship",
+      relationship: "same_row",
+      contribution: 0.22
+    },
+    {
+      signal: "section",
+      value: "Financial Impact",
+      contribution: 0.12
+    },
+    {
+      signal: "entity",
+      type: "account_number",
+      contribution: 0.14
     }
   ]
 }
 
-That starts getting genuinely interesting.
+For government, finance, legal, accessibility and auditing workflows, that explainability can be more valuable than slightly better fuzzy semantics.
 
-RAG-specific failures are even nastier
+Where embeddings would still beat you
 
-A PDF can extract perfectly and still produce terrible RAG.
+You need to acknowledge this boundary.
 
-Consider:
+Source:
 
-SECTION 4
-PROPOSED CONTRACT
+"The proposal would reduce annual expenditures by approximately $480,000."
 
-Vendor:
-ABC Construction
+Question:
 
-Original Amount:
-$1,800,000
+"How much money could taxpayers save each year?"
 
-Change Order:
-$350,000
+There might be no structural or lexical relationship between:
 
-REVISED CONTRACT VALUE
-$2,150,000
+taxpayers save
 
-A dumb chunker might create:
+and:
 
-Chunk 41:
-Vendor ABC Construction Original Amount $1,800,000
+reduce annual expenditures
 
-Chunk 42:
-Change Order $350,000 Revised Contract Value
+A strong embedding model has learned that relationship from enormous amounts of external language.
 
-Chunk 43:
-$2,150,000
+Your model-free system hasn't.
 
-Then ask:
+You can compensate with concept dictionaries:
 
-"What's the revised contract amount?"
+save
+ ↓
+savings
+reduction
+decrease
+lower
+reduce
+cost reduction
+expenditure reduction
 
-Embedding retrieval might retrieve Chunk 42 but not Chunk 43 containing the answer.
+but there will always be expressions you haven't anticipated.
 
-Your structural system can instead preserve:
+Unless you exploit the document corpus
 
-SECTION
-  │
-  ├── Vendor
-  │      ABC Construction
-  │
-  ├── Original Amount
-  │      $1,800,000
-  │
-  ├── Change Order
-  │      $350,000
-  │
-  └── Revised Contract Value
-         $2,150,000
+This is where I'd experiment.
 
-Then your retrieval unit isn't merely a text chunk. It's a semantic document object.
+Across thousands of documents, CODB Docs could construct a local terminology graph without ML:
 
-That's where CODB Docs can differentiate.
+contract
+ ↔ agreement
+ ↔ award
 
-I'd add a PDF "health scan"
+expenditure
+ ↔ cost
+ ↔ spending
 
-Something like:
+authorize
+ ↔ approve
+ ↔ adopt
 
-const report = await doc.diagnose();
+vendor
+ ↔ contractor
+ ↔ supplier
 
-returning:
+Using:
+
+co-occurrence
+heading relationships
+parent/child relationships
+acronym detection
+definitions
+repeated label patterns
+cross-document frequency
+entity roles
+
+That vocabulary could persist in IndexedDB.
+
+Now CODB Docs gets better as it processes documents, without model training.
+
+Not neural learning, but still adaptive knowledge acquisition.
+
+I'd actually use three graphs
+
+This could become the core architecture:
+
+                 CODB DOCS
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+  DOCUMENT GRAPH  CONCEPT GRAPH  EVIDENCE GRAPH
+        │            │            │
+   What exists   What things    Why results
+   and where     mean/relate    matched
+        │            │            │
+        └────────────┼────────────┘
+                     ▼
+               Query Engine
+                     │
+                     ▼
+                Answer/Evidence
+
+Document Graph:
+
+page → section → table → row → cell
+
+Concept Graph:
+
+SOF ↔ Sufficiency of Funds
+vendor ↔ contractor
+
+Evidence Graph:
+
+query
+ → matched "$425,000"
+ → same table row
+ → account number
+ → Financial Impact section
+
+That is considerably more sophisticated than trying to invent a homemade 384-dimensional embedding.
+
+Could it ultimately be "better"?
+
+For open-ended understanding of arbitrary language, probably not. Neural embeddings have an enormous amount of learned world/language knowledge that deterministic algorithms don't magically acquire.
+
+For high-precision retrieval from structured and semi-structured documents, absolutely plausible.
+
+Especially:
+
+government records
+contracts
+agendas
+financial reports
+audits
+forms
+policies
+legal documents
+engineering documents
+procurement documents
+
+because relationships, numbers, sections, tables, pages and exact evidence matter tremendously.
+
+I'd therefore position the technical goal as:
+
+Don't approximate an embedding model without a model. Build a retrieval system that has access to information embeddings threw away.
+
+That is the more defensible and technically interesting direction.
+
+how can i expand this to a fully production ready 
+
+Yes. To make this production-ready, I would stop adding isolated PDF features for a bit and turn the pieces you already have into a defined model-free document intelligence runtime. The hard part now isn't another extractor. It's reliability, retrieval quality, persistence, testing, packaging, and a stable API.
+
+Target architecture
+                       CODB DOCS
+                           │
+                    Document Runtime
+                           │
+        ┌──────────────────┼──────────────────┐
+        ▼                  ▼                  ▼
+    Perception         Understanding       Reliability
+        │                  │                  │
+ PDF objects          Document Graph      Quality scoring
+ Visible page         Concept Graph       Repair/fallback
+ OCR                  Evidence Graph      Diagnostics
+ Layout               Relationships       Validation
+ Images               Query intent        Benchmarks
+ Tables               Terminology
+ Forms
+        │                  │
+        └──────────────────┼──────────────────┘
+                           ▼
+                    CODB Intelligence IR
+                           │
+            ┌──────────────┼───────────────┐
+            ▼              ▼               ▼
+          Search          RAG            APIs
+            │              │               │
+         Exact          Chunks          Vanilla JS
+         BM25           Evidence        React
+         Fuzzy          Context         Lovable
+         Concept        Citations       Workers
+         Entity
+         Graph
+         Spatial
+            │
+            └──────────────┬───────────────
+                           ▼
+                    Evidence Fusion
+                           │
+                           ▼
+                    Ranked Results
+1. Formalize CODB-IR
+
+This should become the foundation.
+
+Every parser should ultimately produce the same schema:
 
 {
-  score: 72,
+  version: "1.0",
 
-  pages: 186,
-
-  issues: {
-    scannedPages: 14,
-    brokenTextPages: 3,
-    readingOrderProblems: 7,
-    duplicateText: 2,
-    untaggedTables: 11,
-    unrecognizedImages: 23,
-    suspiciousOCR: 4,
-    accessibilityFailures: 31
+  document: {
+    id,
+    hash,
+    title,
+    type,
+    metadata
   },
 
-  ragReadiness: {
-    score: 68,
-    searchable: true,
-    needsOCR: true,
-    needsImageAnalysis: true,
-    needsStructureRepair: true
+  pages: [],
+  objects: [],
+  entities: [],
+  relationships: [],
+  concepts: [],
+  images: [],
+  tables: [],
+  forms: [],
+  annotations: []
+}
+
+Every object needs stable provenance:
+
+{
+  id: "obj_812",
+  type: "text",
+  page: 17,
+  bbox: [72, 182, 490, 231],
+
+  source: {
+    method: "native",
+    confidence: .98
+  },
+
+  text: "...",
+
+  parent: "section_31"
+}
+
+Never lose where information came from.
+
+That enables citations, highlighting, debugging and explainability.
+
+2. Build a real extraction-quality engine
+
+Your current nativeText.length <= 20 OCR decision should eventually disappear.
+
+Implement:
+
+const quality =
+  await doc.assessQuality();
+
+Per page:
+
+{
+  textQuality: .91,
+  unicodeQuality: .99,
+  readingOrderQuality: .82,
+  spatialQuality: .94,
+  visualAgreement: .88,
+  ocrQuality: null,
+
+  anomalies: [],
+
+  recommendedAction: "native"
+}
+
+Check things such as:
+
+invalid Unicode
+replacement characters
+impossible words
+duplicate text
+overlapping text
+abnormal whitespace
+broken glyph mapping
+suspicious OCR
+missing visible text
+rotation
+skew
+hidden text
+clipped text
+
+Then choose:
+
+native
+native + repair
+OCR
+native + OCR fusion
+visual reconstruction
+
+That alone will make the system dramatically more dependable.
+
+3. Add native/OCR fusion
+
+Don't treat OCR as:
+
+native OR OCR
+
+Use:
+
+native
+   +
+OCR
+   +
+page geometry
+   ↓
+fusion
+
+Native PDF text might correctly identify:
+
+$2,450,000
+
+while OCR correctly determines its visual relationship to:
+
+Contract Amount
+
+Preserve the best evidence from both.
+
+4. Make your model-free semantics serious
+
+Create a proper:
+
+CodbFingerprint
+
+containing multiple sparse representations:
+
+{
+  lexical,
+  phrases,
+  concepts,
+  entities,
+  structure,
+  spatial,
+  relationships,
+  typography,
+  context
+}
+
+Don't compress everything into your current fake embedding vector.
+
+Keep signals separately addressable.
+
+5. Build the Concept Graph
+
+Start with built-in concepts:
+
+MONEY
+DATE
+PERSON
+ORGANIZATION
+LOCATION
+ACCOUNT
+CONTRACT
+APPROVAL
+PURCHASE
+PROJECT
+VENDOR
+DEPARTMENT
+DEADLINE
+DURATION
+QUANTITY
+ACTION
+
+Then aliases:
+
+CONTRACT
+ ├ agreement
+ ├ contract
+ ├ award
+ ├ agreement number
+ └ contractual
+
+Most importantly, learn terminology from documents deterministically.
+
+Detect:
+
+"Sufficiency of Funds (SOF)"
+
+and automatically establish:
+
+SOF ↔ Sufficiency of Funds
+
+Detect:
+
+"hereinafter referred to as Contractor"
+
+and create:
+
+company-name ↔ Contractor
+
+That's much more powerful than maintaining 80,000 hard-coded synonyms by hand until someone loses the will to live.
+
+6. Build relationship extraction
+
+This is critical.
+
+Objects should connect:
+
+Vendor ──value──> ABC Construction
+
+Contract Amount ──value──> $425,000
+
+$425,000 ──fundedBy──> Account 001...
+
+Contract ──approvedBy──> Jane Smith
+
+Derive relationships from:
+
+same table row
+label/value proximity
+heading hierarchy
+colon patterns
+definition language
+form geometry
+reading order
+repeated structures
+grammatical heuristics
+
+Then query the graph instead of merely searching text.
+
+7. Build the actual retrieval engine
+
+I'd expose:
+
+const index =
+  await graph.createIndex();
+
+Then:
+
+const results =
+  index.search(
+    "Who approved the $425,000 contract?"
+  );
+
+Internally:
+
+Query
+ │
+ ├ Exact
+ ├ Phrase
+ ├ BM25
+ ├ Fuzzy
+ ├ Concept
+ ├ Entity
+ ├ Structure
+ ├ Relationship
+ ├ Spatial
+ └ Context
+       ↓
+ Evidence Fusion
+       ↓
+ Ranked results
+
+Every result should explain itself:
+
+{
+  score: .96,
+
+  object: {...},
+
+  evidence: [
+    {
+      signal: "currency_exact",
+      score: 1
+    },
+    {
+      signal: "contract_concept",
+      score: .87
+    },
+    {
+      signal: "approval_relationship",
+      score: .95
+    }
+  ]
+}
+
+That explainability is a significant advantage.
+
+8. Add query planning
+
+Don't treat every query identically.
+
+"What is the contract amount?"
+
+becomes:
+
+{
+  intent: "value_lookup",
+  subject: "contract",
+  expected: "currency"
+}
+
+While:
+
+"Who approved it?"
+
+becomes:
+
+{
+  intent: "relationship_lookup",
+  relation: "approvedBy",
+  expected: "person"
+}
+
+And:
+
+"Which project costs the most?"
+
+becomes:
+
+{
+  intent: "comparison",
+  subject: "project",
+  metric: "currency",
+  operation: "max"
+}
+
+That last one is important.
+
+An embedding doesn't calculate:
+
+MAX(project.cost)
+
+Your engine can.
+
+9. Add deterministic reasoning operators
+
+Give your query engine operations:
+
+COUNT
+SUM
+AVG
+MIN
+MAX
+COMPARE
+BEFORE
+AFTER
+BETWEEN
+CONTAINS
+GROUP BY
+
+Then:
+
+"What's the total amount of all contracts?"
+
+can become:
+
+find CONTRACT
+ ↓
+follow amount relationships
+ ↓
+extract MONEY
+ ↓
+SUM
+
+No LLM required.
+
+This could become one of CODB Docs' strongest capabilities.
+
+10. Finish visual intelligence without requiring a model
+
+For every image:
+
+{
+  page,
+  bbox,
+  dataUrl,
+
+  role,
+  caption,
+  nearbyText,
+  heading,
+
+  ocrText,
+  entities,
+  concepts,
+
+  width,
+  height,
+
+  visualFeatures: {
+    aspectRatio,
+    colorDistribution,
+    edgeDensity,
+    textDensity
   }
 }
 
-And then the rather satisfying:
+Then heuristically classify:
 
-const repaired =
-  await doc.normalize({
-    readingOrder: true,
-    ocr: "auto",
-    deduplicate: true,
-    tables: true,
-    images: true,
-    structure: true
+photo
+chart
+diagram
+map
+logo
+signature
+scan
+screenshot
+
+You won't recognize arbitrary objects like "golden retriever" without actual vision intelligence, but you can understand an enormous amount about the role of an image inside a document.
+
+11. Make tables first-class
+
+Not:
+
+type: "text"
+
+but:
+
+{
+  type: "table",
+
+  headers: [
+    "Account",
+    "Amount"
+  ],
+
+  rows: [
+    ["001-...", "$425,000"]
+  ],
+
+  relationships: [...]
+}
+
+Then:
+
+table.query({
+  where: {
+    amount: {
+      gt: 100000
+    }
+  }
+});
+
+This makes financial and administrative documents dramatically more useful.
+
+12. Add persistence
+
+Browser production use needs IndexedDB.
+
+const doc =
+  await CodbDocs.load(file, {
+    cache: true
   });
-The bigger opportunity
 
-Don't just make CODB Docs answer:
+Calculate:
 
-"Can I extract text from this PDF?"
+SHA-256(PDF)
 
-Make it answer:
+and store:
 
-"Can an AI accurately understand this document?"
+PDF hash
+CODB-IR
+fingerprints
+concept graph
+search index
+quality report
 
-Those are radically different questions.
+Next opening:
 
-A PDF can be technically valid, searchable, accessible to PDF.js, and still be terrible AI input.
+same PDF?
+ ↓
+YES
+ ↓
+load index
+ ↓
+milliseconds
 
-I'd therefore make ragReadiness, extraction confidence, visual/text agreement, structural integrity, image understanding, reading-order confidence, and evidence traceability first-class CODB Docs concepts. That would fit the architecture you're building far better than chasing another generic PDF-to-text extracto
+No re-analysis.
+
+13. Incremental indexing
+
+If 1,000 pages are being processed, don't wait for page 1,000.
+
+page 1 analyzed
+ ↓
+searchable
+
+page 2 analyzed
+ ↓
+searchable
+
+...
+
+page 1000
+
+Expose:
+
+doc.on("indexed", event => {});
+
+The user can search while processing continues.
+
+14. Move heavy processing into workers
+
+Production architecture:
+
+MAIN THREAD
+ React/Lovable
+     │
+     ▼
+Coordinator
+     │
+ ┌───┼──────────────┐
+ ▼   ▼              ▼
+PDF  OCR          Intelligence
+Worker Worker      Worker
+                   │
+                   ▼
+               Index Worker
+
+Use transferable ArrayBuffers where possible.
+
+Large PDFs should never freeze the UI.
+
+15. Handle memory deliberately
+
+Especially with 500-1,500 page PDFs.
+
+Don't keep every rendered canvas around.
+
+Use:
+
+process page
+ ↓
+extract
+ ↓
+IR
+ ↓
+index
+ ↓
+release canvas
+ ↓
+page.cleanup()
+
+Set memory budgets:
+
+CodbDocs.configure({
+  memory: {
+    maxMB: 512,
+    canvasCache: 5,
+    pageCache: 25
+  }
+});
+16. Build multi-document workspaces
+
+This is the natural production RAG interface:
+
+const workspace =
+  await CodbDocs.createWorkspace({
+    name: "Contracts"
+  });
+
+await workspace.add(files);
+
+Then:
+
+workspace.search(
+  "stormwater contracts"
+);
+
+and:
+
+workspace.query(
+  "Which vendor received the largest contract?"
+);
+
+Now you're querying structured evidence across documents.
+
+17. Make citations mandatory
+
+Every answer should carry provenance:
+
+{
+  answer:
+    "$425,000",
+
+  confidence: .97,
+
+  sources: [
+    {
+      documentId: "...",
+      page: 17,
+      objectId: "obj_291",
+      bbox: [...],
+      text: "$425,000"
+    }
+  ]
+}
+
+Then React:
+
+viewer.showSource(source);
+
+jumps directly to the evidence.
+
+For serious document work, an answer without provenance should basically be considered a rumor.
+
+18. Create a proper React SDK
+
+Aim for:
+
+<CodbDocsProvider>
+  <CodbViewer file={file} />
+  <CodbSearch />
+</CodbDocsProvider>
+
+And hooks:
+
+useDocument()
+useAnalysis()
+useSearch()
+useQuery()
+useViewer()
+useSources()
+useQuality()
+
+For Lovable:
+
+npm install @codbdocs/react
+
+should be enough.
+
+19. Make vanilla JS equally easy
+<script src="codbdocs.min.js"></script>
+
+Then:
+
+const doc =
+  await CodbDocs.load(file);
+
+await doc.prepare();
+
+const result =
+  await doc.query(
+    "What is the contract amount?"
+  );
+
+I would introduce prepare() as the batteries-included production method:
+
+await doc.prepare({
+  ocr: "auto",
+  images: true,
+  index: true,
+  cache: true
+});
+
+It performs everything required automatically.
+
+20. Build a brutal test corpus
+
+This is arguably more important than another 10 features.
+
+Create /test/corpus/ containing PDFs deliberately designed to be awful:
+
+native-text.pdf
+scan.pdf
+bad-ocr.pdf
+mixed-native-scan.pdf
+two-columns.pdf
+three-columns.pdf
+rotated.pdf
+skewed.pdf
+tables.pdf
+multi-page-table.pdf
+forms.pdf
+flattened-form.pdf
+signatures.pdf
+images.pdf
+charts.pdf
+maps.pdf
+missing-tounicode.pdf
+outlined-text.pdf
+hidden-text.pdf
+watermarks.pdf
+redacted.pdf
+tagged-good.pdf
+tagged-broken.pdf
+annotations.pdf
+layers.pdf
+embedded-files.pdf
+1000-pages.pdf
+
+For each one, define expected truth:
+
+{
+  "queries": [
+    {
+      "question":
+        "What is the contract amount?",
+
+      "expected":
+        "$425,000",
+
+      "page":
+        17
+    }
+  ]
+}
+
+Then every commit runs the corpus.
+
+21. Measure retrieval instead of guessing
+
+Track:
+
+Precision@1
+Precision@5
+Recall@5
+MRR
+exact entity accuracy
+table relationship accuracy
+page citation accuracy
+reading order accuracy
+OCR accuracy
+query latency
+indexing latency
+peak RAM
+
+Have a dashboard like:
+
+CODB Docs 1.4
+
+Retrieval P@1       94.7%
+Page citation       99.1%
+Entity extraction   96.2%
+Table relations     93.8%
+
+100-page indexing   4.8 sec
+Search              7 ms
+Peak memory          184 MB
+
+Then you can legitimately compare CODB Docs against embedding-based RAG rather than relying on vibes, humanity's least reproducible benchmark.
+
+22. Benchmark against embeddings
+
+This is particularly important given your design goal.
+
+Build identical tests against:
+
+CODB Model-Free
+vs
+BM25
+vs
+MiniLM
+vs
+Nomic
+vs
+BGE
+
+Measure separately:
+
+exact factual lookup
+semantic paraphrase
+table questions
+numeric questions
+relationship questions
+cross-page questions
+document-specific terminology
+
+I suspect CODB could become very strong on exact facts, tables, relationships and document-specific queries, while embeddings retain an advantage on unconstrained paraphrasing.
+
+Then you know exactly where your invention wins.
+
+The API I would target for 1.0
+
+Ultimately, all this machinery should disappear behind:
+
+const doc =
+  await CodbDocs.load(file);
+
+await doc.prepare();
+
+const result =
+  await doc.query(
+    "Who approved the $425,000 contract?"
+  );
+
+Return:
+
+{
+  answer: "Jane Smith",
+
+  confidence: 0.97,
+
+  sources: [
+    {
+      page: 17,
+      bbox: [...],
+      text: "Approved by Jane Smith"
+    }
+  ],
+
+  reasoning: {
+    intent: "relationship_lookup",
+
+    matched: [
+      "contract",
+      "$425,000",
+      "approved by"
+    ],
+
+    relationship:
+      "contract → approvedBy → person"
+  }
+}
+
+No model. No GPU. No API. No vector database. No server.
+
+The most important next milestone isn't "more PDF support." It's CODB Docs 1.0 Retrieval Engine: quality scoring → normalized IR → concept graph → relationship graph → fingerprints → hybrid deterministic retrieval → query planner → evidence ranking → citations. Once that loop works exceptionally well and is benchmarked, the rest of the library has something coherent to orbit around instead of becoming a museum of impressive PDF functions.
