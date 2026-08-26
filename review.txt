@@ -1,23 +1,4 @@
-Not yet. Based on the current codbdocs code, I would call it RAG-preparation ready, not fully RAG ready.
-
-You already have a surprisingly strong document-understanding layer. CodbDocs.load() handles the PDF, analyze() builds a document graph, and the graph exposes text, structure, metadata, entities, document classification, reading order, vectors from the PDF itself, accessibility information, find(), findOne(), and ask().
-
-The distinction is that the vectors currently being extracted are PDF graphical/vector objects, not embedding vectors for semantic retrieval. I also searched the repository for embedding/chunk/vector-similarity/RAG functionality and didn't find an embedding pipeline.
-
-What you have vs. full RAG
-Capability	CODB Docs now
-PDF.js parsing	✅
-Native text extraction	✅
-OCR fallback	✅
-Page/layout coordinates	✅
-Headings / structures	✅
-Tables/forms/lists	✅
-Metadata/entities	✅
-Reading order	✅
-Document classification	✅
-Document graph	✅
-Text search	✅
-find() / ask()	✅ Local document logic
+check
 RAG-aware chunking	⚠️ Not complete
 Embedding model	❌
 Embedding vectors	❌
@@ -28,1252 +9,393 @@ Reranking	❌
 LLM generation with retrieved context	❌
 Source/page citations in RAG answers	⚠️ Foundation exists
 
-Your extraction foundation is particularly useful because each analyzed page retains text, spatial information, structures, metadata and classification.
+For CODB Docs, I'd build this directly into the document pipeline.
 
-What I would add
-
-Don't turn CODB Docs into another generic "split text every 500 characters" RAG library. You already have enough structural information to do substantially better.
-
-The pipeline should become:
-
+Recommended architecture
 PDF
- ↓
+ │
+ ▼
 PDF.js
- ↓
-CODB Docs Document IR
- ↓
-OCR when necessary
- ↓
-Layout + reading order
- ↓
-Structure detection
- ↓
-Semantic chunker
- ↓
-Embedding model
- ↓
-Vector index
- ↓
-Hybrid search
- ├─ lexical
- ├─ semantic/vector
- ├─ metadata
- └─ spatial/structural
- ↓
-Reranker
- ↓
-Top chunks
- ↓
-LLM
- ↓
-Answer
- + document
- + page
- + bounding box
- + source text
- + confidence
-Most important addition: graph.chunk()
+ │
+ ├──────────── Text
+ │
+ ├──────────── Vector graphics
+ │
+ └──────────── Images
+                  │
+                  ▼
+             Extract Image
+                  │
+          ┌───────┴────────┐
+          ▼                ▼
+       Base64/Blob      Image Pixels
+       transport           │
+                           ▼
+                    Vision Analyzer
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+            OCR         Caption      Objects
+              │            │            │
+              └────────────┼────────────┘
+                           ▼
+                    Image Semantic IR
+                           │
+                           ▼
+                    Document Graph
+                           │
+                           ▼
+                         RAG
 
-Because CODB Docs understands structure, I'd add something along these lines:
+The important idea is that the RAG system shouldn't retrieve Base64. It should retrieve a semantic description of the image.
 
-const graph = await doc.analyze();
+For example, suppose page 14 contains a photograph of flooding around a roadway.
 
-const chunks = graph.chunk({
-    targetTokens: 500,
-    overlapTokens: 75,
-
-    preserve: [
-        "headings",
-        "tables",
-        "lists",
-        "forms",
-        "paragraphs"
-    ]
-});
-
-A chunk should look more like:
+CODB Docs could produce:
 
 {
-  "id": "chunk_001",
-  "documentId": "agenda.pdf",
-  "page": 7,
-  "pages": [7],
-  "heading": "Budget Impact",
-  "type": "paragraph",
-  "text": "The total project cost is...",
-  "bbox": [72, 144, 490, 260],
-  "tokenCount": 184
+  "id": "image_page14_2",
+  "type": "image",
+  "page": 14,
+
+  "bbox": [82, 214, 510, 480],
+
+  "caption": "Photograph showing roadway flooding",
+
+  "description":
+    "Street-level photograph showing standing water covering approximately half of the roadway near a residential intersection.",
+
+  "objects": [
+    "road",
+    "standing water",
+    "vehicle",
+    "houses",
+    "storm drain"
+  ],
+
+  "ocr": [
+    "FLOOD ZONE",
+    "Atlantic Ave"
+  ],
+
+  "context": {
+    "heading": "Existing Drainage Conditions",
+    "before": "Current drainage deficiencies are shown below.",
+    "after": "Proposed improvements will increase stormwater capacity."
+  }
 }
+
+Now your text-only model can understand the image because it receives:
+
+Page 14 contains a street-level photograph showing standing water covering approximately half of a roadway near a residential intersection...
+
+That's vastly better than feeding it:
+
+/9j/4AAQSkZJRgABAQEASABIAAD...
+But I would go further
+
+The surrounding PDF content should participate in understanding the image.
+
+Suppose the image itself is ambiguous:
+
+[image of construction equipment]
+
+A generic vision model might produce:
+
+"Excavator at a construction site."
+
+But CODB Docs knows the image appears under:
+
+Proposed Lift Station Improvements
+
+and immediately below:
+
+Figure 4. Replacement of existing 12-inch force main.
+
+Now you can construct:
+
+IMAGE PIXELS
+     +
+OCR INSIDE IMAGE
+     +
+IMAGE CAPTION
+     +
+NEAREST HEADING
+     +
+TEXT ABOVE
+     +
+TEXT BELOW
+     +
+PAGE CLASSIFICATION
+     +
+DOCUMENT TYPE
+     ↓
+Image Understanding
+
+That could produce a much better representation:
+
+Construction photograph associated with the proposed lift station improvements and replacement of the existing 12-inch force main.
+
+That contextual fusion is worth building.
+
+For diagrams and charts
+
+Don't rely exclusively on image captioning.
+
+Different visual types need different analysis:
+
+Image detected
+      ↓
+Visual classification
+      │
+ ┌────┼────────┬─────────┬─────────┐
+ ▼    ▼        ▼         ▼         ▼
+Photo Chart   Diagram    Map      Scan
+ │     │        │         │         │
+Vision Chart   OCR +      OCR +     OCR
+model  parser  geometry   spatial
+
+A chart should become structured data:
+
+{
+  "type": "chart",
+  "chartType": "bar",
+  "title": "Annual Water Consumption",
+  "xAxis": "Year",
+  "yAxis": "Gallons",
+  "series": [
+    {
+      "year": 2024,
+      "value": 4200000
+    },
+    {
+      "year": 2025,
+      "value": 3900000
+    }
+  ]
+}
+
+A text-only LLM can reason over that beautifully.
+
+And maps
+
+For a map:
+
+{
+  "type": "map",
+  "title": "Project Location",
+  "labels": [
+    "Atlantic Avenue",
+    "Main Street",
+    "Project Area"
+  ],
+  "description":
+    "Project area highlighted east of Atlantic Avenue near Main Street."
+}
+Keep Base64, but don't index it
+
+I'd absolutely allow:
+
+image.base64
+
+because it's convenient for sending the original image to:
+
+OpenAI vision
+Gemini
+local vision models
+Ollama vision models
+your own endpoint
+
+But your RAG index should contain:
+
+image.semantic
 
 rather than:
 
-characters 0-2000
-characters 1800-3800
-
-That difference becomes enormous on agendas, contracts, financial documents and forms.
-
-Then embeddings
-
-I'd make embeddings pluggable:
-
-const index = await graph.createRAGIndex({
-    embedding: {
-        provider: "ollama",
-        model: "nomic-embed-text",
-        endpoint: "http://localhost:11434"
-    },
-
-    chunking: {
-        targetTokens: 500,
-        overlapTokens: 75,
-        structural: true
-    }
-});
-
-Or browser-local:
-
-const index = await graph.createRAGIndex({
-    embedding: {
-        provider: "transformers",
-        model: "Xenova/all-MiniLM-L6-v2"
-    }
-});
-
-Then:
-
-const results = await index.search(
-    "What is the total project cost?",
-    {
-        topK: 8,
-        hybrid: true
-    }
-);
-
-And ultimately:
-
-const answer = await index.ask(
-    "What is the total project cost?"
-);
-
-Returning:
-
-{
-  "answer": "The total project cost is $2.4 million.",
-  "confidence": 0.94,
-  "sources": [
-    {
-      "document": "agenda.pdf",
-      "page": 7,
-      "chunkId": "chunk_001",
-      "text": "The total project cost is $2.4 million...",
-      "bbox": [72, 144, 490, 260],
-      "score": 0.91
-    }
-  ]
-}
-The interesting opportunity
-
-You already have graph.getHighlights(query) and graph.highlight(...).
-
-That means your eventual RAG system could do something most basic RAG implementations don't:
-
-User asks question
-       ↓
-RAG finds answer
-       ↓
-"Source: Page 17"
-       ↓
-User clicks source
-       ↓
-PDF viewer jumps to page 17
-       ↓
-CODB Docs highlights the exact
-region used to answer the question
-
-That's much more useful than an AI confidently announcing "according to your document..." and then leaving the human to hunt through 283 pages like an archaeological expedition.
-
-So: the document intelligence foundation is there. The actual embedding/retrieval/generation layer still needs to be added. I would build that as a separate packages/rag layer on top of core, rather than polluting the PDF engine with model-specific code.
-
-would this mimic a model embedding but my own in browser breakthrough tech
-
-Potentially, yes, but there are two different things here that are easy to accidentally merge into one futuristic soup.
-
-Your current CODB Docs is already doing something interesting: it builds a structured representation of the PDF containing text, spatial layout, detected structures, metadata, classification, reading order, annotations, and PDF objects.
-
-You could build your own browser-native retrieval representation on top of that without depending entirely on a traditional embedding model.
-
-The conventional approach
-
-Normal RAG does roughly:
-
-"What is the project cost?"
-        ↓
-Embedding Model
-        ↓
-[0.018, -0.221, 0.492, ...]
-        ↓
-Vector similarity
-        ↓
-Relevant chunks
-
-The embedding model has learned that:
-
-project cost
-contract amount
-total expenditure
-financial impact
-$2,400,000
-
-can be semantically related even when the words differ.
-
-What CODB Docs could do differently
-
-You have considerably more information than plain text.
-
-Instead of representing a chunk only as:
-
-embedding(text)
-
-you could construct a Document Semantic Fingerprint:
-
-Chunk
- │
- ├── lexical features
- │    ├── terms
- │    ├── phrases
- │    └── frequencies
- │
- ├── entities
- │    ├── money
- │    ├── dates
- │    ├── people
- │    └── addresses
- │
- ├── structure
- │    ├── heading
- │    ├── paragraph
- │    ├── table
- │    └── form
- │
- ├── spatial relationships
- │    ├── underneath heading
- │    ├── table column
- │    ├── adjacent label
- │    └── reading order
- │
- ├── document context
- │    ├── page type
- │    ├── section
- │    └── document type
- │
- └── semantic features
-
-Then a query:
-
-"What did the city approve for the project?"
-
-could be decomposed locally:
-
-{
-    intent: "approval",
-    subject: "project",
-    expectedEntities: [
-        "money",
-        "resolution",
-        "contract"
-    ],
-    preferredStructures: [
-        "heading",
-        "table",
-        "paragraph"
-    ]
-}
-
-Retrieval could calculate:
-
-score =
-    lexicalSimilarity      * .20 +
-    entitySimilarity       * .20 +
-    structuralSimilarity   * .15 +
-    spatialSimilarity      * .10 +
-    documentContext        * .15 +
-    semanticSimilarity     * .20
-
-Now you've created something that serves part of the purpose of embeddings without requiring every operation to pass through an embedding model.
-
-Could it be entirely browser-native?
-
-Absolutely.
-
-Browser
-   │
-   ├── PDF.js
-   │
-   ▼
-CODB Docs
-   │
-   ├── text
-   ├── layout
-   ├── structure
-   ├── entities
-   ├── relationships
-   └── reading order
-        │
-        ▼
-Document Fingerprints
-        │
-        ▼
-Local Index
-IndexedDB / memory
-        │
-        ▼
-Query Fingerprint
-        │
-        ▼
-Similarity Engine
-        │
-        ▼
-Ranked Evidence
-
-No Supabase required.
-
-No Pinecone.
-
-No Qdrant.
-
-No Ollama required for retrieval.
-
-No API call required.
-
-Potentially no neural embedding model at all.
-
-That would be genuinely useful technology.
-
-But here's the important limitation
-
-I wouldn't claim that this replaces embeddings universally.
-
-A learned embedding model understands semantic relationships that deterministic document analysis won't automatically discover.
-
-For instance:
-
-"Which proposal saves taxpayers the most money?"
-
-The document might contain:
-
-"Alternative B results in an estimated annual reduction of $487,000."
-
-There may be almost zero lexical overlap.
-
-A good embedding model can recognize:
-
-saves taxpayers money
-≈
-annual reduction
-
-Your deterministic engine needs some mechanism for learning or representing that relationship.
-
-That's the difficult bit.
-
-The more ambitious version
-
-Instead of eliminating embeddings, CODB Docs could create its own hybrid document vector.
-
-For example:
-
-CODBVector v1
-
-┌─────────────────────────────┐
-│ lexical vector             │
-├─────────────────────────────┤
-│ entity vector              │
-├─────────────────────────────┤
-│ structural vector          │
-├─────────────────────────────┤
-│ spatial vector             │
-├─────────────────────────────┤
-│ relationship vector        │
-├─────────────────────────────┤
-│ optional semantic vector   │
-└─────────────────────────────┘
+image.base64
 
 Something like:
 
-const vector = CodbDocs.vectorize(chunk);
-
-returns:
-
 {
-    lexical: Float32Array(256),
-    semantic: Float32Array(384),
-    spatial: Float32Array(64),
-    structural: Float32Array(64),
-    entities: Float32Array(128)
-}
-
-Then:
-
-const results = graph.search(
-    "What project costs the most?",
-    {
-        mode: "hybrid"
-    }
-);
-
-Your ranking engine compares multiple representations, rather than blindly cosine-comparing one embedding.
-
-That is much more compelling.
-
-And WebGPU changes the equation
-
-You could run an optional tiny semantic encoder directly in the browser:
-
-PDF
- ↓
-CODB Document Intelligence
- ↓
-Structural Fingerprint
-        +
-Tiny WebGPU Semantic Encoder
-        ↓
-CODB Hybrid Vector
-        ↓
-Browser Vector Index
-
-Then everything stays client-side.
-
-PDF never leaves device
-       ↓
-Parsing local
-OCR local
-Chunking local
-Embedding local
-Index local
-Search local
-Reranking local
-       ↓
-Only retrieved context
-needs to reach an LLM
-
-Or pair it eventually with a browser-local LLM and nothing leaves the machine at all.
-
-Would I call it breakthrough technology?
-
-Not merely because it's "embeddings in the browser." Browser embeddings, WebGPU inference, local vector search, PDF.js, OCR, and hybrid retrieval already exist individually.
-
-The potentially novel part would be the combination and representation:
-
-A browser-native document intelligence engine that creates multimodal structural/semantic fingerprints directly from PDF internals and performs hybrid retrieval using textual, spatial, structural, entity, and optionally neural signals.
-
-That's a much stronger technical claim than:
-
-"We made our own embeddings."
-
-And your existing architecture gives you a legitimate starting point because CODB Docs already produces the document graph and intermediate representation needed for it.
-
-The direction I'd pursue is not trying to recreate Nomic in JavaScript. Build a document-specific representation that Nomic fundamentally doesn't have access to when it's handed a flattened string. That's where CODB Docs could actually differentiate rather than becoming yet another vector database wearing a PDF hat.
-
-I want it to do all this and any suggestions how to make it where when used in lovable projects or react or javascript
-
-Yes. If the goal is CODB Docs becomes a drop-in document intelligence + local RAG SDK that works in Lovable, React, vanilla JavaScript, Vite, and potentially Node, I would redesign the public API around that goal now rather than letting every application reinvent the plumbing. Humanity has suffered enough copies of useEffect(() => loadPdf(), []).
-
-Browser-side embeddings are technically practical now. Transformers.js can run embedding models directly with WebGPU, and ONNX Runtime Web supports WebGPU with WASM as a broader fallback.
-
-1. Make the final developer experience absurdly simple
-
-For React/Lovable, I would want this:
-
-npm install @codbdocs/core @codbdocs/rag @codbdocs/react
-
-Then:
-
-import { CodbDocsViewer } from "@codbdocs/react";
-
-export default function App() {
-  return (
-    <CodbDocsViewer
-      file={file}
-      intelligence
-      rag
-      local
-    />
-  );
-}
-
-That's the high-level component.
-
-But developers should also have the lower-level API:
-
-import { CodbDocs } from "@codbdocs/core";
-
-const doc = await CodbDocs.load(file);
-
-const graph = await doc.analyze();
-
-const index = await graph.createIndex();
-
-const result = await index.ask(
-  "How much was the contract?"
-);
-
-console.log(result);
-
-That should be the north star.
-
-2. I would split CODB Docs into packages
-
-Instead of one enormous codbdocs.js:
-
-@codbdocs/core
-@codbdocs/pdf
-@codbdocs/ocr
-@codbdocs/intelligence
-@codbdocs/rag
-@codbdocs/storage
-@codbdocs/react
-@codbdocs/viewer
-
-But don't make developers install all eight manually.
-
-Provide:
-
-@codbdocs/browser
-
-as the batteries-included version.
-
-So Lovable can simply do:
-
-npm install @codbdocs/browser
-
-and:
-
-import { CodbDocs } from "@codbdocs/browser";
-3. One universal API
-
-I'd make the basic interface:
-
-const doc = await CodbDocs.load(file);
-
-Then:
-
-await doc.ready();
-
-And everything hangs off the document:
-
-doc.pages
-doc.text
-doc.graph
-doc.metadata
-doc.entities
-doc.tables
-doc.forms
-doc.images
-doc.annotations
-doc.accessibility
-doc.index
-
-Operations become:
-
-await doc.analyze();
-
-await doc.index();
-
-await doc.search("contract amount");
-
-await doc.ask("What was approved?");
-
-await doc.summarize();
-
-await doc.auditAccessibility();
-
-await doc.toHTML();
-
-Much easier to understand.
-
-4. Make RAG automatic
-
-This is the important part.
-
-A Lovable developer shouldn't need to understand embeddings, cosine similarity, chunk overlap, vector databases, rerankers and the other ceremonial robes AI development currently requires.
-
-They should write:
-
-await doc.index();
-
-CODB Docs handles:
-
-Document
-   ↓
-PDF.js
-   ↓
-OCR if necessary
-   ↓
-Reading order
-   ↓
-Structure detection
-   ↓
-Entity extraction
-   ↓
-Semantic chunking
-   ↓
-Structural fingerprints
-   ↓
-Embeddings
-   ↓
-Local vector index
-   ↓
-Ready
-
-Then:
-
-const results = await doc.search(
-  "How much money was approved?"
-);
-5. Build your hybrid representation
-
-This is where I'd make CODB Docs different.
-
-Don't store just:
-
-{
-  text,
+  id,
+  page,
+  bbox,
+
+  // binary representation
+  blob,
+  base64,
+
+  // intelligence
+  type,
+  caption,
+  description,
+  ocr,
+  objects,
+  entities,
+
+  // document context
+  heading,
+  nearbyText,
+
+  // retrieval
+  fingerprint,
   embedding
 }
 
-Store:
+Then you get something rather powerful:
 
-{
-  id: "chunk_342",
-
-  documentId: "agenda-2026",
-
-  text: "...",
-
-  page: 14,
-
-  bbox: [
-    72,
-    221,
-    510,
-    412
-  ],
-
-  section: "Financial Impact",
-
-  type: "paragraph",
-
-  entities: {
-    money: [
-      "$2,450,000"
-    ],
-
-    dates: [],
-
-    people: [],
-
-    organizations: []
-  },
-
-  structure: {
-    heading: "Financial Impact",
-    level: 2,
-    readingOrder: 37
-  },
-
-  lexicalVector: ...,
-
-  semanticVector: ...,
-
-  structuralVector: ...,
-
-  spatialVector: ...
-}
-
-Now CODB Docs knows much more than a conventional text embedding system.
-
-6. Create a CODB Hybrid Vector
-
-I'd formalize this as an actual API:
-
-const fingerprint =
-  await CodbDocs.fingerprint(chunk);
-
-Return:
-
-{
-  semantic: Float32Array(...),
-  lexical: Float32Array(...),
-  structural: Float32Array(...),
-  spatial: Float32Array(...),
-  entity: Float32Array(...)
-}
-
-Then ranking:
-
-Final Score
-
-35% semantic
-25% lexical
-15% structural
-10% entity
-10% document context
- 5% spatial
-
-But make the weights adaptive.
-
-A query like:
-
-$3,450,000
-
-should favor lexical/entity matching.
-
-While:
-
-What project will save the city the most money?
-
-should heavily favor semantic retrieval.
-
-7. Browser embeddings
-
-I would support:
-
-const docs = new CodbDocs({
-  embeddings: "local"
-});
-
-CODB Docs detects:
-
-navigator.gpu
-
-If available:
-
-WebGPU
-
-otherwise:
-
-WASM
-
-Transformers.js already supports this architecture. Its feature-extraction pipeline can generate normalized embeddings using WebGPU directly in the browser.
-
-Something conceptually like:
-
-const extractor = await pipeline(
-  "feature-extraction",
-  model,
-  {
-    device: "webgpu"
-  }
+const results = await doc.search(
+  "Show me where the flooding is"
 );
 
-Quantized models are particularly relevant for browser deployment because they reduce download and memory requirements.
+CODB Docs could return:
 
-8. Don't download the AI model until it's needed
+Page 14
+Image 2
+94% relevance
 
-Very important for Lovable websites.
+"Photograph showing roadway flooding near
+Atlantic Avenue..."
 
-Don't make:
+Click it and:
 
-User opens app
-↓
-200 MB model downloads
+PDF Viewer
+   ↓
+Page 14
+   ↓
+scroll to image
+   ↓
+highlight image bounding box
+For a completely text-only AI
 
-That's a marvelous way to make everyone hate your library.
+This is where your architecture becomes particularly useful.
 
-Instead:
+You can effectively give a text-only model "vision" through preprocessing:
 
-Open application
+                  CODB DOCS
+                     │
+        ┌────────────┴─────────────┐
+        │                          │
+      TEXT                       VISUAL
+        │                          │
+        │                    ┌─────┴─────┐
+        │                    │           │
+        │                  Images     Graphics
+        │                    │           │
+        │                  Vision      Analysis
+        │                    │           │
+        │                  OCR        Structure
+        │                    │           │
+        └──────────────┬─────┴───────────┘
+                       ▼
+                   CODB-IR
+                       │
+                       ▼
+              Everything becomes
+               semantic information
+                       │
+                       ▼
+                 Text-only LLM
 
-core: ~small
-PDF.js: lazy loaded
+The LLM doesn't need to see pixels.
 
-        ↓
+CODB Docs becomes its document perception layer.
 
-Open PDF
+That's a much more interesting direction than merely storing Base64. Base64 should be the escape hatch for sending pixels to a vision system; CODB-IR should store what those pixels mean.
 
-document engine loads
+so repull my source and see if its added
 
-        ↓
+I repulled the current main source from GitHub. No, the image-semantic/base64 system we discussed has not been added to the built packages/core/dist/codbdocs.js yet.
 
-Click Ask / Search
+The current build SHA is still:
 
-embedding model loads
+f551736d81a4239bc51f7e91677b49b95056ccfb
 
-Use dynamic imports.
+and it still describes the architecture as:
 
-const rag =
-  await import(
-    "@codbdocs/rag"
-  );
-9. Cache the model
+PDF-aware → Vision-aware → Content-aware
 
-After the first download:
+with enableVisual: false by default.
 
-Model
- ↓
-Browser Cache
+I also searched the repository for the expected new concepts such as:
 
-And document indexes:
+image
+base64
+caption
+vision
+semantic
+ImageGraph
+extractImages
 
-IndexedDB
+and didn't find the new implementation.
 
-Conceptually:
+So the specific functionality we discussed is not present yet, namely:
 
-await doc.index({
-  persist: true
+extracting embedded PDF images as Blob/Base64
+assigning each image a page + bounding box
+distinguishing photo/chart/map/diagram/logo/signature
+OCR specifically against extracted images
+generating semantic image descriptions
+associating nearby headings/captions/text with an image
+creating an ImageIR/visual semantic representation
+embedding the image description for RAG
+retrieving images from natural-language questions
+passing Base64/pixels to an optional vision provider
+letting a text-only model consume the resulting semantic description
+
+The current build does have its earlier visual-analysis foundation, but that's not the same thing as the image intelligence layer we're describing.
+
+The target API I'd add is essentially:
+
+const doc = await CodbDocs.load(file);
+
+const graph = await doc.analyze({
+  ocr: true,
+  visual: true,
+  images: true
 });
 
-Then reopening the same document:
+const images = graph.getImages();
 
-PDF hash
-   ↓
-index exists?
-   ↓
-YES
-   ↓
-load index
-
-No re-embedding 200 pages.
-
-10. Use Web Workers
-
-Absolutely don't run:
-
-OCR
-PDF parsing
-chunking
-embedding
-indexing
-
-all on the React UI thread.
-
-Instead:
-
-React UI
-   │
-   │
-   ▼
-CODB Worker
-   │
-   ├── PDF.js
-   ├── OCR
-   ├── analysis
-   ├── chunking
-   ├── embeddings
-   └── indexing
-
-React remains responsive.
-
-The API doesn't change:
-
-await doc.index({
-  worker: true
-});
-
-There are already examples of shipping quantized embedding models entirely client-side using Transformers.js and Web Workers, so this deployment pattern is well grounded.
-
-11. Progressive enhancement
-
-This matters enormously.
-
-CODB Docs shouldn't require WebGPU.
-
-Detect capabilities:
-
-const capabilities =
-  await CodbDocs.capabilities();
-
-Maybe:
+with an image returning something like:
 
 {
-  "pdf": true,
-  "ocr": true,
-  "wasm": true,
-  "webgpu": true,
-  "localEmbeddings": true,
-  "localLLM": false,
-  "workers": true,
-  "indexedDB": true
+  id: "image_page_4_1",
+  page: 4,
+
+  bbox: [82, 214, 510, 480],
+
+  mimeType: "image/jpeg",
+
+  blob: Blob,
+  base64: "...",
+
+  type: "photo",
+
+  caption: "Existing drainage conditions",
+
+  description:
+    "Photograph showing standing water covering a roadway.",
+
+  ocr: [
+    "Atlantic Avenue"
+  ],
+
+  objects: [
+    "road",
+    "water",
+    "vehicle"
+  ],
+
+  context: {
+    heading: "Existing Drainage Conditions",
+    before: "...",
+    after: "..."
+  },
+
+  retrievalText:
+    "Existing drainage conditions. Photograph showing standing water..."
 }
 
-Then choose automatically:
+Then the RAG layer can treat text, tables, charts, diagrams, maps and photographs as retrievable document objects, instead of pretending a PDF is just a very inconvenient .txt file.
 
-WebGPU
- ↓ unavailable
-
-WASM
- ↓ too slow
-
-Remote provider
-
-ONNX Runtime Web currently has broader WASM browser coverage than WebGPU, so this fallback matters if CODB Docs is supposed to work everywhere rather than merely on the developer's suspiciously expensive laptop.
-
-12. Separate retrieval from generation
-
-This is especially important.
-
-Don't force people to use OpenAI, Ollama, Gemini, etc.
-
-Make:
-
-const evidence =
-  await doc.retrieve(question);
-
-return:
-
-[
-  {
-    page: 12,
-    score: .94,
-    text: "...",
-    bbox: [...],
-    heading: "Financial Impact"
-  }
-]
-
-Then:
-
-await doc.ask(question, {
-  provider: ...
-});
-
-Generation becomes optional.
-
-13. Provider adapters
-
-Support:
-
-CodbDocs.providers.openai()
-CodbDocs.providers.ollama()
-CodbDocs.providers.azure()
-CodbDocs.providers.gemini()
-CodbDocs.providers.local()
-
-And custom:
-
-CodbDocs.createProvider({
-  async generate(context) {
-    return myAPI(context);
-  }
-});
-
-That makes CODB Docs usable in practically any Lovable project.
-
-14. React hooks
-
-For React/Lovable I'd build:
-
-useCodbDocument()
-useCodbViewer()
-useCodbSearch()
-useCodbAsk()
-useCodbRAG()
-useCodbAccessibility()
-
-Example:
-
-const {
-  document,
-  loading,
-  progress
-} = useCodbDocument(file);
-
-Then:
-
-const {
-  ask,
-  answer,
-  sources,
-  thinking
-} = useCodbAsk(document);
-
-And:
-
-<button
-  onClick={() =>
-    ask("What was approved?")
-  }
->
-  Ask Document
-</button>
-
-Lovable will handle that kind of API beautifully.
-
-15. Source citations should control the viewer
-
-This is one of the features I'd prioritize heavily.
-
-Return:
-
-{
-  answer:
-    "The contract amount was $2.45 million.",
-
-  sources: [
-    {
-      page: 17,
-
-      bbox: [
-        81,
-        212,
-        491,
-        278
-      ],
-
-      text:
-        "The contract amount shall not exceed..."
-    }
-  ]
-}
-
-React:
-
-<CodbAnswer
-  answer={answer}
-
-  onSourceClick={(source) => {
-    viewer.goToPage(source.page);
-    viewer.highlight(source.bbox);
-  }}
-/>
-
-The user clicks:
-
-Page 17
-
-and CODB Viewer:
-
-jumps to page 17,
-scrolls to the passage,
-highlights the exact evidence.
-
-That's a killer feature.
-
-16. Multi-document RAG
-
-Don't stop at:
-
-doc.ask()
-
-Build:
-
-const workspace =
-  CodbDocs.workspace();
-
-Then:
-
-await workspace.add(file1);
-await workspace.add(file2);
-await workspace.add(file3);
-
-await workspace.index();
-
-Now:
-
-const answer =
-  await workspace.ask(
-    "Which contracts exceed $1 million?"
-  );
-
-Returns:
-
-Contract A
-$2.4M
-Agenda.pdf
-Page 17
-
-Contract B
-$1.8M
-Resolution.pdf
-Page 4
-
-Now you've gone from a PDF library to a browser-native document intelligence platform.
-
-17. Folder ingestion
-
-Eventually:
-
-await workspace.add(files);
-
-Or drag/drop:
-
-<CodbDropZone
-  workspace={workspace}
-/>
-
-Could handle:
-
-PDF
-DOCX
-XLSX
-PPTX
-TXT
-HTML
-Images
-
-Everything gets normalized into your existing IR.
-
-That IR becomes the real product, not PDF.js.
-
-18. Make the IR format public
-
-I would formalize:
-
-CODB-IR 1.0
-
-For example:
-
-const ir =
-  doc.getIR();
-
-And:
-
-CodbDocs.loadIR(ir);
-
-Then someone could build a DOCX parser that produces CODB-IR without touching the RAG engine.
-
-Architecture:
-
-PDF.js ─────┐
-            │
-DOCX ───────┤
-            │
-HTML ───────┤
-            ▼
-         CODB-IR
-            │
-      ┌─────┼───────┐
-      ▼     ▼       ▼
-    RAG   Viewer   ADA
-      │     │       │
-      └─────┼───────┘
-            ▼
-        Applications
-
-That's a much stronger architecture.
-
-19. Vanilla JavaScript needs to remain first-class
-
-You should absolutely maintain:
-
-<script src="https://cdn.jsdelivr.net/.../codbdocs.min.js"></script>
-
-Then:
-
-const doc =
-  await CodbDocs.load(file);
-
-await doc.index();
-
-const answer =
-  await doc.ask(
-    "What is this document about?"
-  );
-
-Meaning someone can build an intelligent document app from one HTML file.
-
-20. React gets the nicer layer
-<CodbProvider
-  config={{
-    embeddings: "local",
-    storage: "indexeddb",
-    acceleration: "auto"
-  }}
->
-
-  <CodbViewer file={file} />
-
-  <CodbChat />
-
-</CodbProvider>
-
-That's what I'd want Lovable consuming.
-
-The architecture I'd build
-                    CODB DOCS
-                        │
-        ┌───────────────┼────────────────┐
-        │               │                │
-        ▼               ▼                ▼
-     INPUTS           ENGINE            UI
-        │               │                │
-   PDF / DOCX         CODB-IR          React
-   XLSX / HTML           │             Vanilla JS
-   Images                │             Lovable
-                         │
-                ┌────────┴─────────┐
-                │                  │
-                ▼                  ▼
-        DOCUMENT BRAIN           VIEWER
-                │
-        ┌───────┼────────┐
-        │       │        │
-        ▼       ▼        ▼
-     Spatial  Entity  Structural
-        │       │        │
-        └───────┼────────┘
-                ▼
-       Semantic Fingerprint
-                │
-          ┌─────┴─────┐
-          │           │
-          ▼           ▼
-       Lexical     Embedding
-                    │
-               WebGPU/WASM
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
-      Local Index         IndexedDB
-          │
-          ▼
-    Hybrid Retrieval
-          │
-          ▼
-       Reranker
-          │
-          ▼
-      Evidence Set
-          │
-      ┌───┴────┐
-      ▼        ▼
-   Local LLM  API LLM
-      │        │
-      └───┬────┘
-          ▼
-        Answer
-          +
-      Citations
-          +
-    PDF Highlights
-And make the simplest usage this
-const doc =
-  await CodbDocs.load(file);
-
-const answer =
-  await doc.ask(
-    "What was approved?"
-  );
-
-console.log(answer);
-
-Everything else should happen automatically:
-
-PDF parsing        ✓
-OCR                ✓
-structure          ✓
-reading order      ✓
-chunking           ✓
-fingerprinting     ✓
-embedding          ✓
-WebGPU/WASM        ✓
-indexing           ✓
-hybrid retrieval   ✓
-reranking          ✓
-context building   ✓
-citations          ✓
-page coordinates   ✓
-highlighting       ✓
-
-And advanced developers can override every layer.
-
-That combination is where I think CODB Docs gets genuinely interesting. Don't build another embedding library. Build a universal browser document intelligence runtime where embeddings are only one signal among layout, structure, entities, lexical relevance and document relationships. Then expose the whole ridiculous machine behind a three-line API.
