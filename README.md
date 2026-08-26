@@ -40,7 +40,7 @@ CodbDocs runs **entirely in the browser**. It extracts text, analyzes structure,
 | **Offline Capable** | Works without internet. Perfect for air-gapped environments, field work, or low-connectivity areas. |
 | **Instant Setup** | One `<script>` tag. No npm install, no webpack config, no build step required. |
 | **Framework Agnostic** | Works with React, Vue, Angular, Svelte, or vanilla JavaScript. |
-| **Full RAG Support** | Generates chunks, embeddings, and structured output for any vector database. |
+| **Model-Free RAG** | No embedding model, no vector database, no GPU. Deterministic retrieval using document structure. |
 | **Round-Trip PDF** | Reconstruct PDFs from the intermediate representation with 3 fidelity levels. |
 | **900+ Pages** | Batch processing mode handles large documents without memory issues. |
 
@@ -51,11 +51,15 @@ CodbDocs runs **entirely in the browser**. It extracts text, analyzes structure,
 | Feature | pdf.js | Tesseract.js | Adobe API | CodbDocs |
 |---------|--------|--------------|-----------|----------|
 | Text extraction | ✅ | ✅ | ✅ | ✅ |
-| OCR fallback | ❌ | ✅ | ✅ | ✅ |
+| OCR fallback | ❌ | ✅ | ✅ | ✅ (quality-scored) |
 | Document structure | ❌ | ❌ | ✅ | ✅ Headings, tables, forms, lists |
 | Entity extraction | ❌ | ❌ | ✅ | ✅ Dates, phones, emails, addresses |
 | Page classification | ❌ | ❌ | ✅ | ✅ Cover, letter, memo, form, legal |
 | Semantic query | ❌ | ❌ | ❌ | ✅ "what dates are mentioned?" |
+| Concept graph | ❌ | ❌ | ❌ | ✅ Entity relationships, co-occurrence |
+| Hybrid search | ❌ | ❌ | ❌ | ✅ BM25 + entity + structure scoring |
+| Deterministic reasoning | ❌ | ❌ | ❌ | ✅ COUNT, SUM, MAX, MIN operators |
+| Model-free retrieval | ❌ | ❌ | ❌ | ✅ No embedding model needed |
 | Offline operation | ✅ | ✅ | ❌ | ✅ No server, no API keys |
 | RAG output | ❌ | ❌ | ❌ | ✅ Chunks, embeddings, JSONL/CSV |
 | PDF creation | ❌ | ❌ | ❌ | ✅ Round-trip from IR |
@@ -83,7 +87,7 @@ CodbDocs uses a **3-layer architecture** that progressively builds understanding
 │                                                                 │
 │  Layer 2: Vision-Aware                                          │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │ • OCR with Tesseract.js                                  │  │
+│  │ • Quality-scored OCR (Tesseract.js)                      │  │
 │  │ • Spatial layout analysis (columns, rows, alignment)     │  │
 │  │ • Structure detection (tables, lists, form fields)       │  │
 │  │ • Visual region analysis (headers, footers, images)      │  │
@@ -93,11 +97,21 @@ CodbDocs uses a **3-layer architecture** that progressively builds understanding
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │ • Native text extraction (PDF.js)                        │  │
 │  │ • Font and vector graphics                               │  │
-│  │ • Images and annotations                                 │  │
+│  │ • Images with semantic roles (logo, chart, figure)       │  │
 │  │ • Structure trees and form fields                        │  │
 │  │ • Digital signatures and encryption                      │  │
 │  │ • Optional Content Groups (layers)                       │  │
 │  │ • Embedded files and actions                             │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  Retrieval Engine (overlay)                                     │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ • Concept Graph (entity relationships, co-occurrence)    │  │
+│  │ • CodbFingerprint (model-free document signature)        │  │
+│  │ • Hybrid Search (BM25 + entity + structure matching)     │  │
+│  │ • Query Planner (intent detection, decomposition)        │  │
+│  │ • Deterministic Reasoning (COUNT, SUM, MAX, MIN)         │  │
+│  │ • Evidence Ranking (explainability + citations)          │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -124,7 +138,7 @@ const ir = graph.getIR();
 //       width, height, rotation, mediaBox, cropBox,
 //       content: [text objects],
 //       vectors: [vector objects],
-//       images: [image objects],
+//       images: [image objects with roles + captions],
 //       annotations: [annotations],
 //       signatures: [digital signatures],
 //       appearanceStreams: [form appearances],
@@ -141,6 +155,105 @@ const ir = graph.getIR();
 //   forms: { ... }
 // }
 ```
+
+---
+
+## How the Model-Free RAG Works
+
+This is the core innovation. Most RAG systems require an embedding model (like OpenAI's `text-embedding-3-small` or a local model via ONNX/WASM) to convert text into vectors, then use a vector database for similarity search. CodbDocs takes a fundamentally different approach.
+
+### The Traditional RAG Pipeline
+
+```
+Traditional RAG:
+  Document → Chunk → Embedding Model → Vector → Vector DB → Similarity Search → Results
+                      (GPU/API needed)          (server needed)
+```
+
+**Problems with this:**
+- Requires an embedding model (GPU or API key)
+- Requires a vector database (server infrastructure)
+- Embeddings are opaque — you can't explain why a result matched
+- Embeddings drift — different model versions produce different vectors
+- Embeddings are slow — running 1000 chunks through a model takes seconds to minutes
+- Privacy — sending document content to an external service
+
+### CodbDocs' Model-Free Retrieval
+
+```
+CodbDocs RAG:
+  Document → Analyze → Concept Graph + CodbFingerprint → Hybrid Search → Ranked Results
+                        (deterministic, explainable)      (no model, no GPU)
+```
+
+**How it works:**
+
+1. **Analysis Phase** — CodbDocs extracts everything from the PDF:
+   - Text content with spatial positions
+   - Entities (dates, people, organizations, currencies, addresses)
+   - Structure (headings, tables, forms, lists)
+   - Images with semantic roles (logo, chart, figure, icon)
+   - Vector graphics and annotations
+
+2. **Concept Graph Construction** — A graph is built where:
+   - **Nodes** are concepts (entities, blocks, headings)
+   - **Edges** are weighted relationships (co-occurrence, spatial proximity, semantic predicates)
+   - **Indices** enable fast lookup by type, page, or text
+
+3. **CodbFingerprint Generation** — A multi-signal document fingerprint:
+   - Table of Contents (heading hierarchy)
+   - Entity Registry (entity types + values + page locations)
+   - Layout Signature (column counts, page types, text flow)
+   - Structure Profile (table/form/list/heading counts)
+   - Topic Vector (word frequency distribution)
+   - Relationship Signature (relationship type counts)
+
+4. **Hybrid Search** — At query time, four signals are combined:
+   - **BM25 text scoring** — classic information retrieval text matching
+   - **Entity matching** — direct entity value lookup
+   - **Structure matching** — heading/block type relevance
+   - **Topic scoring** — topic vector similarity from the fingerprint
+
+5. **Deterministic Reasoning** — For count/sum/max/min queries, CodbDocs
+   runs operators directly against the extracted entities — no model needed.
+
+6. **Evidence Ranking** — Every result includes explainability:
+   - Which page matched and why
+   - Which entities were found
+   - Which text snippets matched
+   - Confidence scores for each signal
+
+### Why This Works
+
+The key insight from the review.txt design document:
+
+> "The most important next milestone isn't 'more PDF support.' It's CODB Docs 1.0 Retrieval Engine: quality scoring → normalized IR → concept graph → relationship graph → fingerprints → hybrid deterministic retrieval → query planner → evidence ranking."
+
+**CodbDocs wins on:**
+- **Exact factual lookup** — "What is the invoice number?" (entity extraction + exact match)
+- **Table questions** — "What is the total budget?" (structure detection + SUM operator)
+- **Relationship questions** — "Who approved this resolution?" (concept graph traversal)
+- **Cross-page questions** — "What dates appear throughout the document?" (global entity registry)
+- **Document-specific terminology** — Ordinance numbers, resolution numbers, permit numbers (custom entity types)
+
+**Embeddings retain an advantage on:**
+- Unconstrained paraphrasing — "Tell me about the funding situation" (semantic similarity)
+- Abstract concepts — "What's the overall sentiment?" (requires language understanding)
+
+### When You Still Want Embeddings
+
+CodbDocs provides embedding providers for when you need them:
+
+```javascript
+// Use OpenAI embeddings if you need semantic similarity
+const embeddings = new OpenAIEmbeddingProvider('your-api-key');
+const ragOutput = await graph.toRAGWithEmbeddings(embeddings);
+
+// Or use the built-in local placeholder (not a real model)
+const local = new LocalEmbeddingProvider();
+```
+
+But the point is: **you don't need them to get good results.** The model-free pipeline handles most document queries.
 
 ---
 
@@ -190,6 +303,24 @@ const ir = graph.getIR();
 </html>
 ```
 
+### Batteries-Included (Recommended)
+
+Use `prepare()` to run the full pipeline in one call:
+
+```javascript
+const doc = await CodbDocs.load(file);
+const graph = await doc.prepare();  // runs analyze() with all features enabled
+
+// Now query with the enhanced engine
+const result = graph.askEnhanced("Who approved the $425,000 contract?");
+// → {
+//   answer: "Found relevant content on page 17.",
+//   confidence: 0.87,
+//   evidence: [{ type: 'entity', entity: { type: 'currency', value: '$425,000' }, page: 17 }],
+//   reasoning: { intent: 'relationship_lookup', searchResults: 5, topScore: 0.87 }
+// }
+```
+
 ### Local Files — No CDN Required
 
 ```html
@@ -202,7 +333,7 @@ const ir = graph.getIR();
 
 <script>
   const doc = await CodbDocs.load(file);
-  const graph = await doc.analyze({ ocr: true });
+  const graph = await doc.prepare();
   console.log(graph.getSummary());
 </script>
 ```
@@ -236,7 +367,7 @@ function DocumentProcessor() {
       {result && (
         <div>
           <h2>{result.getSummary().wordCount} words</h2>
-          <pre>{JSON.stringify(result.query("what dates are mentioned?"), null, 2)}</pre>
+          <pre>{JSON.stringify(result.askEnhanced("What is this document about?"), null, 2)}</pre>
         </div>
       )}
     </div>
@@ -275,6 +406,9 @@ const graph = await doc.analyze({
   }
 });
 
+// Batteries-included (recommended)
+const graph = await doc.prepare();  // same as analyze() with all options enabled
+
 // For large PDFs (900+ pages)
 const graph = await doc.analyzeBatched({
   batchSize: 50,                // Process 50 pages at a time
@@ -305,63 +439,255 @@ graph.query("what is this document about?") // → { type: 'summary', results: {
 const results = graph.find("budget");
 const first = graph.findOne("invoice");
 
-// AI-like Q&A
+// AI-like Q&A (simple)
 const answer = graph.ask("What is the total amount?");
 // → { answer: "$1,250,000", confidence: 0.92, evidence: [...] }
+
+// Enhanced Q&A (with reasoning operators + concept graph)
+const enhanced = graph.askEnhanced("Who approved the $425,000 contract?");
+// → { answer, confidence, evidence, reasoning: { intent, searchResults, explanation } }
 ```
 
-### Getting Structured Data
+---
+
+## Retrieval Engine
+
+### Concept Graph
+
+The concept graph is a weighted graph of entities and their relationships. It's built automatically during `analyze()`.
 
 ```javascript
-// Document summary
-const summary = graph.getSummary();
-// → { pageCount, wordCount, pageTypes, metadata: { dates, phones, ... } }
+// Get the full concept graph
+const conceptGraph = graph.getConceptGraph();
 
-// Entities
-const dates = graph.getEntities("date");
-const people = graph.getEntities("person");
-const orgs = graph.getEntities("organization");
+// Find all concepts of a type
+const people = graph.getConcepts("person");
+const orgs = graph.getConcepts("organization");
 
-// Content blocks
-const headings = graph.getBlocks("heading");
-const tables = graph.getBlocks("table");
-const forms = graph.getBlocks("form");
+// Get neighbors of a concept
+const neighbors = graph.getConceptNeighbors("person:Jane Smith", 1);
+// → [{ node: { type: 'organization', text: 'City of Daytona Beach' }, edge: { relation: 'affiliated_with' }, depth: 1 }]
 
-// Document type
-const docType = graph.getDocumentType();
-// → { type: "budget", confidence: 0.92 }
+// Find path between two concepts
+const path = graph.getConceptPath("person:Jane Smith", "currency:$425,000");
+// → [{ sourceId, targetId, relation: 'associated_with', weight: 1.0 }]
+
+// Get the most connected concepts (hubs)
+const hubs = graph.getConceptHubs(5);
+// → [{ node: { type: 'organization', text: 'City of Daytona Beach' }, degree: 12 }]
+
+// Get communities (connected components)
+const communities = graph.getCommunities();
+```
+
+### CodbFingerprint
+
+The fingerprint is a model-free document signature. It captures structure, entities, and topics without any embedding model.
+
+```javascript
+const fp = graph.getFingerprint();
+// → {
+//   toc: [{ text: "Budget Overview", level: 1, page: 1 }],
+//   entityRegistry: Map { "person:jane smith" → { type, value, pages, count } },
+//   layoutSignature: { columnCounts: [1,2,1], pageTypes: { budget: 3, cover: 1 } },
+//   structureProfile: { tableCount: 5, formCount: 2, listCount: 3, headingCount: 12 },
+//   topicVector: { "budget": 0.9, "appropriation": 0.7, "revenue": 0.6 },
+//   relationshipSignature: { contains: 45, affiliated_with: 8 },
+//   metadata: { pageCount: 24, wordCount: 15000, documentType: 'budget' }
+// }
+
+// Compare two documents
+const similarity = CodbFingerprint.similarity(fp1, fp2);
+// → 0.73 (Jaccard on TOC, entity overlap, layout similarity, topic cosine)
+```
+
+### Hybrid Search
+
+Search combines four signals: text (BM25), entities, structure, and topic similarity.
+
+```javascript
+const results = graph.hybridSearch("budget appropriation 2024", {
+  maxResults: 10,
+  minScore: 0.1,
+  includeEvidence: true,
+});
+
+// Each result includes:
+// {
+//   page: 3,
+//   score: 0.87,           // composite score
+//   textScore: 0.82,       // BM25 text match
+//   entityScore: 0.9,      // entity value match
+//   structureScore: 0.7,   // heading/block type match
+//   topicScore: 0.6,       // topic vector similarity
+//   text: "The 2024 budget appropriation...",
+//   entities: [{ type: 'currency', value: '$2.5M' }],
+//   evidence: [
+//     { type: 'text_snippet', text: '...', page: 3, relevance: 0.9 },
+//     { type: 'entity', entity: { type: 'currency', value: '$2.5M' }, page: 3 }
+//   ]
+// }
+```
+
+### Query Intent Detection
+
+The query planner detects intent and decomposes complex queries.
+
+```javascript
+const intent = graph.detectIntent("How many ordinances are mentioned?");
+// → { type: 'count', confidence: 0.9 }
+
+const intent2 = graph.detectIntent("Who approved the contract?");
+// → { type: 'relationship_lookup', confidence: 0.8 }
+
+const subQueries = graph.decomposeQuery("Find all dates and amounts on page 5");
+// → [
+//   { query: "find all dates and amounts on page 5", intent: { type: 'entity_search' } },
+//   { query: "5", intent: { type: 'entity_search', entityType: 'date' } }
+// ]
+```
+
+### Deterministic Reasoning Operators
+
+For count, sum, max, and min queries, CodbDocs runs operators directly against extracted entities. No model, no API, no GPU.
+
+```javascript
+// COUNT — count entities matching criteria
+const count = graph.count({ entityType: 'ordinance_number' });
+// → { operator: 'COUNT', result: 8, items: [...] }
+
+const countFiltered = graph.count({ entityType: 'person', textContains: 'Smith' });
+// → { operator: 'COUNT', result: 2, items: [...] }
+
+// SUM — sum numeric values (currency entities)
+const total = graph.sum({ entityType: 'currency' });
+// → { operator: 'SUM', result: 2500000, formattedResult: '$2,500,000', itemCount: 15 }
+
+const filteredSum = graph.sum({ entityType: 'currency', filter: 'budget' });
+// → sums only amounts that contain the word "budget"
+
+// MAX — find highest value
+const max = graph.max({ entityType: 'currency' });
+// → { operator: 'MAX', result: 425000, formattedResult: '$425,000', item: { ... } }
+
+// MIN — find lowest value
+const min = graph.min({ entityType: 'currency' });
+// → { operator: 'MIN', result: 150, formattedResult: '$150.00', item: { ... } }
+
+// reason() — auto-detects intent and runs the right operator
+const result = graph.reason("How many resolutions are mentioned?");
+// → { answer: "Found 8 resolution_number items.", confidence: 0.9, reasoning: { operator: 'COUNT' } }
+
+const totalBudget = graph.reason("What is the total budget amount?");
+// → { answer: "The total is $2,500,000.00 (from 15 value(s)).", confidence: 0.85 }
+```
+
+### Evidence Ranking
+
+Every search result includes explainability — you can show users exactly why a result matched.
+
+```javascript
+const ranked = graph.hybridSearch("contract approval", { includeEvidence: true });
+
+for (const result of ranked) {
+  console.log(`Page ${result.page} (score: ${result.score})`);
+  for (const ev of result.evidence) {
+    if (ev.type === 'entity') {
+      console.log(`  Entity: ${ev.entity.type} = ${ev.entity.value}`);
+    }
+    if (ev.type === 'text_snippet') {
+      console.log(`  Text: "${ev.text.substring(0, 80)}..."`);
+    }
+  }
+}
+```
+
+---
+
+## Image Semantic Understanding
+
+Images are extracted during `analyze()` with automatic role inference and caption detection.
+
+```javascript
+const images = graph.getImages();
+// → [
+//   {
+//     id: 'page_1_img_0',
+//     pageNumber: 1,
+//     width: 800, height: 200,
+//     role: 'logo',          // inferred from size + position
+//     caption: null,
+//     dataUrl: 'data:image/png;base64,...'
+//   },
+//   {
+//     id: 'page_3_img_1',
+//     pageNumber: 3,
+//     width: 600, height: 400,
+//     role: 'chart',         // large, centered
+//     caption: 'Figure 3: Revenue by Department',
+//     dataUrl: 'data:image/png;base64,...'
+//   }
+// ]
+
+// Get images for a specific page
+const pageImages = graph.getImages(3);
+```
+
+**Image Roles:**
+
+| Role | Detection |
+|------|-----------|
+| `logo` | Small image near top of page |
+| `header` | Image in top 15% of page |
+| `footer` | Image in bottom 15% of page |
+| `chart` | Large, centered image (>400×300) |
+| `icon` | Very small image (<50×50) |
+| `figure` | Referenced as "Figure" or "Fig." in nearby text |
+| `content` | Default for other images |
+
+---
+
+## Quality-Based OCR
+
+Instead of a crude text-length check ("if text < 20 chars, OCR"), CodbDocs uses multi-signal quality scoring to decide whether to OCR a page.
+
+```javascript
+// The quality score considers:
+// 1. Text volume (very short = likely scanned image)
+// 2. Non-printable character ratio (garbage characters)
+// 3. Outside-bounds text ratio (invisible text objects)
+// 4. Average word length (too short or too long = garbage)
+// 5. Duplicate text fragment ratio
+// 6. Character variety (too few unique characters)
+
+// Configure the quality threshold
+CodbDocs.configure({ qualityThreshold: 0.5 });  // default: 0.5
+// Pages scoring below this threshold get OCR'd
 ```
 
 ---
 
 ## RAG (Retrieval-Augmented Generation)
 
-CodbDocs provides complete RAG support for AI applications.
+CodbDocs provides complete RAG support for AI applications — both model-free and embedding-based.
 
-### Smart Chunking
+### Model-Free RAG (Recommended)
 
 ```javascript
-const chunks = graph.createChunks({
-  strategy: 'semantic',  // 'fixed' | 'semantic' | 'page' | 'section' | 'table' | 'hybrid'
-  chunkSize: 1000,
-  chunkOverlap: 200,
-  includeMetadata: true,
-  includeBoundingBoxes: true,
-});
+// One call — analyzes, builds concept graph, creates fingerprint
+const graph = await doc.prepare();
+
+// Query with the enhanced engine
+const answer = graph.askEnhanced("What is the total appropriation?");
+// Uses: quality scoring → concept graph → hybrid search → evidence ranking
+
+// Or use deterministic reasoning for exact questions
+const count = graph.count({ entityType: 'ordinance_number' });
+const total = graph.sum({ entityType: 'currency' });
+const max = graph.max({ entityType: 'currency' });
 ```
 
-**Chunk Strategies:**
-
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| `semantic` | Split by natural paragraph boundaries | General RAG |
-| `fixed` | Fixed-size chunks with overlap | Simple vector DBs |
-| `page` | One chunk per page | Page-level retrieval |
-| `section` | Split by headings | Document structure |
-| `table` | Keep tables as separate chunks | Table-heavy documents |
-| `hybrid` | Semantic with tables separate | Mixed content |
-
-### Embeddings
+### Embedding-Based RAG (When You Need Semantic Similarity)
 
 ```javascript
 import { OpenAIEmbeddingProvider, LocalEmbeddingProvider } from '@codbdocs/core';
@@ -390,6 +716,29 @@ const localEmbeddings = new LocalEmbeddingProvider({ dimensions: 384 });
 const ragLocal = await graph.toRAGWithEmbeddings(localEmbeddings);
 ```
 
+### Smart Chunking
+
+```javascript
+const chunks = graph.createChunks({
+  strategy: 'semantic',  // 'fixed' | 'semantic' | 'page' | 'section' | 'table' | 'hybrid'
+  chunkSize: 1000,
+  chunkOverlap: 200,
+  includeMetadata: true,
+  includeBoundingBoxes: true,
+});
+```
+
+**Chunk Strategies:**
+
+| Strategy | Description | Best For |
+|----------|-------------|----------|
+| `semantic` | Split by natural paragraph boundaries | General RAG |
+| `fixed` | Fixed-size chunks with overlap | Simple vector DBs |
+| `page` | One chunk per page | Page-level retrieval |
+| `section` | Split by headings | Document structure |
+| `table` | Keep tables as separate chunks | Table-heavy documents |
+| `hybrid` | Semantic with tables separate | Mixed content |
+
 ### Export Formats
 
 ```javascript
@@ -415,12 +764,13 @@ import CodbDocs, { OpenAIEmbeddingProvider } from '@codbdocs/core';
 
 // Load and analyze
 const doc = await CodbDocs.load(file);
-const graph = await doc.analyze({ ocr: true });
+const graph = await doc.prepare();
 
-// Create embeddings
+// Model-free query (no API key needed)
+const answer = graph.askEnhanced("What are the key budget items?");
+
+// Embedding-based RAG (for vector database storage)
 const embeddings = new OpenAIEmbeddingProvider('your-api-key');
-
-// Generate RAG output
 const ragOutput = await graph.toRAGWithEmbeddings(embeddings, {
   chunkStrategy: 'semantic',
   chunkSize: 1000,
@@ -547,6 +897,31 @@ const graphics = graph.getGraphicsStateSummary(1);
 // → { uniqueTransforms, strokeColors, fillColors, hasTransparency, hasClipping }
 ```
 
+### Document Health / Diagnosis
+
+```javascript
+const health = graph.diagnose();
+// → {
+//   score: 85,
+//   pageCount: 24,
+//   issues: { scannedPages: 2, brokenTextPages: 0, watermarks: 1, ... },
+//   ragReadiness: { score: 78, searchable: true, needsOCR: false },
+//   recommendations: [{ type: 'ocr', priority: 'high', description: '...' }]
+// }
+```
+
+### Normalization / Repair
+
+```javascript
+const repairs = graph.normalize({
+  fixHyphenation: true,
+  fixLigatures: true,
+  deduplicate: true,
+  tables: true,
+});
+// → { success: true, repairs: [...], repairCount: 8 }
+```
+
 ---
 
 ## Configuration
@@ -556,7 +931,7 @@ CodbDocs.configure({
   // OCR settings
   ocrScale: 2,              // Render scale before OCR (default: 2)
   ocrLang: 'eng',           // Tesseract language code (default: 'eng')
-  nativeTextMinLength: 20,  // Below this, treat as scan-only (default: 20)
+  qualityThreshold: 0.5,    // Below this, use OCR (default: 0.5)
 
   // Analysis settings
   enableBrain: true,        // Enable Document Brain (default: true)
@@ -615,10 +990,13 @@ codbdocs/
 │   │   │   ├── pdfir.js         ← PDF-IR core + HTML export
 │   │   │   ├── query.js         ← Natural language query + ask()
 │   │   │   ├── rag.js           ← RAG module (chunks, embeddings, export)
+│   │   │   ├── concepts.js      ← Concept graph + retrieval engine + reasoning
 │   │   │   ├── extended.js      ← Metadata, navigation, security, glyphs
 │   │   │   ├── graphics.js      ← Graphics state + color management
 │   │   │   ├── pdfcreator.js    ← Round-trip PDF generation
 │   │   │   ├── advanced.js      ← Signatures, OCG, files, actions
+│   │   │   ├── quality.js       ← Text quality, diagnosis, normalization
+│   │   │   ├── edgecases.js     ← Rotation, glyphs, forms, footnotes
 │   │   │   └── workers.js       ← OffscreenCanvas + Web Workers
 │   │   ├── dist/
 │   │   │   └── codbdocs.js      ← UMD browser build (drop-in <script>)
@@ -653,6 +1031,7 @@ codbdocs/
 | Method | Description |
 |--------|-------------|
 | `doc.analyze(options)` | Run full 3-layer analysis pipeline |
+| `doc.prepare(options)` | Batteries-included analysis (same as analyze with all options) |
 | `doc.analyzeBatched(options)` | Process in batches for large PDFs |
 | `doc.extractText(options)` | Quick text-only extraction |
 | `doc.renderPage(pageNum, scale)` | Render page to canvas |
@@ -664,6 +1043,7 @@ codbdocs/
 |--------|-------------|
 | `graph.query(question)` | Natural language query |
 | `graph.ask(question)` | AI-like Q&A with confidence |
+| `graph.askEnhanced(question)` | Enhanced Q&A with reasoning + concept graph |
 | `graph.find(query)` | Search content |
 | `graph.findOne(query)` | Get first match |
 | `graph.getSummary()` | Document summary |
@@ -671,6 +1051,27 @@ codbdocs/
 | `graph.getBlocks(type?)` | Get content blocks |
 | `graph.getDocumentType()` | Document classification |
 | `graph.toJSON()` | Export as JSON |
+
+### Retrieval Engine
+
+| Method | Description |
+|--------|-------------|
+| `graph.hybridSearch(query, options?)` | BM25 + entity + structure search with evidence |
+| `graph.detectIntent(query)` | Detect query intent type |
+| `graph.decomposeQuery(query)` | Break complex queries into sub-queries |
+| `graph.count(criteria)` | COUNT operator for entities |
+| `graph.sum(criteria)` | SUM operator for currency values |
+| `graph.max(criteria)` | MAX operator for currency values |
+| `graph.min(criteria)` | MIN operator for currency values |
+| `graph.reason(query)` | Auto-detect intent and run reasoning |
+| `graph.getConceptGraph()` | Get the full concept graph |
+| `graph.getConcepts(type?)` | Get all concepts |
+| `graph.getConceptNeighbors(id, depth?)` | Get concept neighbors |
+| `graph.getConceptPath(sourceId, targetId)` | Find path between concepts |
+| `graph.getConceptHubs(limit?)` | Most connected concepts |
+| `graph.getCommunities()` | Connected component clusters |
+| `graph.getRelationships(nodeId?)` | Get relationships |
+| `graph.getFingerprint()` | Get document fingerprint |
 
 ### RAG Methods
 
@@ -682,6 +1083,7 @@ codbdocs/
 | `graph.toRAGWithEmbeddings(provider)` | RAG with embeddings |
 | `graph.toJSONL(options)` | Export as JSONL |
 | `graph.toCSV(options)` | Export as CSV |
+| `graph.getImages(pageNum?)` | Get extracted images with roles |
 | `graph.extractAllImages(options)` | Extract all images |
 
 ### PDF-IR Methods
@@ -726,6 +1128,33 @@ codbdocs/
 | `graph.getRevisions()` | Revision history |
 | `graph.getGraphicsStateSummary(pageNum)` | Graphics state |
 
+### Quality & Health
+
+| Method | Description |
+|--------|-------------|
+| `graph.diagnose()` | Comprehensive health scan |
+| `graph.normalize(options?)` | Normalize and repair document issues |
+| `graph.getTextQuality(pageNum)` | Text quality analysis |
+| `graph.getVisualComparison(pageNum)` | Visual vs internal comparison |
+| `graph.getRepeatedElements()` | Watermarks, headers, footers |
+| `graph.getRedactions(pageNum)` | Redaction detection |
+| `graph.getTagValidation(pageNum)` | Tag validation |
+| `graph.getRAGReadiness()` | RAG readiness score |
+
+### Edge Cases
+
+| Method | Description |
+|--------|-------------|
+| `graph.getRotationSkew(pageNum)` | Rotation and skew detection |
+| `graph.getGlyphIssues(pageNum)` | Glyph encoding issues |
+| `graph.getOutlinedText(pageNum)` | Outlined/stroked text |
+| `graph.getFlattenedForms(pageNum)` | Flattened form fields |
+| `graph.getCheckboxes(pageNum)` | Checkbox detection |
+| `graph.getFootnotes(pageNum)` | Footnote detection |
+| `graph.getLanguage(pageNum)` | Language detection |
+| `graph.getCrossPageTables()` | Cross-page table recognition |
+| `graph.associateCaptions(pageNum)` | Caption-image association |
+
 ---
 
 ## Browser Support
@@ -745,6 +1174,13 @@ Requires:
 ## What This Is Not
 
 CodbDocs is the **extraction + understanding layer**. "Ask questions about this document" using an LLM (RAG) is a separate concern that needs a backend. But `graph.toJSON()` and `graph.toRAG()` give you everything you need to feed into any RAG pipeline, vector database, or search index.
+
+For the retrieval engine specifically: CodbDocs handles the **exact factual lookup** portion of RAG very well (entity extraction, table queries, relationship traversal). For **semantic paraphrasing** ("tell me about the funding situation"), you'll still want an embedding model or an LLM. The recommended architecture is:
+
+1. Use CodbDocs for extraction + concept graph + fingerprinting
+2. Use CodbDocs' hybrid search for factual queries
+3. Optionally add embeddings for semantic similarity
+4. Pass context to an LLM for natural language generation
 
 ---
 

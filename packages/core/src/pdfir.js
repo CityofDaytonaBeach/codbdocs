@@ -19,6 +19,9 @@ export function createIR() {
     version: '1.0',
     document: {
       id: generateId('doc'),
+      hash: null,
+      title: null,
+      type: 'unknown',
       metadata: {},
       pages: [],
       structure: null,
@@ -29,12 +32,17 @@ export function createIR() {
     },
     pages: {},
     objects: {},
+    entities: {},
+    relationships: {},
+    concepts: {},
+    images: {},
+    tables: {},
+    forms: {},
+    annotations: {},
+    vectors: {},
     resources: {},
     structure: {},
-    annotations: {},
-    forms: {},
     assets: {},
-    vectors: {},
   };
 }
 

@@ -1,0 +1,112 @@
+{
+  "version": "1.0",
+  "description": "Ground truth for CODB Docs test corpus",
+  "corpus": [
+    {
+      "file": "native-text.pdf",
+      "type": "native",
+      "description": "PDF with selectable text, no images",
+      "queries": [
+        {
+          "question": "What is the contract amount?",
+          "expected": "$425,000",
+          "page": 1
+        },
+        {
+          "question": "Who approved the contract?",
+          "expected": "Jane Smith",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "file": "scan.pdf",
+      "type": "scanned",
+      "description": "Scanned document, requires OCR",
+      "queries": [
+        {
+          "question": "What is the date?",
+          "expected": "January 15, 2024",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "file": "tables.pdf",
+      "type": "tables",
+      "description": "PDF with multiple tables",
+      "queries": [
+        {
+          "question": "What is the total for Account 001-100-521000?",
+          "expected": "$325,000",
+          "page": 1
+        },
+        {
+          "question": "Which account has the highest amount?",
+          "expected": "001-100-521000",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "file": "multi-page-table.pdf",
+      "type": "cross-page",
+      "description": "Table spanning multiple pages",
+      "queries": [
+        {
+          "question": "What is the total of all items?",
+          "expected": "$1,250,000",
+          "page": 2
+        }
+      ]
+    },
+    {
+      "file": "forms.pdf",
+      "type": "forms",
+      "description": "PDF with form fields",
+      "queries": [
+        {
+          "question": "What is the applicant name?",
+          "expected": "John Doe",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "file": "images.pdf",
+      "type": "images",
+      "description": "PDF with images and captions",
+      "queries": [
+        {
+          "question": "What does Figure 1 show?",
+          "expected": "Building elevation",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "file": "rotated.pdf",
+      "type": "edge-case",
+      "description": "PDF with rotated pages",
+      "queries": [
+        {
+          "question": "What is the content?",
+          "expected": "Rotated text content",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "file": "1000-pages.pdf",
+      "type": "large",
+      "description": "Large PDF for batch processing test",
+      "queries": [
+        {
+          "question": "What is on page 500?",
+          "expected": "Page 500 content",
+          "page": 500
+        }
+      ]
+    }
+  ]
+}

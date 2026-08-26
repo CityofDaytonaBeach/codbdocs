@@ -106,7 +106,7 @@ export function executeAsk(contentGraph, question) {
   // Build answer based on type
   let answer = '';
   let confidence = 0.8;
-  const evidence = [];
+  let evidence = [];
 
   if (type === 'summary') {
     return {

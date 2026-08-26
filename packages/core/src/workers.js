@@ -247,3 +247,187 @@ export function terminateWorker(worker) {
     try { worker.terminate(); } catch (e) {}
   }
 }
+
+/**
+ * Create an Intelligence worker for concept graph and relationship extraction.
+ * Runs heavy analysis off the main thread.
+ */
+export function createIntelligenceWorker() {
+  if (!HAS_WORKERS) return null;
+
+  const workerCode = `
+    self.onmessage = function(e) {
+      const { id, type, data } = e.data;
+
+      if (type === 'build-concept-graph') {
+        try {
+          const { entities, relationships } = data;
+          const graph = buildConceptGraph(entities, relationships);
+          self.postMessage({ id, type: 'concept-graph-result', data: graph });
+        } catch (err) {
+          self.postMessage({ id, type: 'error', data: { error: String(err) } });
+        }
+      } else if (type === 'extract-relationships') {
+        try {
+          const { text, entities, tables } = data;
+          const relationships = extractRelationships(text, entities, tables);
+          self.postMessage({ id, type: 'relationships-result', data: relationships });
+        } catch (err) {
+          self.postMessage({ id, type: 'error', data: { error: String(err) } });
+        }
+      }
+    };
+
+    function buildConceptGraph(entities, relationships) {
+      const nodes = new Map();
+      const edges = [];
+
+      for (const entity of entities) {
+        const id = entity.type + ':' + entity.value;
+        if (!nodes.has(id)) {
+          nodes.set(id, { id, type: entity.type, value: entity.value, count: 0 });
+        }
+        nodes.get(id).count++;
+      }
+
+      for (const rel of relationships) {
+        edges.push({
+          source: rel.source,
+          target: rel.target,
+          type: rel.type,
+          weight: rel.weight || 1,
+        });
+      }
+
+      return {
+        nodes: Array.from(nodes.values()),
+        edges,
+      };
+    }
+
+    function extractRelationships(text, entities, tables) {
+      const relationships = [];
+
+      // Co-occurrence relationships
+      for (let i = 0; i < entities.length; i++) {
+        for (let j = i + 1; j < entities.length; j++) {
+          const a = entities[i];
+          const b = entities[j];
+          if (a.page === b.page) {
+            relationships.push({
+              source: a.type + ':' + a.value,
+              target: b.type + ':' + b.value,
+              type: 'co-occurrence',
+              weight: 1,
+            });
+          }
+        }
+      }
+
+      // Table row relationships
+      if (tables) {
+        for (const table of tables) {
+          for (const row of table.rows || []) {
+            for (let i = 0; i < row.length; i++) {
+              for (let j = i + 1; j < row.length; j++) {
+                relationships.push({
+                  source: String(row[i]),
+                  target: String(row[j]),
+                  type: 'same-row',
+                  weight: 2,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      return relationships;
+    }
+  `;
+
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    return worker;
+  } catch (err) {
+    URL.revokeObjectURL(url);
+    return null;
+  }
+}
+
+/**
+ * Create an Index worker for building search indices.
+ */
+export function createIndexWorker() {
+  if (!HAS_WORKERS) return null;
+
+  const workerCode = `
+    self.onmessage = function(e) {
+      const { id, type, data } = e.data;
+
+      if (type === 'build-index') {
+        try {
+          const { pages, options } = data;
+          const index = buildSearchIndex(pages, options);
+          self.postMessage({ id, type: 'index-result', data: index });
+        } catch (err) {
+          self.postMessage({ id, type: 'error', data: { error: String(err) } });
+        }
+      }
+    };
+
+    function buildSearchIndex(pages, options = {}) {
+      const index = {
+        terms: new Map(),
+        pages: [],
+        totalTokens: 0,
+      };
+
+      for (const page of pages) {
+        const tokens = tokenize(page.text || '');
+        index.pages.push({
+          id: page.id,
+          tokens,
+          length: tokens.length,
+        });
+
+        for (const token of tokens) {
+          if (!index.terms.has(token)) {
+            index.terms.set(token, []);
+          }
+          index.terms.get(token).push(page.id);
+          index.totalTokens++;
+        }
+      }
+
+      return {
+        terms: Array.from(index.terms.entries()),
+        pages: index.pages,
+        totalTokens: index.totalTokens,
+      };
+    }
+
+    function tokenize(text) {
+      return text.toLowerCase()
+        .replace(/[^a-z0-9\\s]/g, ' ')
+        .split(/\\s+/)
+        .filter(t => t.length > 1);
+    }
+  `;
+
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    return worker;
+  } catch (err) {
+    URL.revokeObjectURL(url);
+    return null;
+  }
+}

@@ -99,7 +99,17 @@ export async function extractImages(page, options = {}) {
               } : null,
               format,
               dataUrl: canvas.toDataURL(`image/${format}`, quality),
-              arrayBuffer: await canvas.convertToBlob({ type: `image/${format}`, quality }).then(b => b.arrayBuffer()),
+              arrayBuffer: await new Promise((resolve) => {
+                if (canvas.convertToBlob) {
+                  canvas.convertToBlob({ type: `image/${format}`, quality })
+                    .then(blob => resolve(blob.arrayBuffer()))
+                    .catch(() => resolve(null));
+                } else {
+                  canvas.toBlob((blob) => {
+                    resolve(blob ? blob.arrayBuffer() : null);
+                  }, `image/${format}`, quality);
+                }
+              }),
             };
             
             // Create thumbnail if requested
