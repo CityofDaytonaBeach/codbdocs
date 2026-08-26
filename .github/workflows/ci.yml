@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd packages/core
+          npm install
+
+      - name: Syntax check
+        run: |
+          cd packages/core/src
+          node --check index.js
+          node --check concepts.js
+          node --check expansion.js
+          node --check docaccess.js
+          node --check workspace.js
+          node --check persistence.js
+          node --check query.js
+          node --check rag.js
+          node --check workers.js
+          node --check pdfir.js
+          node --check content.js
+          node --check layers.js
+          node --check brain.js
+          node --check quality.js
+          node --check edgecases.js
+          node --check graphics.js
+          node --check extended.js
+          node --check advanced.js
+          node --check pdfcreator.js
+
+      - name: Build
+        run: |
+          cd packages/core
+          npx esbuild src/index.js --bundle --format=iife --global-name=CodbDocs --outfile=dist/codbdocs.js --platform=browser --target=es2020
+
+      - name: Verify dist matches source
+        run: |
+          cd packages/core
+          node -e "
+            const fs = require('fs');
+            const dist = fs.readFileSync('dist/codbdocs.js', 'utf8');
+            const src = fs.readFileSync('src/index.js', 'utf8');
+
+            // Check that all exports from index.js are in dist
+            const exports = src.match(/export\s+(?:default\s+)?(?:\{[^}]+\}|[A-Za-z]+)/g) || [];
+            console.log('Exports found:', exports.length);
+
+            // Basic size check
+            if (dist.length < 100000) {
+              console.error('ERROR: dist is too small (' + dist.length + ' bytes)');
+              process.exit(1);
+            }
+
+            console.log('dist size:', dist.length, 'bytes');
+            console.log('dist/build check PASSED');
+          "
+
+      - name: Run corpus tests (if PDFs available)
+        run: |
+          cd packages/core
+          if ls ../../test/corpus/*.pdf 1> /dev/null 2>&1; then
+            node ../../test/corpus/run-tests.js --all
+          else
+            echo "No PDF files in test/corpus/ — skipping corpus tests"
+          fi

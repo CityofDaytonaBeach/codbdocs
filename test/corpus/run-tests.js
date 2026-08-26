@@ -1,19 +1,19 @@
 /**
  * CODB Docs Test Corpus Runner
- * 
- * Validates retrieval accuracy against ground truth.
- * 
+ *
+ * Actually loads PDFs, analyzes them, executes queries, and compares results.
+ *
  * Usage:
- *   node test/corpus/run-tests.js <pdf-file>
- *   node test/corpus/run-tests.js --all
- * 
+ *   node --experimental-vm-modules test/corpus/run-tests.js <pdf-file>
+ *   node --experimental-vm-modules test/corpus/run-tests.js --all
+ *
  * Requirements:
- *   - PDF.js loaded globally
- *   - Tesseract.js loaded globally (for OCR tests)
- *   - CodbDocs loaded globally
+ *   - pdfjsLib loaded (via import or global)
+ *   - Tesseract loaded (for OCR tests)
+ *   - CodbDocs loaded
  */
 
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -24,28 +24,71 @@ async function loadGroundTruth() {
   return JSON.parse(readFileSync(gtPath, 'utf-8'));
 }
 
-async function testDocument(pdfPath, groundTruth) {
-  const docEntry = groundTruth.corpus.find(e => e.file === pdfPath.split('/').pop());
+async function testDocument(pdfPath, groundTruth, CodbDocs) {
+  const fileName = pdfPath.split('/').pop();
+  const docEntry = groundTruth.corpus.find(e => e.file === fileName);
   if (!docEntry) {
-    console.log(`No ground truth for ${pdfPath}`);
+    console.log(`  No ground truth for ${fileName}`);
     return null;
   }
 
-  console.log(`\nTesting: ${docEntry.description}`);
-  console.log(`Type: ${docEntry.type}`);
-  console.log(`Queries: ${docEntry.queries.length}`);
+  console.log(`\n  Testing: ${docEntry.description}`);
+  console.log(`  Type: ${docEntry.type}`);
+  console.log(`  Queries: ${docEntry.queries.length}`);
 
   const results = [];
-  
-  // This would run the actual tests with CodbDocs
-  // For now, just report what would be tested
+
   for (const query of docEntry.queries) {
-    results.push({
-      question: query.question,
-      expected: query.expected,
-      page: query.page,
-      status: 'pending',
-    });
+    try {
+      // Load and analyze the PDF
+      const fileBuffer = readFileSync(pdfPath);
+      const doc = await CodbDocs.load(fileBuffer);
+
+      // Analyze the document
+      await doc.analyze({
+        ocr: true,
+        extractVectors: true,
+        extractExtended: true,
+      });
+
+      // Get the graph
+      const graph = doc._graph || doc;
+
+      // Execute the query
+      const result = await graph.askEnhanced(query.question);
+
+      // Compare with expected
+      const passed = result.answer &&
+        (result.answer.toLowerCase().includes(query.expected.toLowerCase()) ||
+         query.expected.toLowerCase().includes(result.answer.toLowerCase()));
+
+      results.push({
+        question: query.question,
+        expected: query.expected,
+        page: query.page,
+        actual: result.answer,
+        confidence: result.confidence,
+        passed,
+        status: passed ? 'pass' : 'fail',
+      });
+
+      console.log(`    ${passed ? '✓' : '✗'} "${query.question}"`);
+      if (!passed) {
+        console.log(`      Expected: ${query.expected}`);
+        console.log(`      Got: ${result.answer}`);
+      }
+    } catch (err) {
+      results.push({
+        question: query.question,
+        expected: query.expected,
+        page: query.page,
+        actual: null,
+        error: err.message,
+        passed: false,
+        status: 'error',
+      });
+      console.log(`    ✗ "${query.question}" - Error: ${err.message}`);
+    }
   }
 
   return {
@@ -57,29 +100,54 @@ async function testDocument(pdfPath, groundTruth) {
 
 async function runTests() {
   const groundTruth = await loadGroundTruth();
-  
+
   console.log('CODB Docs Test Corpus');
   console.log('=====================\n');
   console.log(`Documents: ${groundTruth.corpus.length}`);
-  
+
   const summary = {
     total: 0,
     passed: 0,
     failed: 0,
-    pending: 0,
+    errors: 0,
   };
 
-  for (const doc of groundTruth.corpus) {
-    const result = await testDocument(doc.file, groundTruth);
+  // Check if PDF files exist
+  const corpusDir = join(__dirname, 'corpus');
+  const availablePDFs = readdirSync(corpusDir).filter(f => f.endsWith('.pdf'));
+
+  if (availablePDFs.length === 0) {
+    console.log('\n  No PDF files found in test/corpus/');
+    console.log('  Add PDF files to run actual tests.');
+    console.log('\n  See ground-truth.json for expected test cases.');
+    return;
+  }
+
+  for (const pdf of availablePDFs) {
+    const pdfPath = join(corpusDir, pdf);
+    if (!existsSync(pdfPath)) continue;
+
+    const result = await testDocument(pdfPath, groundTruth, globalThis.CodbDocs);
     if (result) {
-      summary.total += result.results.length;
-      summary.pending += result.results.length;
+      for (const r of result.results) {
+        summary.total++;
+        if (r.status === 'pass') summary.passed++;
+        else if (r.status === 'fail') summary.failed++;
+        else summary.errors++;
+      }
     }
   }
 
   console.log('\n=====================');
   console.log(`Total queries: ${summary.total}`);
-  console.log(`Pending: ${summary.pending}`);
+  console.log(`Passed: ${summary.passed}`);
+  console.log(`Failed: ${summary.failed}`);
+  console.log(`Errors: ${summary.errors}`);
+
+  if (summary.total > 0) {
+    const accuracy = (summary.passed / summary.total * 100).toFixed(1);
+    console.log(`Accuracy: ${accuracy}%`);
+  }
 }
 
 // Run if executed directly

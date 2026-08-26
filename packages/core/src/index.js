@@ -789,12 +789,12 @@ class CodbDoc {
     graph._fingerprint = fingerprint;
 
     // Add content-aware methods
-    graph.find = (query) => executeQuery(contentGraph, query);
+    graph.find = (query) => executeQuery(contentGraph, query, graph);
     graph.findOne = (query) => {
       const results = contentGraph.find(query);
       return results.length > 0 ? results[0] : null;
     };
-    graph.ask = (question) => executeAsk(contentGraph, question);
+    graph.ask = (question) => executeAsk(contentGraph, question, graph);
     graph.getEntities = (type) => contentGraph.getEntities(type);
     graph.getBlocks = (type) => contentGraph.getBlocks(type);
     graph.getDocumentType = () => contentGraph.documentType;
@@ -1501,12 +1501,12 @@ class CodbDoc {
     graph._doc = this;
     graph._ir = ir;
 
-    graph.find = (query) => executeQuery(contentGraph, query);
+    graph.find = (query) => executeQuery(contentGraph, query, graph);
     graph.findOne = (query) => {
       const results = contentGraph.find(query);
       return results.length > 0 ? results[0] : null;
     };
-    graph.ask = (question) => executeAsk(contentGraph, question);
+    graph.ask = (question) => executeAsk(contentGraph, question, graph);
     graph.getEntities = (type) => contentGraph.getEntities(type);
     graph.getBlocks = (type) => contentGraph.getBlocks(type);
     graph.getDocumentType = () => contentGraph.documentType;

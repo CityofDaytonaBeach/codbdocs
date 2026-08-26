@@ -1,7 +1,7 @@
 /**
  * @codbdocs/core — Document Access System
  *
- * WCAG 2.1 AA-compliant accessible HTML export from PDF-IR.
+ * WCAG 2.1 AA-oriented accessible HTML generation and automated auditing.
  * Provides complete screen reader support, keyboard navigation,
  * proper semantic HTML, and automated accessibility auditing.
  *
