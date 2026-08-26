@@ -43,7 +43,43 @@ function escapeHTML(str) {
  * @param {Object} ir - PDF-IR document
  * @returns {Object} { score, level, issues, summary, wcagCriteria }
  */
+/**
+ * Normalize a PDF-IR object so downstream accessibility helpers never crash on
+ * partially-populated IRs (e.g. those produced by createTextPDF, hand-built
+ * IRs, or IRs round-tripped through JSON).
+ *
+ * Fills in `document`, `document.metadata`, `document.pages`, `pages`,
+ * `objects` and per-page `content` when missing.
+ *
+ * @param {Object} ir - PDF-IR document
+ * @returns {Object} the same IR, normalized in place
+ */
+export function normalizeIR(ir) {
+  if (!ir || typeof ir !== 'object') {
+    throw new TypeError('codbdocs: an IR object is required (received ' + (ir === null ? 'null' : typeof ir) + ')');
+  }
+  if (!ir.pages || typeof ir.pages !== 'object') ir.pages = {};
+  if (!ir.objects || typeof ir.objects !== 'object') ir.objects = {};
+  if (!ir.document || typeof ir.document !== 'object') ir.document = {};
+  if (!ir.document.metadata || typeof ir.document.metadata !== 'object') ir.document.metadata = {};
+  if (!Array.isArray(ir.document.pages)) {
+    ir.document.pages = Object.keys(ir.pages).sort((a, b) => {
+      const na = ir.pages[a]?.num ?? 0;
+      const nb = ir.pages[b]?.num ?? 0;
+      return na - nb;
+    });
+  }
+  for (const pageId of ir.document.pages) {
+    const page = ir.pages[pageId];
+    if (!page) continue;
+    if (!Array.isArray(page.content)) page.content = [];
+    if (!Array.isArray(page.annotations)) page.annotations = [];
+  }
+  return ir;
+}
+
 export function wcagAudit(ir) {
+  ir = normalizeIR(ir);
   const issues = [];
   let score = 100;
   const criteria = {};
@@ -379,6 +415,7 @@ function computeContrastRatio(fg, bg) {
  * @returns {string} Complete HTML document
  */
 export function exportAccessibleHTML(ir, options = {}) {
+  ir = normalizeIR(ir);
   const {
     mode = 'accessible',
     includeSkipNav = true,
@@ -1208,6 +1245,7 @@ function generateKeyboardScript() {
  * @returns {Object} { ir, report }
  */
 export function remediateAccessibility(ir, options = {}) {
+  ir = normalizeIR(ir);
   const {
     fixAltText = true,
     fixHeadingHierarchy = true,
@@ -1328,6 +1366,7 @@ export function remediateAccessibility(ir, options = {}) {
  * @returns {Object} { html, text, audit, remediations }
  */
 export function generateAccessibilityReport(ir) {
+  ir = normalizeIR(ir);
   const audit = wcagAudit(ir);
   const { report: remediations } = remediateAccessibility(ir, { fixAltText: true, fixHeadingHierarchy: true, fixLanguage: true, fixTitle: true, fixFormLabels: true });
 

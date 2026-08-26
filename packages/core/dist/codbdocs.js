@@ -55,11 +55,13 @@ var CodbDocs = (() => {
     buildTableObjects: () => buildTableObjects,
     buildXObjectSummary: () => buildXObjectSummary,
     calculateRAGReadiness: () => calculateRAGReadiness,
+    canUseWorkers: () => canUseWorkers,
     charNGrams: () => charNGrams,
     classifyPage: () => classifyPage,
     clearCache: () => clearCache,
     cmykToRgb: () => cmykToRgb,
     compareVisualInternal: () => compareVisualInternal,
+    configure: () => configure,
     createChunks: () => createChunks,
     createGradientShading: () => createGradientShading,
     createHighlightAnnotations: () => createHighlightAnnotations,
@@ -122,11 +124,14 @@ var CodbDocs = (() => {
     getCacheStats: () => getCacheStats,
     highlightResults: () => highlightResults,
     hybridSearch: () => hybridSearch,
+    hydrateGraph: () => hydrateGraph,
     labToRgb: () => labToRgb,
     learnTerminology: () => learnTerminology2,
     levenshtein: () => levenshtein,
+    load: () => load,
     loadFromCache: () => loadFromCache,
     normalizeDocument: () => normalizeDocument,
+    normalizeIR: () => normalizeIR,
     normalizeText: () => normalizeText,
     operatorCount: () => operatorCount,
     operatorMax: () => operatorMax,
@@ -1800,7 +1805,67 @@ var CodbDocs = (() => {
     }
     return chunks;
   }
+  function hydrateGraph(json) {
+    if (!json || typeof json !== "object") {
+      throw new TypeError("codbdocs: a document graph (or graph.toJSON() output) is required");
+    }
+    if (typeof json.getSummary === "function") return json;
+    const pages = Array.isArray(json.pages) ? json.pages : [];
+    const pageOf = (n) => pages.find((p) => (p.num ?? p.pageNum) === n) || null;
+    const listOf = (n, key) => {
+      if (n == null) return pages.flatMap((p) => p[key] || []);
+      return pageOf(n)?.[key] || [];
+    };
+    const metaOf = (n, key) => {
+      if (n == null) return pages.flatMap((p) => p.metadata?.[key] || []);
+      return pageOf(n)?.metadata?.[key] || [];
+    };
+    const pageCount = json.pageCount ?? pages.length;
+    const summary = json.summary || {
+      pageCount,
+      wordCount: pages.reduce((acc, p) => acc + String(p.text || "").split(/\s+/).filter(Boolean).length, 0),
+      pageTypes: {},
+      metadata: {},
+      headings: pages.flatMap((p) => (p.headings || []).map((h) => h.text)),
+      tableCount: pages.reduce((acc, p) => acc + (p.tables?.length || 0), 0),
+      formCount: pages.reduce((acc, p) => acc + (p.forms?.length || 0), 0),
+      listCount: pages.reduce((acc, p) => acc + (p.lists?.length || 0), 0)
+    };
+    if (summary.pageCount == null) summary.pageCount = pageCount;
+    return {
+      ...json,
+      pageCount,
+      getSummary: () => summary,
+      getDocumentType: () => json.documentType || null,
+      classifications: json.classifications || pages.map((p) => p.classification || null),
+      text: {
+        pages: pages.map((p) => ({ pageNum: p.num ?? p.pageNum, text: p.text || "", source: p.source })),
+        getPageText: (n) => pageOf(n)?.text || ""
+      },
+      layout: {
+        getHeadings: (n) => listOf(n, "headings"),
+        getAllHeadings: () => listOf(null, "headings")
+      },
+      structure: {
+        getTables: (n) => listOf(n, "tables"),
+        getForms: (n) => listOf(n, "forms"),
+        getLists: (n) => listOf(n, "lists"),
+        tables: listOf(null, "tables"),
+        forms: listOf(null, "forms"),
+        lists: listOf(null, "lists")
+      },
+      metadata: {
+        getDates: (n) => metaOf(n, "dates"),
+        getPhones: (n) => metaOf(n, "phones"),
+        getEmails: (n) => metaOf(n, "emails"),
+        getAddresses: (n) => metaOf(n, "addresses"),
+        getAmounts: (n) => metaOf(n, "amounts"),
+        getSummary: () => summary.metadata || {}
+      }
+    };
+  }
   function createChunks(graph, options = {}) {
+    graph = hydrateGraph(graph);
     const {
       strategy = ChunkStrategies.SEMANTIC,
       chunkSize = 1e3,
@@ -1899,6 +1964,7 @@ var CodbDocs = (() => {
     return chunks;
   }
   function buildCrossPageContext(graph) {
+    graph = hydrateGraph(graph);
     const context = {
       documentType: graph.getDocumentType?.() || null,
       globalEntities: [],
@@ -2025,6 +2091,7 @@ var CodbDocs = (() => {
     return context;
   }
   function createRAGOutput(graph, options = {}) {
+    graph = hydrateGraph(graph);
     const {
       chunkStrategy = ChunkStrategies.SEMANTIC,
       chunkSize = 1e3,
@@ -4008,7 +4075,7 @@ var CodbDocs = (() => {
     const creator = new PDFCreator();
     return creator.create(ir, options);
   }
-  async function createTextPDF(pages2, options = {}) {
+  async function createTextPDF(pages, options = {}) {
     const ir = {
       document: { metadata: options.metadata || {} },
       pages: {},
@@ -4016,7 +4083,7 @@ var CodbDocs = (() => {
       structure: {},
       annotations: {}
     };
-    for (let i = 0; i < pages2.length; i++) {
+    for (let i = 0; i < pages.length; i++) {
       const pageId = `page_${i + 1}`;
       ir.pages[pageId] = {
         id: pageId,
@@ -4030,7 +4097,7 @@ var CodbDocs = (() => {
         images: [],
         annotations: []
       };
-      const text = typeof pages2[i] === "string" ? pages2[i] : pages2[i].text || "";
+      const text = typeof pages[i] === "string" ? pages[i] : pages[i].text || "";
       const lines = text.split("\n");
       for (let j = 0; j < lines.length; j++) {
         const objId = `text_${i}_${j}`;
@@ -4292,8 +4359,8 @@ var CodbDocs = (() => {
       const pageLabels = await docObj.get("PageLabels");
       const pagesRef = await docObj.get("Pages");
       if (pagesRef) {
-        const pages2 = await pagesRef.fetch();
-        await extractPageActions(pages2, actions, 0);
+        const pages = await pagesRef.fetch();
+        await extractPageActions(pages, actions, 0);
       }
     } catch (e) {
       console.error("[codbdocs] Actions extraction error:", e);
@@ -5731,13 +5798,13 @@ var CodbDocs = (() => {
         });
       }
     }
-    for (const [key, pages2] of Object.entries(tablePages)) {
-      if (pages2.length < 2) continue;
-      pages2.sort((a, b) => a.pageNum - b.pageNum);
-      let currentSequence = [pages2[0]];
-      for (let i = 1; i < pages2.length; i++) {
-        if (pages2[i].pageNum === currentSequence[currentSequence.length - 1].pageNum + 1) {
-          currentSequence.push(pages2[i]);
+    for (const [key, pages] of Object.entries(tablePages)) {
+      if (pages.length < 2) continue;
+      pages.sort((a, b) => a.pageNum - b.pageNum);
+      let currentSequence = [pages[0]];
+      for (let i = 1; i < pages.length; i++) {
+        if (pages[i].pageNum === currentSequence[currentSequence.length - 1].pageNum + 1) {
+          currentSequence.push(pages[i]);
         } else {
           if (currentSequence.length >= 2) {
             crossPageTables.push({
@@ -5748,7 +5815,7 @@ var CodbDocs = (() => {
               type: "cross_page_table"
             });
           }
-          currentSequence = [pages2[i]];
+          currentSequence = [pages[i]];
         }
       }
       if (currentSequence.length >= 2) {
@@ -6218,11 +6285,11 @@ var CodbDocs = (() => {
     }
     return definitions;
   }
-  function learnTerminology2(pages2) {
+  function learnTerminology2(pages) {
     const aliases = /* @__PURE__ */ new Map();
     const acronymMap = /* @__PURE__ */ new Map();
     const definitionMap = /* @__PURE__ */ new Map();
-    for (const page of pages2) {
+    for (const page of pages) {
       const text = page.text || "";
       const acronyms = detectAcronyms(text);
       for (const acr of acronyms) {
@@ -6235,7 +6302,7 @@ var CodbDocs = (() => {
       }
     }
     const phraseFreq = /* @__PURE__ */ new Map();
-    for (const page of pages2) {
+    for (const page of pages) {
       const text = (page.text || "").toLowerCase();
       const words = text.split(/\s+/).filter((w) => w.length > 2);
       for (let len = 2; len <= 4; len++) {
@@ -6279,11 +6346,11 @@ var CodbDocs = (() => {
     }
     aliases.get(alias).add(canonical);
   }
-  function fuzzySearch(query, pages2, options = {}) {
+  function fuzzySearch(query, pages, options = {}) {
     const { threshold = 0.6, maxResults = 10 } = options;
     const results = [];
     const queryLower = query.toLowerCase().trim();
-    for (const page of pages2) {
+    for (const page of pages) {
       const text = page.text || "";
       const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 5);
       for (const sentence of sentences) {
@@ -6698,11 +6765,11 @@ var CodbDocs = (() => {
         }
       }
     }
-    const __pages = (contentGraph && contentGraph.pages || []).map((p) => ({
+    const definitionPages = (contentGraph?.pages || []).map((p) => ({
       pageNum: p.page,
       text: (p.blocks || []).map((b) => b.text || "").join("\n")
     }));
-    for (const page of __pages) {
+    for (const page of definitionPages) {
       const text = page.text || "";
       const acronyms = detectAcronyms(text);
       for (const acr of acronyms) {
@@ -6968,18 +7035,18 @@ var CodbDocs = (() => {
     const contentGraph = graph._contentGraph;
     const fingerprint = graph._fingerprint;
     const conceptGr = graph._conceptGraph;
-    const pages2 = graph.text?.pages || [];
-    const avgDocLength = pages2.reduce((s, p) => s + (p.text?.length || 0), 0) / (pages2.length || 1);
+    const pages = graph.text?.pages || [];
+    const avgDocLength = pages.reduce((s, p) => s + (p.text?.length || 0), 0) / (pages.length || 1);
     const expandedTerms = useExpansion ? expandQuery(query, { includeSynonyms: true, includeStems: true }) : [{ term: query.toLowerCase(), weight: 1, sources: ["original"] }];
     const queryLower = query.toLowerCase();
     const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 1);
     const docVocab = /* @__PURE__ */ new Set();
-    for (const page of pages2) {
+    for (const page of pages) {
       for (const word of (page.text || "").toLowerCase().split(/\s+/)) {
         if (word.length > 2) docVocab.add(word);
       }
     }
-    for (const page of pages2) {
+    for (const page of pages) {
       const pageNum = page.pageNum;
       const pageText = page.text || "";
       const pageTextLower = pageText.toLowerCase();
@@ -7936,7 +8003,31 @@ var CodbDocs = (() => {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  function normalizeIR(ir) {
+    if (!ir || typeof ir !== "object") {
+      throw new TypeError("codbdocs: an IR object is required (received " + (ir === null ? "null" : typeof ir) + ")");
+    }
+    if (!ir.pages || typeof ir.pages !== "object") ir.pages = {};
+    if (!ir.objects || typeof ir.objects !== "object") ir.objects = {};
+    if (!ir.document || typeof ir.document !== "object") ir.document = {};
+    if (!ir.document.metadata || typeof ir.document.metadata !== "object") ir.document.metadata = {};
+    if (!Array.isArray(ir.document.pages)) {
+      ir.document.pages = Object.keys(ir.pages).sort((a, b) => {
+        const na = ir.pages[a]?.num ?? 0;
+        const nb = ir.pages[b]?.num ?? 0;
+        return na - nb;
+      });
+    }
+    for (const pageId of ir.document.pages) {
+      const page = ir.pages[pageId];
+      if (!page) continue;
+      if (!Array.isArray(page.content)) page.content = [];
+      if (!Array.isArray(page.annotations)) page.annotations = [];
+    }
+    return ir;
+  }
   function wcagAudit(ir) {
+    ir = normalizeIR(ir);
     const issues = [];
     let score = 100;
     const criteria = {};
@@ -8194,6 +8285,7 @@ var CodbDocs = (() => {
     return (lighter + 0.05) / (darker + 0.05);
   }
   function exportAccessibleHTML(ir, options = {}) {
+    ir = normalizeIR(ir);
     const {
       mode = "accessible",
       includeSkipNav = true,
@@ -8910,6 +9002,7 @@ ${customStyles}
 `;
   }
   function remediateAccessibility(ir, options = {}) {
+    ir = normalizeIR(ir);
     const {
       fixAltText = true,
       fixHeadingHierarchy = true,
@@ -9005,6 +9098,7 @@ ${customStyles}
     return { ir, report };
   }
   function generateAccessibilityReport(ir) {
+    ir = normalizeIR(ir);
     const audit = wcagAudit(ir);
     const { report: remediations } = remediateAccessibility(ir, { fixAltText: true, fixHeadingHierarchy: true, fixLanguage: true, fixTitle: true, fixFormLabels: true });
     let text = "=== CodbDocs Accessibility Report ===\n\n";
@@ -9238,8 +9332,8 @@ ${customStyles}
     workspace._learnTerminology = function() {
       const allPages = [];
       for (const [, entry] of this.documents) {
-        const pages2 = entry.graph?.text?.pages || [];
-        allPages.push(...pages2);
+        const pages = entry.graph?.text?.pages || [];
+        allPages.push(...pages);
       }
       this.terminology = learnTerminology(allPages);
     };
@@ -10176,8 +10270,8 @@ ${customStyles}
       };
       graph.expandQuery = (query, options) => expandQuery(query, options);
       graph.fuzzySearch = (query, options) => {
-        const pages2 = graph.text?.pages || [];
-        return fuzzySearch(query, pages2, options);
+        const pages = graph.text?.pages || [];
+        return fuzzySearch(query, pages, options);
       };
       graph.getTerminology = () => graph._terminology || { aliases: {}, acronyms: {}, definitions: {} };
       graph.getAcronyms = () => {
@@ -10251,7 +10345,7 @@ ${customStyles}
      */
     async extractText(opts = {}) {
       const { ocr = true, onProgress } = opts;
-      const pages2 = [];
+      const pages = [];
       for (let num = 1; num <= this.pageCount; num++) {
         onProgress && onProgress({ page: num, total: this.pageCount, status: "reading" });
         const page = await this._pdf.getPage(num);
@@ -10276,12 +10370,12 @@ ${customStyles}
           source = "skipped";
           text = "";
         }
-        pages2.push({ num, text, source });
+        pages.push({ num, text, source });
       }
       return {
         pageCount: this.pageCount,
-        pages: pages2,
-        fullText: pages2.map((p) => `--- page ${p.num} (${p.source}) ---
+        pages,
+        fullText: pages.map((p) => `--- page ${p.num} (${p.source}) ---
 ${p.text}`).join("\n\n")
       };
     }
@@ -10630,10 +10724,5 @@ ${p.text}`).join("\n\n")
   }
   var CodbDocs = { load, configure, canUseWorkers };
   var index_default = CodbDocs;
-  var __ns = __toCommonJS(index_exports);
-  __ns.load = load;
-  __ns.configure = configure;
-  __ns.canUseWorkers = canUseWorkers;
-  return __ns;
+  return __toCommonJS(index_exports);
 })();
-

@@ -1777,6 +1777,7 @@ export {
   OpenAIEmbeddingProvider,
   LocalEmbeddingProvider,
   CustomEmbeddingProvider,
+  hydrateGraph,
 } from './rag.js';
 
 export {
@@ -1879,6 +1880,7 @@ export {
   exportAccessibleHTML,
   remediateAccessibility,
   generateAccessibilityReport,
+  normalizeIR,
 } from './docaccess.js';
 
 export {
