@@ -1,2062 +1,1279 @@
-Yes — content-aware is probably the more valuable direction if you're building a browser PDF vision library.
-
-Instead of making it just:
-
-“PDF → pixels → OCR”
-
-make it:
-
-“PDF → understand what each piece of content is → expose meaningful structure.”
-
-What “content-aware” could mean
-
-For example, given a PDF page:
-
-┌──────────────────────────────┐
-│ ACME CORPORATION             │ ← heading
-│ Invoice #10492               │ ← metadata
-│                              │
-│ Bill To: John Smith          │ ← entity
-│                              │
-│ ┌────────┬───────┬─────────┐ │
-│ │ Item   │ Qty   │ Price   │ │ ← table
-│ ├────────┼───────┼─────────┤ │
-│ │ Laptop │ 2     │ $2,000  │ │
-│ └────────┴───────┴─────────┘ │
-│                              │
-│ Total: $4,000                │ ← monetary value
-│                              │
-│ [signature]                  │ ← signature
-└──────────────────────────────┘
-
-Your library could understand:
-
-{
-  type: "invoice",
-  elements: [
-    { type: "heading", text: "ACME CORPORATION" },
-    { type: "metadata", key: "invoice_number", value: "10492" },
-    { type: "person", text: "John Smith" },
-    { type: "table", rows: [...] },
-    { type: "currency", value: 4000 },
-    { type: "signature", bbox: [...] }
-  ]
-}
-
-That's much more useful than returning raw OCR text.
-
-I'd design it as 3 layers
-
-1. PDF-aware
-
-Understand native PDF objects when they're available:
-
-text
-fonts
-vectors
-images
-links
-annotations
-coordinates
-
-This is cheap and extremely accurate.
-
-2. Vision-aware
-
-For scanned/image PDFs:
-
-OCR
-document layout
-tables
-handwriting
-figures
-signatures
-charts
-
-3. Content-aware
-
-Turn those primitives into semantic objects:
-
-heading
-paragraph
-table
-invoice
-receipt
-form
-address
-person
-date
-currency
-checkbox
-signature
-chart
-citation
-etc.
-
-That third layer is where your library could become really interesting.
-
-An important design decision
-
-I wouldn't hard-code the library around “AI-generated answers.”
-
-Instead, make the core output a content graph:
-
-document.pages[0].blocks
-document.pages[0].tables
-document.pages[0].entities
-document.pages[0].regions
-document.pages[0].relationships
-
-Then users can build things on top:
-
-const invoices = document.find({
-  type: "invoice"
-});
-
-const totals = document.find({
-  type: "currency",
-  near: "invoice_total"
-});
-
-Or even:
-
-document.ask("What is the total amount?");
-
-The second API can be an optional AI layer.
-
-The killer feature could be spatial + semantic search
-
-For example:
-
-document.find("invoice number")
-document.find("total")
-document.find("signature")
-document.find("table")
-document.find("dates")
-
-and return:
-
-{
-  text: "$4,000",
-  page: 1,
-  bbox: [421, 682, 493, 701],
-  confidence: 0.97
-}
-
-Now a browser application can highlight the exact region in the PDF.
-
-That's considerably more powerful than an OCR package.
-
-So yes: I'd make it content-aware, but keep the underlying representation generic. PDF parsing → vision → semantic content should be separate layers. That lets you start lightweight and progressively add AI without forcing every user to download a huge model. 
-
-Vectors Absolutely. Vectors are one of the most important pieces if you're making a content-aware PDF vision library.
-
-In fact, I'd make vector understanding a first-class feature, not treat vectors as images.
-
-Why vectors matter
-
-PDFs often contain meaning that OCR/vision would completely miss:
-
-lines and borders → table structure
-rectangles → form fields/cards
-paths → diagrams
-arrows → relationships
-circles → checkboxes/radio buttons
-curves → logos/charts
-text converted to outlines → text that OCR may struggle with
-coordinate geometry → layout
-
-So instead of:
-
-PDF → render → pixels → vision
-
-you want:
-
-                    PDF
-                     │
-        ┌────────────┼────────────┐
-        ▼            ▼            ▼
-      Text        Vectors       Images
-        │            │            │
-        └────────────┼────────────┘
-                     ▼
-              Content model
-Vector → semantic content
-
-Imagine the PDF contains:
-
-{
-  type: "path",
-  points: [...],
-  stroke: "#000",
-  width: 1
-}
-
-Your library could recognize that several paths form:
-
-{
-  type: "table",
-  bbox: [50, 200, 550, 500],
-  rows: 8,
-  columns: 4
-}
-
-Or:
-
-{
-  type: "arrow",
-  from: { x: 120, y: 200 },
-  to: { x: 300, y: 200 }
-}
-
-Or:
-
-{
-  type: "checkbox",
-  checked: true,
-  bbox: [...]
-}
-This creates a really interesting concept
-
-You could build a PDF scene graph.
-
-Something like:
-
-document.pages[0].scene
-
-containing:
-
-[
-  {
-    type: "text",
-    content: "Invoice",
-    bbox: [...]
-  },
-  {
-    type: "rect",
-    bbox: [...]
-  },
-  {
-    type: "line",
-    from: [...],
-    to: [...]
-  },
-  {
-    type: "image",
-    bbox: [...]
-  },
-  {
-    type: "table",
-    children: [...]
-  }
-]
-
-Then your semantic layer operates on the scene graph.
-
-That's powerful because you can combine evidence:
-
-TEXT + VECTOR GEOMETRY + IMAGE + POSITION
-                  ↓
-           semantic inference
-
-For example, you don't need an AI model to recognize a table if the PDF already contains perfectly aligned horizontal/vertical lines and text cells.
-
-You could also preserve the original vectors
-
-This is important.
-
-Don't just convert vectors into semantic objects and throw the originals away.
-
-Keep:
-
-{
-  type: "table",
-
-  source: {
-    vectors: [...],
-    text: [...]
-  },
-
-  geometry: {...},
-
-  semantics: {...}
-}
-
-Then users can go both ways:
-
-element.semanticType
-element.sourceVectors
-element.bbox
-element.render()
-This could differentiate your library
-
-There are plenty of PDF/OCR tools.
-
-A library that combines:
-
-PDF primitives + vectors + text + images + spatial relationships + optional ML
-
-into a unified, queryable content graph is much more interesting.
-
-I'd potentially call the core abstraction something like:
-
-PDF Semantic Scene Graph
-
-Then your vision layer becomes only one way of constructing that graph.
-
-And there's a big advantage to doing this in the browser: for native PDFs, you can often extract a lot of semantic information from the original PDF without sending the document anywhere or running expensive vision models.
-
-blob extract 
-
-Yes — but I’d separate Base64 as a transport format from image knowledge/understanding.
-
-If by “Base64 knowledge” you mean having the library understand images embedded in a PDF, that fits very well into the architecture.
-
-Don't make Base64 the core representation
-
-Instead of:
-
-{
-  image: "data:image/png;base64,iVBOR..."
-}
-
-use something like:
-
-{
-  type: "image",
-  id: "img_42",
-  bbox: [100, 200, 500, 600],
-
-  source: {
-    format: "jpeg",
-    width: 1200,
-    height: 800,
-    bytes: 245000
-  }
-}
-
-Then expose the actual data only when requested:
-
-const image = await document.image("img_42");
-
-const base64 = await image.toBase64();
-const blob = await image.toBlob();
-const bitmap = await image.toBitmap();
-
-That gives you much better memory behavior.
-
-But the interesting part is image knowledge
-
-Your image object could have progressively richer information:
-
-{
-  type: "image",
-
-  geometry: {
-    bbox: [...]
-  },
-
-  source: {
-    format: "jpeg",
-    width: 1200,
-    height: 800
-  },
-
-  vision: {
-    objects: [
-      { type: "logo", bbox: [...] },
-      { type: "person", bbox: [...] }
-    ],
-
-    text: [
-      {
-        text: "ACME",
-        bbox: [...]
-      }
-    ],
-
-    description: "...",
-    embeddings: [...]
-  }
-}
-
-So you get:
+Not yet. Based on the current codbdocs code, I would call it RAG-preparation ready, not fully RAG ready.
+
+You already have a surprisingly strong document-understanding layer. CodbDocs.load() handles the PDF, analyze() builds a document graph, and the graph exposes text, structure, metadata, entities, document classification, reading order, vectors from the PDF itself, accessibility information, find(), findOne(), and ask().
+
+The distinction is that the vectors currently being extracted are PDF graphical/vector objects, not embedding vectors for semantic retrieval. I also searched the repository for embedding/chunk/vector-similarity/RAG functionality and didn't find an embedding pipeline.
+
+What you have vs. full RAG
+Capability	CODB Docs now
+PDF.js parsing	✅
+Native text extraction	✅
+OCR fallback	✅
+Page/layout coordinates	✅
+Headings / structures	✅
+Tables/forms/lists	✅
+Metadata/entities	✅
+Reading order	✅
+Document classification	✅
+Document graph	✅
+Text search	✅
+find() / ask()	✅ Local document logic
+RAG-aware chunking	⚠️ Not complete
+Embedding model	❌
+Embedding vectors	❌
+Cosine/vector similarity	❌
+Vector index/store	❌
+Hybrid BM25 + vector retrieval	❌
+Reranking	❌
+LLM generation with retrieved context	❌
+Source/page citations in RAG answers	⚠️ Foundation exists
+
+Your extraction foundation is particularly useful because each analyzed page retains text, spatial information, structures, metadata and classification.
+
+What I would add
+
+Don't turn CODB Docs into another generic "split text every 500 characters" RAG library. You already have enough structural information to do substantially better.
+
+The pipeline should become:
 
 PDF
- │
- ├── Text
- ├── Vectors
- ├── Images
- │    ├── pixels
- │    ├── OCR
- │    ├── objects
- │    ├── embeddings
- │    └── semantic meaning
- │
- └── relationships
-Base64 can be useful for AI models
+ ↓
+PDF.js
+ ↓
+CODB Docs Document IR
+ ↓
+OCR when necessary
+ ↓
+Layout + reading order
+ ↓
+Structure detection
+ ↓
+Semantic chunker
+ ↓
+Embedding model
+ ↓
+Vector index
+ ↓
+Hybrid search
+ ├─ lexical
+ ├─ semantic/vector
+ ├─ metadata
+ └─ spatial/structural
+ ↓
+Reranker
+ ↓
+Top chunks
+ ↓
+LLM
+ ↓
+Answer
+ + document
+ + page
+ + bounding box
+ + source text
+ + confidence
+Most important addition: graph.chunk()
 
-This becomes particularly useful if you want your library to support multimodal APIs:
+Because CODB Docs understands structure, I'd add something along these lines:
 
-const image = await page.images[0];
+const graph = await doc.analyze();
 
-await vision.analyze(image);
+const chunks = graph.chunk({
+    targetTokens: 500,
+    overlapTokens: 75,
 
-Internally, the adapter could convert it to whatever the model needs:
+    preserve: [
+        "headings",
+        "tables",
+        "lists",
+        "forms",
+        "paragraphs"
+    ]
+});
 
-PDF image
-   ↓
-Blob / ImageBitmap
-   ↓
-model adapter
-   ↓
-Base64 / URL / binary / tensor
-
-The user shouldn't need to know whether the underlying model uses Base64.
-
-I'd go one step further
-
-Have a unified Asset abstraction:
-
-const asset = document.assets[0];
-
-asset.kind       // "image"
-asset.width
-asset.height
-asset.bbox
-
-await asset.blob()
-await asset.bitmap()
-await asset.base64()
-await asset.tensor()
-await asset.embed()
-await asset.analyze()
-
-That lets the same architecture eventually support:
-
-raster images
-vector graphics
-charts
-diagrams
-scanned pages
-extracted figures
-
-So yes, image/Base64 support belongs in the library—but Base64 should be an output/transport adapter, not your internal “knowledge” representation. The internal representation should ideally be structured around content + geometry + relationships + optional visual/semantic features.
-
-Yes. Accessibility could be one of the strongest differentiators for this library.
-
-And PDFs contain quite a bit more than text, vectors, and images. If you're aiming for a genuinely content-aware PDF engine, I'd think of the PDF as a document with multiple layers of information.
-
-What is commonly missed
-Layer	Examples	What your library could expose
-Text	characters, fonts, spans	text + semantic roles + coordinates
-Vectors	paths, lines, rectangles, curves	geometry + inferred meaning
-Images	photos, scans, logos	pixels + OCR + visual semantics
-Annotations	links, highlights, comments	interactive elements
-Forms	text fields, checkboxes, dropdowns	form schema + values
-Structure	headings, paragraphs, lists	semantic document tree
-Tables	cells, borders, columns	structured rows/columns
-Metadata	title, author, dates	document metadata
-Bookmarks	outline/navigation	navigation tree
-Layers	optional content groups	visibility/state
-Attachments	embedded files	asset relationships
-Signatures	digital signatures	signature metadata/validation
-Colors	RGB/CMYK/ICC	color information
-Fonts	embedded/subset fonts	font + encoding information
-Reading order	visual vs logical order	reconstructed reading sequence
-Accessibility	tags, alt text, language	accessibility tree + audit
-Security	permissions/encryption	security metadata
-
-And there's another particularly interesting one:
-
-Relationships
-
-Instead of treating everything as independent objects:
-
-Text
-Image
-Vector
-Text
-Table
-
-you can model relationships:
-
-Heading
-  ↓
-Paragraph
-  ↓
-Figure ──→ Caption
-  ↓
-Table
-  ↓
-Footnote
-
-That is where your content-aware idea becomes substantially more powerful.
-
-Accessibility is a great feature
-
-I'd actually make accessibility a dedicated subsystem:
-
-const report = await document.accessibility.audit();
-
-Output:
+A chunk should look more like:
 
 {
-  score: 82,
+  "id": "chunk_001",
+  "documentId": "agenda.pdf",
+  "page": 7,
+  "pages": [7],
+  "heading": "Budget Impact",
+  "type": "paragraph",
+  "text": "The total project cost is...",
+  "bbox": [72, 144, 490, 260],
+  "tokenCount": 184
+}
 
-  issues: [
-    {
-      type: "missing_alt_text",
-      page: 3,
-      element: "image_17",
-      severity: "warning"
+rather than:
+
+characters 0-2000
+characters 1800-3800
+
+That difference becomes enormous on agendas, contracts, financial documents and forms.
+
+Then embeddings
+
+I'd make embeddings pluggable:
+
+const index = await graph.createRAGIndex({
+    embedding: {
+        provider: "ollama",
+        model: "nomic-embed-text",
+        endpoint: "http://localhost:11434"
     },
-    {
-      type: "missing_heading_structure",
-      page: 5,
-      severity: "error"
-    },
-    {
-      type: "reading_order",
-      page: 7,
-      severity: "warning"
+
+    chunking: {
+        targetTokens: 500,
+        overlapTokens: 75,
+        structural: true
     }
-  ]
-}
+});
 
-But don't stop at auditing.
+Or browser-local:
 
-Accessibility generation
-
-This is where it gets really interesting.
-
-Your engine could infer:
-
-PDF
- ↓
-Content graph
- ↓
-Accessibility analysis
- ↓
-Suggested structure
-
-For example:
-
-{
-  type: "image",
-  bbox: [...],
-  accessibility: {
-    alt: "Company logo",
-    decorative: false
-  }
-}
-
-Or:
-
-{
-  type: "heading",
-  level: 2,
-  text: "Financial Results"
-}
-
-Or:
-
-{
-  type: "table",
-  accessibility: {
-    caption: "Quarterly revenue",
-    headers: [...]
-  }
-}
-You could provide an accessibility tree
-
-Something conceptually similar to the browser's accessibility tree:
-
-document.accessibility.tree()
-Document
- ├── Heading: Annual Report 2026
- ├── Paragraph
- ├── Heading: Financial Results
- │    ├── Table
- │    │    ├── Header
- │    │    ├── Row
- │    │    └── Row
- │    └── Figure
- │         └── Caption
- └── Heading: Conclusion
-
-Then developers could query it:
-
-document.accessibility.find("heading");
-document.accessibility.find("table");
-document.accessibility.find("unlabeled-image");
-Even better: accessibility remediation
-
-Don't just say:
-
-❌ Image has no alt text.
-
-Offer:
-
-Suggested: “Bar chart showing revenue increasing from $2.1M in Q1 to $3.4M in Q4.”
+const index = await graph.createRAGIndex({
+    embedding: {
+        provider: "transformers",
+        model: "Xenova/all-MiniLM-L6-v2"
+    }
+});
 
 Then:
 
-await document.accessibility.fix({
-  issue: "missing_alt_text",
-  strategy: "vision"
-});
+const results = await index.search(
+    "What is the total project cost?",
+    {
+        topK: 8,
+        hybrid: true
+    }
+);
 
-Potentially producing a new accessible PDF.
+And ultimately:
 
-Your overall architecture starts looking very compelling
+const answer = await index.ask(
+    "What is the total project cost?"
+);
 
-I'd structure it roughly like:
-
-                    PDF
-                     │
-        ┌────────────┼────────────┐
-        │            │            │
-      Text        Vectors       Images
-        │            │            │
-        └────────────┼────────────┘
-                     │
-              PDF Content Graph
-                     │
-        ┌────────────┼─────────────┐
-        │            │             │
-     Semantic    Accessibility   Vision
-        │            │             │
-        └────────────┼─────────────┘
-                     │
-              Developer API
-
-And the killer APIs could be:
-
-document.content()
-document.scene()
-document.accessibility.audit()
-document.accessibility.tree()
-document.accessibility.remediate()
-document.find(...)
-document.images()
-document.vectors()
-document.tables()
-document.forms()
-document.annotations()
-One important distinction
-
-I'd call the feature accessibility, not “assessability.” If you mean evaluating how accessible a PDF is, “Accessibility Audit” or “Accessibility Checker” is the clearer product terminology.
-
-And I'd make the accessibility engine standards-aware rather than purely AI-based. AI can infer missing semantics, but the library should also inspect actual PDF structure/tags, reading order, alt text, language, form labels, table structure, contrast/color issues, etc.
-
-That combination—native PDF structure + geometry + vision + semantic understanding + accessibility auditing/remediation—could be much more interesting than another PDF.js wrapper.
-
-Yes. I looked specifically at the PDF features that tend to disappear when people reduce a PDF to text + images + vectors, and there is a much bigger opportunity here.
-
-If your goal is:
-
-PDF → one portable JSON representation → JSON → recreate the PDF as closely as possible
-
-then I would not design this as a “PDF vision library.” I'd design it as a PDF document model / intermediate representation (IR) with vision and accessibility layered on top.
-
-PDF has logical structure, marked-content sequences, artifacts, reading order, annotations/forms, embedded/associated files, structure IDs, rich actions, 3D, output intents, signatures, etc.
-
-The things I'd add that are easy to miss
-1. The actual PDF graphics state
-
-This is a huge one.
-
-Don't just store:
+Returning:
 
 {
-  "type": "line",
-  "x1": 10,
-  "y1": 20
+  "answer": "The total project cost is $2.4 million.",
+  "confidence": 0.94,
+  "sources": [
+    {
+      "document": "agenda.pdf",
+      "page": 7,
+      "chunkId": "chunk_001",
+      "text": "The total project cost is $2.4 million...",
+      "bbox": [72, 144, 490, 260],
+      "score": 0.91
+    }
+  ]
 }
+The interesting opportunity
 
-You need the graphics state at the time the object was painted:
+You already have graph.getHighlights(query) and graph.highlight(...).
+
+That means your eventual RAG system could do something most basic RAG implementations don't:
+
+User asks question
+       ↓
+RAG finds answer
+       ↓
+"Source: Page 17"
+       ↓
+User clicks source
+       ↓
+PDF viewer jumps to page 17
+       ↓
+CODB Docs highlights the exact
+region used to answer the question
+
+That's much more useful than an AI confidently announcing "according to your document..." and then leaving the human to hunt through 283 pages like an archaeological expedition.
+
+So: the document intelligence foundation is there. The actual embedding/retrieval/generation layer still needs to be added. I would build that as a separate packages/rag layer on top of core, rather than polluting the PDF engine with model-specific code.
+
+would this mimic a model embedding but my own in browser breakthrough tech
+
+Potentially, yes, but there are two different things here that are easy to accidentally merge into one futuristic soup.
+
+Your current CODB Docs is already doing something interesting: it builds a structured representation of the PDF containing text, spatial layout, detected structures, metadata, classification, reading order, annotations, and PDF objects.
+
+You could build your own browser-native retrieval representation on top of that without depending entirely on a traditional embedding model.
+
+The conventional approach
+
+Normal RAG does roughly:
+
+"What is the project cost?"
+        ↓
+Embedding Model
+        ↓
+[0.018, -0.221, 0.492, ...]
+        ↓
+Vector similarity
+        ↓
+Relevant chunks
+
+The embedding model has learned that:
+
+project cost
+contract amount
+total expenditure
+financial impact
+$2,400,000
+
+can be semantically related even when the words differ.
+
+What CODB Docs could do differently
+
+You have considerably more information than plain text.
+
+Instead of representing a chunk only as:
+
+embedding(text)
+
+you could construct a Document Semantic Fingerprint:
+
+Chunk
+ │
+ ├── lexical features
+ │    ├── terms
+ │    ├── phrases
+ │    └── frequencies
+ │
+ ├── entities
+ │    ├── money
+ │    ├── dates
+ │    ├── people
+ │    └── addresses
+ │
+ ├── structure
+ │    ├── heading
+ │    ├── paragraph
+ │    ├── table
+ │    └── form
+ │
+ ├── spatial relationships
+ │    ├── underneath heading
+ │    ├── table column
+ │    ├── adjacent label
+ │    └── reading order
+ │
+ ├── document context
+ │    ├── page type
+ │    ├── section
+ │    └── document type
+ │
+ └── semantic features
+
+Then a query:
+
+"What did the city approve for the project?"
+
+could be decomposed locally:
 
 {
-  "type": "path",
-  "transform": [1, 0, 0, 1, 50, 100],
-  "stroke": {
-    "color": "#000000",
-    "width": 0.5,
-    "cap": "round",
-    "join": "miter",
-    "dash": [3, 2]
-  },
-  "fill": null,
-  "clip": "...",
-  "opacity": 0.8,
-  "blendMode": "Normal"
+    intent: "approval",
+    subject: "project",
+    expectedEntities: [
+        "money",
+        "resolution",
+        "contract"
+    ],
+    preferredStructures: [
+        "heading",
+        "table",
+        "paragraph"
+    ]
 }
 
-Otherwise you won't be able to faithfully reconstruct the document.
+Retrieval could calculate:
 
-2. Transforms
+score =
+    lexicalSimilarity      * .20 +
+    entitySimilarity       * .20 +
+    structuralSimilarity   * .15 +
+    spatialSimilarity      * .10 +
+    documentContext        * .15 +
+    semanticSimilarity     * .20
 
-This deserves its own first-class representation.
+Now you've created something that serves part of the purpose of embeddings without requiring every operation to pass through an embedding model.
 
-PDF objects aren't necessarily positioned with simple x/y coordinates.
+Could it be entirely browser-native?
 
-You have:
+Absolutely.
 
-translation
-rotation
-scaling
-skew
-nested transforms
-page transforms
-image transforms
-form XObject transforms
+Browser
+   │
+   ├── PDF.js
+   │
+   ▼
+CODB Docs
+   │
+   ├── text
+   ├── layout
+   ├── structure
+   ├── entities
+   ├── relationships
+   └── reading order
+        │
+        ▼
+Document Fingerprints
+        │
+        ▼
+Local Index
+IndexedDB / memory
+        │
+        ▼
+Query Fingerprint
+        │
+        ▼
+Similarity Engine
+        │
+        ▼
+Ranked Evidence
 
-So:
+No Supabase required.
 
-{
-  "transform": [a, b, c, d, e, f]
-}
+No Pinecone.
 
-should probably be everywhere.
+No Qdrant.
 
-3. Clipping paths
+No Ollama required for retrieval.
 
-Very easy to overlook.
+No API call required.
 
-A PDF can draw a huge object and then clip it to a specific shape.
+Potentially no neural embedding model at all.
+
+That would be genuinely useful technology.
+
+But here's the important limitation
+
+I wouldn't claim that this replaces embeddings universally.
+
+A learned embedding model understands semantic relationships that deterministic document analysis won't automatically discover.
+
+For instance:
+
+"Which proposal saves taxpayers the most money?"
+
+The document might contain:
+
+"Alternative B results in an estimated annual reduction of $487,000."
+
+There may be almost zero lexical overlap.
+
+A good embedding model can recognize:
+
+saves taxpayers money
+≈
+annual reduction
+
+Your deterministic engine needs some mechanism for learning or representing that relationship.
+
+That's the difficult bit.
+
+The more ambitious version
+
+Instead of eliminating embeddings, CODB Docs could create its own hybrid document vector.
 
 For example:
 
-Huge image
-     ↓
-┌─────────────┐
-│   CLIP      │
-│   ╭─────╮   │
-│   │image│   │
-│   ╰─────╯   │
-└─────────────┘
+CODBVector v1
 
-If your JSON doesn't preserve clipping paths, reconstruction can look completely different.
+┌─────────────────────────────┐
+│ lexical vector             │
+├─────────────────────────────┤
+│ entity vector              │
+├─────────────────────────────┤
+│ structural vector          │
+├─────────────────────────────┤
+│ spatial vector             │
+├─────────────────────────────┤
+│ relationship vector        │
+├─────────────────────────────┤
+│ optional semantic vector   │
+└─────────────────────────────┘
 
-4. Transparency / blend modes
+Something like:
 
-Not just opacity.
+const vector = CodbDocs.vectorize(chunk);
 
-You need things such as:
-
-alpha
-soft masks
-transparency groups
-blend modes
-knockout/isolated groups
-
-PDF 2.0 specifically expanded graphics/transparency capabilities.
-
-5. Patterns and shadings
-
-This is another big omission.
-
-PDF fills aren't necessarily:
-
-"fill": "#FF0000"
-
-They can be:
-
-tiling patterns
-gradients
-axial shadings
-radial shadings
-mesh shadings
-
-So I'd have:
+returns:
 
 {
-  "paint": {
-    "type": "gradient",
-    "kind": "radial",
-    "stops": [...]
-  }
+    lexical: Float32Array(256),
+    semantic: Float32Array(384),
+    spatial: Float32Array(64),
+    structural: Float32Array(64),
+    entities: Float32Array(128)
 }
-6. Fonts need much more than font names
+
+Then:
+
+const results = graph.search(
+    "What project costs the most?",
+    {
+        mode: "hybrid"
+    }
+);
+
+Your ranking engine compares multiple representations, rather than blindly cosine-comparing one embedding.
+
+That is much more compelling.
+
+And WebGPU changes the equation
+
+You could run an optional tiny semantic encoder directly in the browser:
+
+PDF
+ ↓
+CODB Document Intelligence
+ ↓
+Structural Fingerprint
+        +
+Tiny WebGPU Semantic Encoder
+        ↓
+CODB Hybrid Vector
+        ↓
+Browser Vector Index
+
+Then everything stays client-side.
+
+PDF never leaves device
+       ↓
+Parsing local
+OCR local
+Chunking local
+Embedding local
+Index local
+Search local
+Reranking local
+       ↓
+Only retrieved context
+needs to reach an LLM
+
+Or pair it eventually with a browser-local LLM and nothing leaves the machine at all.
+
+Would I call it breakthrough technology?
+
+Not merely because it's "embeddings in the browser." Browser embeddings, WebGPU inference, local vector search, PDF.js, OCR, and hybrid retrieval already exist individually.
+
+The potentially novel part would be the combination and representation:
+
+A browser-native document intelligence engine that creates multimodal structural/semantic fingerprints directly from PDF internals and performs hybrid retrieval using textual, spatial, structural, entity, and optionally neural signals.
+
+That's a much stronger technical claim than:
+
+"We made our own embeddings."
+
+And your existing architecture gives you a legitimate starting point because CODB Docs already produces the document graph and intermediate representation needed for it.
+
+The direction I'd pursue is not trying to recreate Nomic in JavaScript. Build a document-specific representation that Nomic fundamentally doesn't have access to when it's handed a flattened string. That's where CODB Docs could actually differentiate rather than becoming yet another vector database wearing a PDF hat.
+
+I want it to do all this and any suggestions how to make it where when used in lovable projects or react or javascript
+
+Yes. If the goal is CODB Docs becomes a drop-in document intelligence + local RAG SDK that works in Lovable, React, vanilla JavaScript, Vite, and potentially Node, I would redesign the public API around that goal now rather than letting every application reinvent the plumbing. Humanity has suffered enough copies of useEffect(() => loadPdf(), []).
+
+Browser-side embeddings are technically practical now. Transformers.js can run embedding models directly with WebGPU, and ONNX Runtime Web supports WebGPU with WASM as a broader fallback.
+
+1. Make the final developer experience absurdly simple
+
+For React/Lovable, I would want this:
+
+npm install @codbdocs/core @codbdocs/rag @codbdocs/react
+
+Then:
+
+import { CodbDocsViewer } from "@codbdocs/react";
+
+export default function App() {
+  return (
+    <CodbDocsViewer
+      file={file}
+      intelligence
+      rag
+      local
+    />
+  );
+}
+
+That's the high-level component.
+
+But developers should also have the lower-level API:
+
+import { CodbDocs } from "@codbdocs/core";
+
+const doc = await CodbDocs.load(file);
+
+const graph = await doc.analyze();
+
+const index = await graph.createIndex();
+
+const result = await index.ask(
+  "How much was the contract?"
+);
+
+console.log(result);
+
+That should be the north star.
+
+2. I would split CODB Docs into packages
+
+Instead of one enormous codbdocs.js:
+
+@codbdocs/core
+@codbdocs/pdf
+@codbdocs/ocr
+@codbdocs/intelligence
+@codbdocs/rag
+@codbdocs/storage
+@codbdocs/react
+@codbdocs/viewer
+
+But don't make developers install all eight manually.
+
+Provide:
+
+@codbdocs/browser
+
+as the batteries-included version.
+
+So Lovable can simply do:
+
+npm install @codbdocs/browser
+
+and:
+
+import { CodbDocs } from "@codbdocs/browser";
+3. One universal API
+
+I'd make the basic interface:
+
+const doc = await CodbDocs.load(file);
+
+Then:
+
+await doc.ready();
+
+And everything hangs off the document:
+
+doc.pages
+doc.text
+doc.graph
+doc.metadata
+doc.entities
+doc.tables
+doc.forms
+doc.images
+doc.annotations
+doc.accessibility
+doc.index
+
+Operations become:
+
+await doc.analyze();
+
+await doc.index();
+
+await doc.search("contract amount");
+
+await doc.ask("What was approved?");
+
+await doc.summarize();
+
+await doc.auditAccessibility();
+
+await doc.toHTML();
+
+Much easier to understand.
+
+4. Make RAG automatic
+
+This is the important part.
+
+A Lovable developer shouldn't need to understand embeddings, cosine similarity, chunk overlap, vector databases, rerankers and the other ceremonial robes AI development currently requires.
+
+They should write:
+
+await doc.index();
+
+CODB Docs handles:
+
+Document
+   ↓
+PDF.js
+   ↓
+OCR if necessary
+   ↓
+Reading order
+   ↓
+Structure detection
+   ↓
+Entity extraction
+   ↓
+Semantic chunking
+   ↓
+Structural fingerprints
+   ↓
+Embeddings
+   ↓
+Local vector index
+   ↓
+Ready
+
+Then:
+
+const results = await doc.search(
+  "How much money was approved?"
+);
+5. Build your hybrid representation
+
+This is where I'd make CODB Docs different.
+
+Don't store just:
+
+{
+  text,
+  embedding
+}
 
 Store:
 
-font identity
-embedded font
-subset information
-encoding
-Unicode mapping
-glyph IDs
-glyph widths
-character spacing
-word spacing
-horizontal/vertical writing
-rendering mode
-text matrix
-
-This is particularly important because the visible glyph and the extracted Unicode character are not necessarily the same thing. PDF accessibility guidance specifically calls out Unicode mapping and cases where visible graphics/text don't have usable Unicode mappings.
-
-I'd represent text at the glyph level:
-
 {
-  "type": "text",
-  "glyphs": [
-    {
-      "gid": 42,
-      "unicode": "A",
-      "advance": 7.2,
-      "transform": [...]
-    }
-  ]
+  id: "chunk_342",
+
+  documentId: "agenda-2026",
+
+  text: "...",
+
+  page: 14,
+
+  bbox: [
+    72,
+    221,
+    510,
+    412
+  ],
+
+  section: "Financial Impact",
+
+  type: "paragraph",
+
+  entities: {
+    money: [
+      "$2,450,000"
+    ],
+
+    dates: [],
+
+    people: [],
+
+    organizations: []
+  },
+
+  structure: {
+    heading: "Financial Impact",
+    level: 2,
+    readingOrder: 37
+  },
+
+  lexicalVector: ...,
+
+  semanticVector: ...,
+
+  structuralVector: ...,
+
+  spatialVector: ...
 }
 
-That gives you much better reconstruction.
+Now CODB Docs knows much more than a conventional text embedding system.
 
-7. Marked content
+6. Create a CODB Hybrid Vector
 
-This is probably one of the most important things missing from your current model.
+I'd formalize this as an actual API:
 
-PDF can associate page content with the logical structure tree using marked-content sequences.
+const fingerprint =
+  await CodbDocs.fingerprint(chunk);
 
-That relationship is critical for accessibility, reuse, extraction, and semantic understanding.
-
-Your JSON should preserve:
+Return:
 
 {
-  "type": "markedContent",
-  "id": "mc_123",
-  "tag": "P",
-  "properties": {},
-  "children": [...]
+  semantic: Float32Array(...),
+  lexical: Float32Array(...),
+  structural: Float32Array(...),
+  spatial: Float32Array(...),
+  entity: Float32Array(...)
 }
 
-And then separately:
+Then ranking:
 
-{
-  "structure": {
-    "type": "P",
-    "children": [
-      { "ref": "mc_123" }
-    ]
+Final Score
+
+35% semantic
+25% lexical
+15% structural
+10% entity
+10% document context
+ 5% spatial
+
+But make the weights adaptive.
+
+A query like:
+
+$3,450,000
+
+should favor lexical/entity matching.
+
+While:
+
+What project will save the city the most money?
+
+should heavily favor semantic retrieval.
+
+7. Browser embeddings
+
+I would support:
+
+const docs = new CodbDocs({
+  embeddings: "local"
+});
+
+CODB Docs detects:
+
+navigator.gpu
+
+If available:
+
+WebGPU
+
+otherwise:
+
+WASM
+
+Transformers.js already supports this architecture. Its feature-extraction pipeline can generate normalized embeddings using WebGPU directly in the browser.
+
+Something conceptually like:
+
+const extractor = await pipeline(
+  "feature-extraction",
+  model,
+  {
+    device: "webgpu"
   }
-}
+);
 
-That separation is important.
+Quantized models are particularly relevant for browser deployment because they reduce download and memory requirements.
 
-8. Artifacts
+8. Don't download the AI model until it's needed
 
-This is subtle and extremely valuable.
+Very important for Lovable websites.
 
-A page number, header, footer, decorative line, etc. might visually exist but not be part of the document's semantic reading order.
+Don't make:
 
-PDF accessibility explicitly distinguishes real content from artifacts.
+User opens app
+↓
+200 MB model downloads
 
-So:
-
-{
-  "type": "text",
-  "text": "Page 4",
-  "role": "artifact",
-  "artifactType": "pagination"
-}
-
-This lets your system answer:
-
-"Give me the actual content without headers and footers."
-
-9. The structure tree
-
-This should become the semantic backbone of your JSON.
-
-Something like:
-
-{
-  "structure": {
-    "type": "Document",
-    "children": [
-      {
-        "type": "H1",
-        "children": ["Introduction"]
-      },
-      {
-        "type": "P",
-        "children": [
-          { "ref": "text_31" }
-        ]
-      },
-      {
-        "type": "Table",
-        "children": [...]
-      },
-      {
-        "type": "Figure",
-        "children": [...]
-      }
-    ]
-  }
-}
-
-Tagged PDF is specifically intended to represent logical structure, reading order, headings, lists, tables, figures, etc.
-
-10. Structure attributes
-
-Don't stop at tags.
-
-Store attributes such as:
-
-{
-  "type": "Table",
-  "attributes": {
-    "rowSpan": 2,
-    "colSpan": 3,
-    "headers": [...]
-  }
-}
-
-Also:
-
-language
-alternate descriptions
-expansion
-actual text
-table headers
-list numbering
-pronunciation
-MathML-related information
-
-PDF 2.0 expanded the structure/tagging model and added things including namespaces, MathML support and pronunciation hints.
-
-11. Reading order
-
-Don't assume:
-
-top → bottom → left → right
-
-is correct.
-
-You want to preserve both:
-
-{
-  "visualOrder": [...],
-  "logicalOrder": [...]
-}
-
-This is crucial for:
-
-columns
-sidebars
-footnotes
-captions
-headers
-tables
-
-Logical content order is explicitly part of accessible PDF semantics.
-
-12. Annotations
-
-Huge category.
-
-Don't reduce annotations to links.
-
-You have things such as:
-
-links
-highlights
-underlines
-strikeouts
-free text
-stamps
-ink
-squares
-circles
-polygons
-lines
-popups
-file attachments
-widgets
-redactions
-multimedia-related annotations
-
-Your model should be:
-
-{
-  "type": "annotation",
-  "subtype": "highlight",
-  "rect": [...],
-  "quadPoints": [...],
-  "color": [...],
-  "opacity": 0.5,
-  "contents": "Important",
-  "action": {...}
-}
-13. Actions
-
-Another commonly forgotten category.
-
-A link isn't merely:
-
-{
-  "url": "https://..."
-}
-
-It might perform an action.
-
-I'd have:
-
-{
-  "action": {
-    "type": "URI",
-    "uri": "https://..."
-  }
-}
-
-but support other action types too:
-
-GoTo
-GoToR
-URI
-JavaScript
-Named
-SubmitForm
-ResetForm
-Launch
-etc.
-
-PDF 2.0 also added richer navigation capabilities, including actions targeting structure elements.
-
-14. Forms
-
-This should be its own subsystem.
-
-Not just:
-
-{
-  "type": "input"
-}
-
-You need:
-
-{
-  "type": "formField",
-  "name": "customerName",
-  "fieldType": "text",
-  "value": "John",
-  "defaultValue": "",
-  "flags": [...],
-  "actions": {...},
-  "appearance": {...},
-  "widget": {...}
-}
-
-And:
-
-checkbox
-radio
-combo box
-list box
-signature field
-calculation order
-validation
-formatting
-appearance state
-
-The accessibility reference suite specifically includes complex interactive forms.
-
-15. Appearance streams
-
-Very important for reconstruction.
-
-Forms and annotations can have their own visual appearance.
-
-Don't assume:
-
-field value → renderer automatically creates appearance
-
-You need to preserve the actual appearance information where necessary.
-
-Otherwise:
-
-original PDF
-    ↓
-JSON
-    ↓
-recreated PDF
-
-can have a functionally identical form but visually different rendering.
-
-16. Optional Content Groups / layers
-
-Think:
-
-Photoshop layers, but PDF.
-
-{
-  "layers": [
-    {
-      "id": "english",
-      "name": "English",
-      "visible": true
-    },
-    {
-      "id": "french",
-      "name": "French",
-      "visible": false
-    }
-  ]
-}
-
-Objects then reference layers.
-
-17. Embedded files + associated files
-
-This is a major one if your goal is complete extraction.
-
-PDF 2.0 has an Associated Files framework allowing files to be semantically related to PDF objects—not merely attached generically.
-
-For example:
-
-{
-  "asset": {
-    "id": "data.csv",
-    "mime": "text/csv",
-    "data": "...",
-    "relationship": "Data"
-  }
-}
-
-You could associate it with:
-
-{
-  "type": "table",
-  "associatedFiles": ["data.csv"]
-}
-
-That's extremely useful for machine-readable PDFs.
-
-18. Document navigation
-
-Don't forget:
-
-bookmarks / outline
-named destinations
-page labels
-internal links
-structure destinations
-article threads
-
-Page labels are particularly interesting because the displayed page number doesn't necessarily equal the PDF page index. The PDF accessibility guidance explicitly discusses page labels.
-
-So:
-
-{
-  "page": 7,
-  "label": "A-3"
-}
-19. Metadata
-
-I'd capture both standard and extended metadata:
-
-{
-  "metadata": {
-    "title": "...",
-    "author": "...",
-    "subject": "...",
-    "keywords": [...],
-    "creator": "...",
-    "producer": "...",
-    "creationDate": "...",
-    "modifiedDate": "...",
-    "language": "en-US",
-    "xmp": {...}
-  }
-}
-
-And potentially object-level metadata as well. PDF 2.0 has an object metadata stream mechanism.
-
-20. Color management
-
-This is another reconstruction trap.
-
-Don't normalize everything to RGB.
-
-Preserve:
-
-DeviceRGB
-DeviceCMYK
-DeviceGray
-ICCBased
-CalGray
-CalRGB
-Lab
-Separation
-DeviceN
-Indexed
-Pattern
-
-plus:
-
-ICC profiles
-rendering intent
-output intents
-
-PDF 2.0 supports page-level and referenced output intents.
-
-21. Print-specific information
-
-If you're going for full fidelity, include:
-
-media box
-crop box
-bleed box
-trim box
-art box
-rotation
-page scaling
-viewer preferences
-output intent
-print settings
-
-This is where a “looks right on screen” recreation can fail when printed.
-
-22. Digital signatures
-
-Don't treat a signature as an image.
-
-You potentially need:
-
-{
-  "signature": {
-    "field": "...",
-    "certificate": {...},
-    "byteRange": [...],
-    "digestAlgorithm": "SHA-256",
-    "subFilter": "...",
-    "timestamp": {...}
-  }
-}
-
-And importantly, distinguish:
-
-visual signature
-digital signature
-
-PDF 2.0 has expanded signature capabilities.
-
-23. Security / encryption
-
-If you're extracting the document completely, your metadata model should know:
-
-{
-  "security": {
-    "encrypted": true,
-    "permissions": {...},
-    "encryptionAlgorithm": "..."
-  }
-}
-
-Don't necessarily put secrets/passwords into your JSON representation.
-
-PDF's security model is part of the document's technical state.
-
-24. Incremental revisions
-
-This is one I'd absolutely include if you're serious.
-
-PDF can be incrementally updated.
-
-That means the file can contain historical revisions.
-
-Instead of treating:
-
-PDF = current state
-
-you could expose:
-
-{
-  "revisions": [
-    {
-      "id": 0,
-      "objects": [...]
-    },
-    {
-      "id": 1,
-      "changes": [...]
-    }
-  ]
-}
-
-This could allow:
-
-“Show me what changed between revision 1 and revision 2.”
-
-That's a killer enterprise feature.
-
-25. Object identity
-
-This is fundamental to your JSON idea.
-
-Don't make your JSON purely hierarchical.
-
-Use IDs:
-
-{
-  "id": "obj_8392",
-  "type": "image"
-}
-
-and references:
-
-{
-  "type": "figure",
-  "content": ["obj_8392"]
-}
-
-Why?
-
-Because PDFs reuse objects.
-
-For example, one logo can be painted on 100 pages without storing 100 copies.
-
-Your JSON should preserve that relationship.
-
-26. Reusable XObjects
-
-Same concept.
-
-Represent:
-
-{
-  "resources": {
-    "xobjects": {
-      "logo": {...}
-    }
-  }
-}
-
-and then:
-
-{
-  "draw": {
-    "xobject": "logo",
-    "transform": [...]
-  }
-}
-
-This makes your JSON much smaller and makes exact reconstruction easier.
-
-27. Images should have two identities
-
-This is important given your earlier Base64 question.
-
-Don't just:
-
-{
-  "image": "base64..."
-}
+That's a marvelous way to make everyone hate your library.
 
 Instead:
 
+Open application
+
+core: ~small
+PDF.js: lazy loaded
+
+        ↓
+
+Open PDF
+
+document engine loads
+
+        ↓
+
+Click Ask / Search
+
+embedding model loads
+
+Use dynamic imports.
+
+const rag =
+  await import(
+    "@codbdocs/rag"
+  );
+9. Cache the model
+
+After the first download:
+
+Model
+ ↓
+Browser Cache
+
+And document indexes:
+
+IndexedDB
+
+Conceptually:
+
+await doc.index({
+  persist: true
+});
+
+Then reopening the same document:
+
+PDF hash
+   ↓
+index exists?
+   ↓
+YES
+   ↓
+load index
+
+No re-embedding 200 pages.
+
+10. Use Web Workers
+
+Absolutely don't run:
+
+OCR
+PDF parsing
+chunking
+embedding
+indexing
+
+all on the React UI thread.
+
+Instead:
+
+React UI
+   │
+   │
+   ▼
+CODB Worker
+   │
+   ├── PDF.js
+   ├── OCR
+   ├── analysis
+   ├── chunking
+   ├── embeddings
+   └── indexing
+
+React remains responsive.
+
+The API doesn't change:
+
+await doc.index({
+  worker: true
+});
+
+There are already examples of shipping quantized embedding models entirely client-side using Transformers.js and Web Workers, so this deployment pattern is well grounded.
+
+11. Progressive enhancement
+
+This matters enormously.
+
+CODB Docs shouldn't require WebGPU.
+
+Detect capabilities:
+
+const capabilities =
+  await CodbDocs.capabilities();
+
+Maybe:
+
 {
-  "id": "img_17",
+  "pdf": true,
+  "ocr": true,
+  "wasm": true,
+  "webgpu": true,
+  "localEmbeddings": true,
+  "localLLM": false,
+  "workers": true,
+  "indexedDB": true
+}
 
-  "source": {
-    "encoding": "jpeg",
-    "bytes": "..."
-  },
+Then choose automatically:
 
-  "placement": {
-    "transform": [...]
-  },
+WebGPU
+ ↓ unavailable
 
-  "content": {
-    "ocr": [...],
-    "objects": [...],
-    "description": "..."
+WASM
+ ↓ too slow
+
+Remote provider
+
+ONNX Runtime Web currently has broader WASM browser coverage than WebGPU, so this fallback matters if CODB Docs is supposed to work everywhere rather than merely on the developer's suspiciously expensive laptop.
+
+12. Separate retrieval from generation
+
+This is especially important.
+
+Don't force people to use OpenAI, Ollama, Gemini, etc.
+
+Make:
+
+const evidence =
+  await doc.retrieve(question);
+
+return:
+
+[
+  {
+    page: 12,
+    score: .94,
+    text: "...",
+    bbox: [...],
+    heading: "Financial Impact"
   }
-}
-
-That separates:
-
-what the image is from how it is displayed.
-
-28. 3D / multimedia / rich media
-
-If your goal is genuinely “all PDF content,” don't forget these.
-
-PDF 2.0 includes 3D-related features and 3D measurements/viewing conditions.
-
-You don't necessarily need to implement them in v1, but your schema shouldn't make them impossible.
-
-29. Math
-
-This is another interesting content-aware opportunity.
-
-Instead of:
-
-∫ x² dx
-
-you could potentially have:
-
-{
-  "type": "math",
-  "mathml": "...",
-  "latex": "..."
-}
-
-PDF 2.0 expanded tagging with MathML-related support.
-
-30. Provenance
-
-I'd add something most PDF libraries don't expose well:
-
-{
-  "provenance": {
-    "source": "pdf",
-    "extraction": "native",
-    "ocr": false,
-    "vision": false,
-    "confidence": 1
-  }
-}
-
-For an OCR-derived object:
-
-{
-  "provenance": {
-    "source": "ocr",
-    "engine": "tesseract",
-    "confidence": 0.93
-  }
-}
-
-For AI-inferred semantics:
-
-{
-  "provenance": {
-    "source": "inference",
-    "model": "...",
-    "confidence": 0.87
-  }
-}
-
-This is extremely important.
-
-Your library should be able to distinguish:
-
-“The PDF explicitly said this.”
-
-from:
-
-“We inferred this from the pixels.”
-
-The JSON shouldn't actually be one giant JSON object
-
-I'd make the format an IR.
-
-Something like:
-
-{
-  "version": "1.0",
-
-  "document": {
-    "id": "doc_1",
-    "metadata": {},
-    "pages": ["page_1", "page_2"],
-    "structure": "struct_1",
-    "resources": "resources_1"
-  },
-
-  "pages": {},
-
-  "objects": {},
-
-  "resources": {},
-
-  "structure": {},
-
-  "annotations": {},
-
-  "forms": {},
-
-  "assets": {},
-
-  "navigation": {},
-
-  "security": {},
-
-  "provenance": {}
-}
+]
 
 Then:
 
-                    PDF
-                     ↓
-             ┌───────────────┐
-             │  PDF Parser   │
-             └───────┬───────┘
-                     ↓
-             ┌───────────────┐
-             │   PDF-IR JSON │
-             └───────┬───────┘
-                     │
-       ┌─────────────┼─────────────┐
-       ↓             ↓             ↓
-    Renderer       Vision      Accessibility
-       ↓             ↓             ↓
-     PDF          Semantic      Audit/Fix
+await doc.ask(question, {
+  provider: ...
+});
 
-And the same IR can go backward:
+Generation becomes optional.
 
-JSON
- ↓
-Renderer
- ↓
-PDF
+13. Provider adapters
 
-That's the part I think is particularly compelling.
+Support:
 
-The killer feature: round-trip fidelity
+CodbDocs.providers.openai()
+CodbDocs.providers.ollama()
+CodbDocs.providers.azure()
+CodbDocs.providers.gemini()
+CodbDocs.providers.local()
 
-You should make this a formal promise/test:
+And custom:
 
-const model = await PDFVision.extract(pdf);
+CodbDocs.createProvider({
+  async generate(context) {
+    return myAPI(context);
+  }
+});
 
-const pdf2 = await PDFVision.create(model);
+That makes CODB Docs usable in practically any Lovable project.
 
-const model2 = await PDFVision.extract(pdf2);
+14. React hooks
 
-assertEquivalent(model, model2);
+For React/Lovable I'd build:
 
-Not necessarily byte-for-byte identical—that's often unrealistic because PDFs can be serialized differently—but semantically and visually equivalent.
+useCodbDocument()
+useCodbViewer()
+useCodbSearch()
+useCodbAsk()
+useCodbRAG()
+useCodbAccessibility()
 
-You could have three levels:
+Example:
 
-LEVEL 1  Content equivalent
-         Text/images/forms/links preserved
+const {
+  document,
+  loading,
+  progress
+} = useCodbDocument(file);
 
-LEVEL 2  Semantic equivalent
-         Structure/reading order/accessibility preserved
+Then:
 
-LEVEL 3  Visual equivalent
-         Geometry/colors/fonts/transparency preserved
+const {
+  ask,
+  answer,
+  sources,
+  thinking
+} = useCodbAsk(document);
 
-That is a much more ambitious and interesting product than “PDF OCR.”
+And:
 
-And the research backs up the direction: Tagged PDF was specifically designed to preserve richer context for extraction, reuse, navigation and accessibility, while modern PDF 2.0 adds things like associated files, structure-based navigation, MathML-related semantics, enhanced signatures and richer graphics.
+<button
+  onClick={() =>
+    ask("What was approved?")
+  }
+>
+  Ask Document
+</button>
 
-If I were building this, I'd call the core something like PDF-IR (PDF Intermediate Representation), and make vision, accessibility, search, editing, and reconstruction features that operate on that IR. That architecture gives you a path toward essentially turning a PDF into a queryable, editable, AI-readable document scene graph rather than just extracting its text.
+Lovable will handle that kind of API beautifully.
 
-Ad
-i want both 
+15. Source citations should control the viewer
 
-Yes — and I think you should build both.
+This is one of the features I'd prioritize heavily.
 
-The mistake would be making them two separate products. Make them two modes on top of the same underlying PDF representation:
-
-1. Fidelity mode — “Everything”
-
-Goal:
-
-Extract the PDF as completely as technically possible and recreate it.
-
-This preserves the low-level information:
-
-text/glyphs/fonts
-vectors/paths
-images
-transforms
-clipping
-transparency
-gradients/patterns
-colors/ICC profiles
-XObjects/resources
-annotations
-forms + appearance streams
-layers
-bookmarks
-destinations/actions
-embedded/associated files
-metadata
-page boxes/rotation
-signatures
-encryption information
-revisions
-object identity/reuse
-tagged PDF structure
-marked content
-artifacts
-
-The JSON is essentially a loss-minimizing PDF IR.
-
-2. Intelligence mode — “Understand”
-
-Goal:
-
-Understand what the PDF means, not merely what it contains.
-
-This adds:
-
-headings
-paragraphs
-lists
-tables
-figures
-captions
-entities
-dates
-addresses
-amounts
-charts
-diagrams
-signatures
-checkboxes
-reading order
-document type
-relationships
-OCR
-image descriptions
-semantic search
-embeddings
-accessibility analysis
-inferred alt text
-inferred structure
-
-The critical thing is that intelligence never destroys fidelity information.
-
-The architecture I'd use
-                         PDF
-                          │
-                  ┌───────▼───────┐
-                  │   PDF Parser   │
-                  └───────┬───────┘
-                          │
-                          ▼
-               ┌─────────────────────┐
-               │      PDF-IR          │
-               │                     │
-               │ Text                │
-               │ Glyphs              │
-               │ Vectors             │
-               │ Images              │
-               │ Resources           │
-               │ Structure            │
-               │ Forms               │
-               │ Annotations         │
-               │ Metadata            │
-               │ etc.                │
-               └──────────┬──────────┘
-                          │
-              ┌───────────┴───────────┐
-              │                       │
-              ▼                       ▼
-      ┌─────────────────┐    ┌──────────────────┐
-      │ Fidelity Engine │    │ Intelligence     │
-      │                 │    │ Engine           │
-      │ reconstruct     │    │                  │
-      │ edit            │    │ OCR              │
-      │ render          │    │ vision           │
-      │ validate        │    │ semantics        │
-      └────────┬────────┘    │ accessibility    │
-               │             └────────┬─────────┘
-               ▼                      ▼
-              PDF              semantic JSON
-And I'd make the JSON support both
-
-For example:
+Return:
 
 {
-  "id": "page_1",
+  answer:
+    "The contract amount was $2.45 million.",
 
-  "content": [
+  sources: [
     {
-      "id": "obj_42",
-      "type": "text",
+      page: 17,
 
-      "raw": {
-        "glyphs": [...],
-        "font": "font_3",
-        "transform": [...]
-      },
+      bbox: [
+        81,
+        212,
+        491,
+        278
+      ],
 
-      "semantic": {
-        "role": "heading",
-        "level": 1,
-        "text": "Annual Report"
-      },
-
-      "accessibility": {
-        "role": "H1"
-      }
+      text:
+        "The contract amount shall not exceed..."
     }
   ]
 }
 
-The raw layer tells you exactly how to reconstruct it.
+React:
 
-The semantic layer tells you what it means.
+<CodbAnswer
+  answer={answer}
 
-The accessibility layer tells you how it should be exposed to assistive technology.
+  onSourceClick={(source) => {
+    viewer.goToPage(source.page);
+    viewer.highlight(source.bbox);
+  }}
+/>
 
-One feature I'd strongly recommend
+The user clicks:
 
-Make every extracted object have provenance.
+Page 17
 
-{
-  "semantic": {
-    "role": "table"
-  },
+and CODB Viewer:
 
-  "provenance": {
-    "method": "native",
-    "confidence": 1.0,
-    "source": [
-      "vector_41",
-      "vector_42",
-      "text_87"
-    ]
-  }
-}
+jumps to page 17,
+scrolls to the passage,
+highlights the exact evidence.
 
-If you detect something with AI:
+That's a killer feature.
 
-{
-  "semantic": {
-    "role": "figure"
-  },
+16. Multi-document RAG
 
-  "provenance": {
-    "method": "vision",
-    "model": "…",
-    "confidence": 0.91,
-    "source": ["image_14"]
-  }
-}
+Don't stop at:
 
-That makes your system much more trustworthy.
+doc.ask()
 
-Your API could become extremely clean
-const pdf = await PDFVision.load(file);
+Build:
 
-// Everything
-const ir = await pdf.extract();
-
-// Understand it
-const semantic = await pdf.analyze();
-
-// Accessibility
-const audit = await pdf.accessibility.audit();
-
-// Search meaning
-const results = await pdf.find("invoice total");
-
-// Reconstruct
-const output = await PDFVision.create(ir);
-
-// Edit
-ir.objects["obj_42"].semantic.role = "H1";
-
-// Recreate again
-const edited = await PDFVision.create(ir);
-
-And perhaps:
-
-await pdf.optimize();
-await pdf.redact(...);
-await pdf.remediateAccessibility();
-await pdf.reorder();
-await pdf.toHTML();
-await pdf.toMarkdown();
-await pdf.toJSON();
-The really ambitious version
-
-Eventually your PDF becomes a bidirectional document model:
-
-PDF
- ↕
-PDF-IR
- ↕
-HTML
- ↕
-Accessible document
- ↕
-Markdown
- ↕
-AI semantic representation
-
-So you're not just extracting PDFs.
-
-You're creating a universal intermediate representation for documents.
-
-That's the direction I'd pursue.
-
-Fidelity is the foundation. Intelligence is the layer on top. If you get the IR right, you can support both without having to redesign the library later.
-
-
-Yes. That would be a very strong feature, and I’d make it a separate “Accessible HTML / Document Replica” mode rather than mixing it into the PDF parser.
-
-The goal becomes:
-
-Take any PDF → reconstruct its document model → generate an accessible HTML representation that can visually mimic the PDF while exposing a proper semantic/accessibility tree.
-
-And importantly, the user can toggle between PDF-faithful mode and AI-accessible mode.
-
-The feature set
-PDF
- │
- ▼
-PDF-IR
- │
- ├───────────────┐
- ▼               ▼
-Fidelity      AI/Accessibility
-Renderer       Interpretation
- │               │
- ▼               ▼
-PDF replica    Accessible HTML
-                  │
-          ┌───────┼────────┐
-          ▼       ▼        ▼
-        Visual   Semantic  A11y
-        mimic    structure controls
-HTML output could have two modes
-
-Visual mode
-
-Attempts to look like the original PDF:
-
-<div class="pdf-page">
-  <div class="pdf-text">Annual Report</div>
-  <img ...>
-  <div class="pdf-table">...</div>
-</div>
-
-Accessible mode
-
-Transforms it into meaningful HTML:
-
-<main>
-  <h1>Annual Report</h1>
-
-  <section>
-    <h2>Financial Results</h2>
-
-    <p>...</p>
-
-    <figure>
-      <img alt="Revenue increased from ...">
-      <figcaption>...</figcaption>
-    </figure>
-
-    <table>
-      <caption>Quarterly Revenue</caption>
-      <thead>...</thead>
-      <tbody>...</tbody>
-    </table>
-  </section>
-</main>
-And then provide a toggle
-
-Something like:
-
-const html = await pdf.toHTML({
-  mode: "accessible",
-  visualFidelity: "high",
-  ai: true
-});
-
-Or in a viewer:
-
-┌─────────────────────────────────────────┐
-│ PDF                                      │
-│                                         │
-│ [ Original ] [ Accessible ] [ AI View ] │
-└─────────────────────────────────────────┘
-“Full suite” should include the surrounding UI too
-
-This is where your idea gets interesting.
-
-Don't only convert the document body. Generate a complete accessible application shell:
-
-Navigation
-table of contents
-bookmarks
-previous/next page
-page navigation
-document sections
-search results
-Viewer controls
-zoom
-page selection
-fullscreen
-print
-download
-rotate
-text selection
-search
-Accessibility controls
-increase/decrease text size
-high contrast
-dyslexia-friendly font option
-reading mode
-simplified layout
-focus mode
-reduced motion
-keyboard navigation
-screen-reader optimized mode
-AI controls
-“Explain this page”
-“Summarize section”
-“Find tables”
-“Find figures”
-“Ask about this document”
-“Read this section”
-“Simplify language”
-“Show important information”
-
-But these should be optional enhancements, not assumptions about what the user needs.
-
-The wrapper/menu system should be customizable
-
-I'd expose a component API:
-
-PDFVisionViewer({
-  document,
-
-  mode: "accessible",
-
-  toolbar: {
-    search: true,
-    navigation: true,
-    zoom: true,
-    print: true,
-    download: true,
-    accessibility: true,
-    ai: true
-  },
-
-  accessibility: {
-    screenReader: true,
-    keyboardNavigation: true,
-    highContrast: true,
-    simplifiedView: true
-  }
-});
-
-And allow developers to replace the UI entirely:
-
-PDFVisionViewer({
-  toolbar: MyToolbar,
-  sidebar: MySidebar,
-  pageControls: MyPageControls
-});
-
-So your library isn't locked to one visual design.
-
-But I'd add something even more important
-The HTML should retain a mapping back to the PDF.
-
-For example:
-
-<h2
-  data-pdf-page="4"
-  data-pdf-object="obj_382"
->
-  Financial Results
-</h2>
+const workspace =
+  CodbDocs.workspace();
 
 Then:
 
-htmlElement → PDF object
-PDF object → HTML element
+await workspace.add(file1);
+await workspace.add(file2);
+await workspace.add(file3);
 
-You could expose:
+await workspace.index();
 
-viewer.focusPdfObject("obj_382");
-viewer.focusHtmlElement("obj_382");
+Now:
 
-So a screen-reader user could navigate the accessible HTML and the visual PDF viewer could simultaneously highlight the corresponding region.
+const answer =
+  await workspace.ask(
+    "Which contracts exceed $1 million?"
+  );
 
-That's a really compelling interaction.
+Returns:
 
-Even better: two synchronized representations
-             PDF-IR
-                │
-       ┌────────┴────────┐
-       ▼                 ▼
-   PDF Renderer      HTML Renderer
-       │                 │
-       ▼                 ▼
-   Visual PDF      Accessible HTML
-       │                 │
-       └───────┬─────────┘
-               ▼
-          Synchronizer
+Contract A
+$2.4M
+Agenda.pdf
+Page 17
 
-Now clicking a table cell in the PDF can move focus to the corresponding <td> in HTML.
+Contract B
+$1.8M
+Resolution.pdf
+Page 4
 
-And navigating with a screen reader can highlight the corresponding PDF region.
+Now you've gone from a PDF library to a browser-native document intelligence platform.
 
-I would also support “AI remediation”
+17. Folder ingestion
 
-For a bad PDF:
+Eventually:
 
-const accessible = await pdf.toHTML({
-  accessibility: "enhance",
-  ai: true
-});
+await workspace.add(files);
 
-The engine could infer:
+Or drag/drop:
 
-Unstructured PDF
-       ↓
-Heading detection
-Reading order
-Table recognition
-Figure recognition
-Caption association
-Alt-text generation
-Form labeling
-Link semantics
-Language detection
-       ↓
-Accessible HTML
-
-But never silently replace authoritative PDF data with AI guesses.
-
-Your provenance system becomes important:
-
-<img
-  alt="AI-generated description: ..."
-  data-source="vision"
-  data-confidence="0.94"
+<CodbDropZone
+  workspace={workspace}
 />
 
-And perhaps expose a UI indicator:
+Could handle:
 
-✨ AI-generated description
+PDF
+DOCX
+XLSX
+PPTX
+TXT
+HTML
+Images
 
-I'd name the feature something like
+Everything gets normalized into your existing IR.
 
-PDF → Accessible Document
+That IR becomes the real product, not PDF.js.
 
-or
+18. Make the IR format public
 
-AI Accessibility Mode
+I would formalize:
 
-with three output modes:
+CODB-IR 1.0
 
-1. Faithful
-   └── Maximum visual similarity
+For example:
 
-2. Accessible
-   └── Semantic HTML + WCAG-oriented UI
+const ir =
+  doc.getIR();
 
-3. Intelligent
-   └── Accessible HTML + AI interpretation
+And:
 
-And because you're already planning the complete PDF-IR, you don't need to modify the original PDF at all. The HTML becomes another rendering of the same underlying document model.
+CodbDocs.loadIR(ir);
 
-That gives you a very clean product story:
+Then someone could build a DOCX parser that produces CODB-IR without touching the RAG engine.
 
-One document model. Multiple representations: PDF, pixel-faithful HTML, semantic HTML, accessible HTML, Markdown, structured JSON, and AI-readable content.
+Architecture:
+
+PDF.js ─────┐
+            │
+DOCX ───────┤
+            │
+HTML ───────┤
+            ▼
+         CODB-IR
+            │
+      ┌─────┼───────┐
+      ▼     ▼       ▼
+    RAG   Viewer   ADA
+      │     │       │
+      └─────┼───────┘
+            ▼
+        Applications
+
+That's a much stronger architecture.
+
+19. Vanilla JavaScript needs to remain first-class
+
+You should absolutely maintain:
+
+<script src="https://cdn.jsdelivr.net/.../codbdocs.min.js"></script>
+
+Then:
+
+const doc =
+  await CodbDocs.load(file);
+
+await doc.index();
+
+const answer =
+  await doc.ask(
+    "What is this document about?"
+  );
+
+Meaning someone can build an intelligent document app from one HTML file.
+
+20. React gets the nicer layer
+<CodbProvider
+  config={{
+    embeddings: "local",
+    storage: "indexeddb",
+    acceleration: "auto"
+  }}
+>
+
+  <CodbViewer file={file} />
+
+  <CodbChat />
+
+</CodbProvider>
+
+That's what I'd want Lovable consuming.
+
+The architecture I'd build
+                    CODB DOCS
+                        │
+        ┌───────────────┼────────────────┐
+        │               │                │
+        ▼               ▼                ▼
+     INPUTS           ENGINE            UI
+        │               │                │
+   PDF / DOCX         CODB-IR          React
+   XLSX / HTML           │             Vanilla JS
+   Images                │             Lovable
+                         │
+                ┌────────┴─────────┐
+                │                  │
+                ▼                  ▼
+        DOCUMENT BRAIN           VIEWER
+                │
+        ┌───────┼────────┐
+        │       │        │
+        ▼       ▼        ▼
+     Spatial  Entity  Structural
+        │       │        │
+        └───────┼────────┘
+                ▼
+       Semantic Fingerprint
+                │
+          ┌─────┴─────┐
+          │           │
+          ▼           ▼
+       Lexical     Embedding
+                    │
+               WebGPU/WASM
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+      Local Index         IndexedDB
+          │
+          ▼
+    Hybrid Retrieval
+          │
+          ▼
+       Reranker
+          │
+          ▼
+      Evidence Set
+          │
+      ┌───┴────┐
+      ▼        ▼
+   Local LLM  API LLM
+      │        │
+      └───┬────┘
+          ▼
+        Answer
+          +
+      Citations
+          +
+    PDF Highlights
+And make the simplest usage this
+const doc =
+  await CodbDocs.load(file);
+
+const answer =
+  await doc.ask(
+    "What was approved?"
+  );
+
+console.log(answer);
+
+Everything else should happen automatically:
+
+PDF parsing        ✓
+OCR                ✓
+structure          ✓
+reading order      ✓
+chunking           ✓
+fingerprinting     ✓
+embedding          ✓
+WebGPU/WASM        ✓
+indexing           ✓
+hybrid retrieval   ✓
+reranking          ✓
+context building   ✓
+citations          ✓
+page coordinates   ✓
+highlighting       ✓
+
+And advanced developers can override every layer.
+
+That combination is where I think CODB Docs gets genuinely interesting. Don't build another embedding library. Build a universal browser document intelligence runtime where embeddings are only one signal among layout, structure, entities, lexical relevance and document relationships. Then expose the whole ridiculous machine behind a three-line API.
