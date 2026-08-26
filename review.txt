@@ -389,3 +389,120 @@ you ultimately want the parser to produce:
 That's the piece that would move your model-free document intelligence from impressive extraction into genuinely sophisticated retrieval.
 
 So: core looks healthy structurally, but no, I wouldn't certify all the code as correct yet. The highest-priority defects are contextual Q&A, unsafe automatic currency summation, first-regex-wins intent routing, summary type handling, missing headless Accessible View, and the still-stale dist build.
+
+I pulled main again. There was a new repository update, but unfortunately the actual core code did not change. The tree moved from 5320dbf9... to e2ad1b26..., while the source SHAs remain the same. The change appears to be mainly review.txt, which now contains the previous review.
+
+What's still remaining
+Headless Accessible View is still missing. There is still no accessible.js or access/ module and therefore no graph.createAccessibleView(). This is the layer that should build semantic accessible content while leaving UI/design entirely to the consuming React/Lovable/JS app.
+query.js has not been updated. Its SHA remains c4c6ed..., so the query problems identified previously remain: overlapping intent regexes, subject context not being preserved, who effectively targeting people too broadly, and how much targeting currency too broadly.
+Relationship-aware retrieval still needs completion. The desired flow should be:
+"Who approved the $425,000 contract?"
+        ↓
+intent: relationship_lookup
+subject: contract
+anchor: $425,000
+relation: approvedBy
+expected: PERSON
+        ↓
+Document Graph
+        ↓
+best matching relationship
+        ↓
+answer + page + bbox + evidence
+
+rather than simply finding every PERSON entity.
+
+Currency aggregation needs query awareness. CODB should only perform SUM when the question actually requests a total, sum, combined amount, aggregate, etc. Otherwise original amount + change order + revised amount can produce a beautifully precise but completely wrong total.
+A proper query planner is still missing. I'd want:
+graph.planQuery(question)
+
+producing something like:
+
+{
+  intent: "value_lookup",
+  subject: ["contract"],
+  expected: ["currency"],
+  anchors: [],
+  relations: [],
+  operation: null
+}
+
+Then retrieval operates from that plan.
+
+Deterministic operators remain worth adding: SUM, COUNT, AVG, MIN, MAX, COMPARE, BEFORE, AFTER, BETWEEN, and GROUP BY. These are especially valuable because your model-free engine can execute them deterministically instead of asking an LLM to perform interpretive arithmetic.
+Concept Graph remains a major intelligence upgrade. You want relationships such as:
+contract ↔ agreement ↔ award
+vendor ↔ contractor ↔ supplier
+SOF ↔ Sufficiency of Funds
+cost ↔ amount ↔ value
+approve ↔ authorize ↔ adopt
+
+with document-derived aliases and terminology added automatically.
+
+Evidence fusion/indexing should become first-class. Instead of one search strategy:
+Exact
++ BM25
++ fuzzy
++ phrase
++ concept
++ entity
++ structure
++ spatial
++ relationships
+        ↓
+adaptive ranking
+
+and every result should explain why it matched.
+
+dist/codbdocs.js is still stale. This remains a major production issue. Its SHA is still f551736..., while src/index.js is cc8a250.... So the jsDelivr dist URL you've been using is still serving the older build.
+Production regression tests/CI are still important. I'd specifically make CI fail when src changed without rebuilding dist, because apparently humans cannot be trusted to remember generated bundles. A nasty-PDF corpus should also verify reading order, OCR fallback, tables, images, accessibility, query answers, page citations and bounding boxes.
+Priority now
+
+I wouldn't add more PDF extraction features yet. Your extraction system is already unusually broad. I'd finish these four layers:
+
+P0  Build/update dist automatically
+P0  Fix contextual query planning
+P1  Relationship + Concept Graph retrieval
+P1  Add headless createAccessibleView()
+
+then
+
+P1  Evidence fusion/ranking
+P1  Deterministic reasoning operators
+P2  IndexedDB persistence/caching
+P2  Full regression benchmark suite
+
+Once those are complete, the architecture becomes much more cohesive:
+
+PDF
+ ↓
+CODB-IR
+ ↓
+Document Graph
+ ├── structure
+ ├── entities
+ ├── tables
+ ├── images
+ ├── spatial relationships
+ └── provenance
+ ↓
+Concept Graph
+ ↓
+Query Planner
+ ↓
+Evidence Fusion
+ ↓
+Relationship Reasoning
+ ↓
+Answer / Search Result
+ ├── confidence
+ ├── explanation
+ ├── page
+ ├── bbox
+ └── source object
+ ↓
+Headless Accessible View
+ ↓
+React / Lovable / JS decides presentation
+
+That's the remaining path I'd concentrate on. You're no longer missing a mountain of PDF features. You're missing the orchestration layer that turns the mountain into one coherent engine.
