@@ -46,3 +46,35 @@ let fails=0;
 for (const [id,fn] of cases){ try{ const o=fn(); console.log(`PASS ${id} -> ${String(JSON.stringify(o)).slice(0,110)}`);}catch(e){fails++;console.log(`FAIL ${id} -> ${(e.stack||String(e)).split('\n').slice(0,2).join(' | ')}`);} }
 console.log('fails:',fails,'exports:',Object.keys(codbdocs).length);
 if (fails) process.exit(1);
+
+// DocAccess transcript conventions
+{
+  const ir = {
+    document: { metadata: { title: 'Doc' }, pages: ['page_1'] },
+    pages: { page_1: { num: 1, content: ['o1', 'o2'], complexity: 88 } },
+    objects: {
+      o1: { id: 'o1', type: 'text', bbox: [0, 0, 1, 1], semantic: { role: 'heading', level: 1, text: 'Title' } },
+      o2: { id: 'o2', type: 'image', bbox: [0, 5, 1, 1], accessibility: { alt: 'A map' }, semantic: { caption: 'Cap' } },
+    },
+    vectors: {},
+  };
+  const html = codbdocs.exportAccessibleHTML(ir, { transcriptNotice: 'Transcribed automatically.' });
+  const required = [
+    'class="docviewer-page-break"',
+    'data-page-number="1"',
+    'class="transcript-page pdf-page content"',
+    'role="group"',
+    'class="complexity-warning"',
+    'data-complexity-score="88"',
+    'data-el-num="1"',
+    'id="h-1"',
+    'class="transcript-page-image"',
+    'transcript-page-image-alt',
+    'aria-atomic="true"',
+    'class="sr-only visually-hidden transcript-notice"',
+  ];
+  const missing = required.filter((token) => !html.includes(token));
+  if (missing.length) throw new Error('transcript markup missing: ' + missing.join(', '));
+  if ((html.match(/<h1\b/g) || []).length !== 1) throw new Error('expected exactly one h1');
+  console.log('PASS docaccess-transcript-conventions');
+}

@@ -8296,6 +8296,11 @@ var CodbDocs = (() => {
       wrapImagesInFigures = true,
       includeDataAttributes: includeDataAttributes2 = true,
       includeStyles = true,
+      elementNumbering = true,
+      pageBreaks = true,
+      pageHeadings = false,
+      complexityWarnings = true,
+      transcriptNotice = "",
       customStyles = "",
       lang
     } = options;
@@ -8342,9 +8347,12 @@ ${customStyles}
       }
       html += "</header>\n";
     }
-    html += '<main id="main-content" role="main" aria-label="Document content">\n';
+    const elState = { enabled: elementNumbering, n: 0 };
+    html += '<main id="main-content" role="main" tabindex="-1" aria-label="Document container">\n';
     if (includeAriaLive) {
-      html += '  <div id="doc-status" role="status" aria-live="polite" class="visually-hidden"></div>\n';
+      const loadedMsg = `Document loaded: ${title}, ${ir.document.pages.length} page${ir.document.pages.length !== 1 ? "s" : ""}.`;
+      html += `  <div id="doc-status" role="status" aria-live="polite" aria-atomic="true" class="sr-only visually-hidden">${escapeHTML2(loadedMsg)}</div>
+`;
     }
     const pageCount = ir.document.pages.length;
     if (pageCount > 1) {
@@ -8360,26 +8368,45 @@ ${customStyles}
       html += "    </ul>\n";
       html += "  </nav>\n";
     }
-    let headingTracker = { current: 0, enforced: enforceHeadingHierarchy };
+    let headingTracker = { current: 0, enforced: enforceHeadingHierarchy, min: includeLandmarks ? 2 : 1 };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
       if (!page) continue;
       const pageNum = parseInt(pageId.split("_")[1]);
       const pageLabel = page.labels?.print || `Page ${pageNum}`;
-      const dataAttr = includeDataAttributes2 ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}"` : "";
-      html += `
-  <section id="${pageId}" class="pdf-page"${dataAttr} aria-label="${escapeHTML2(pageLabel)}">
+      const dataAttr = includeDataAttributes2 ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}" data-page-number="${pageNum}"` : ` data-page-number="${pageNum}"`;
+      if (pageBreaks) {
+        html += `
+  <hr class="docviewer-page-break" data-page-number="${pageNum}" aria-label="${escapeHTML2(pageLabel)}">
 `;
-      html += `    <h2 class="page-heading" aria-label="${escapeHTML2(pageLabel)}">${escapeHTML2(pageLabel)}</h2>
+      }
+      html += `  <section id="${pageId}" class="transcript-page pdf-page content"${dataAttr} tabindex="-1" role="group" aria-label="${escapeHTML2(pageLabel)}">
 `;
+      const complexity = page.complexity ?? page.analysis?.complexityScore ?? null;
+      const note = page.readabilityNote || page.analysis?.readabilityNote || "";
+      if (complexityWarnings && (note || typeof complexity === "number" && complexity >= 70)) {
+        const scoreAttr = typeof complexity === "number" ? ` data-complexity-score="${complexity}"` : "";
+        const text = note || `${pageLabel} is complex and may be difficult to understand. Its content was transcribed into reading order below.`;
+        html += `    <div class="complexity-warning" data-page-number="${pageNum}"${scoreAttr} data-readability-note="true">${escapeHTML2(text)}</div>
+`;
+      }
+      if (pageHeadings) {
+        html += `    <h2 class="page-heading">${escapeHTML2(pageLabel)}</h2>
+`;
+      }
       html += renderAccessiblePage(page, ir, {
         pageNum,
         includeDataAttributes: includeDataAttributes2,
         enforceHeadingHierarchy,
         headingTracker,
         wrapImagesInFigures,
-        mode
+        mode,
+        elState
       });
+      if (transcriptNotice) {
+        html += `    <p class="sr-only visually-hidden transcript-notice">${escapeHTML2(transcriptNotice)}</p>
+`;
+      }
       html += "  </section>\n";
     }
     html += "</main>\n";
@@ -8414,25 +8441,31 @@ ${customStyles}
     }
     return html;
   }
+  function nextEl(state) {
+    if (!state || !state.enabled) return "";
+    state.n = (state.n || 0) + 1;
+    state.last = state.n;
+    return ` data-el-num="${state.n}"`;
+  }
   function renderAccessiblePage(page, ir, opts) {
     let html = "";
-    const { pageNum, includeDataAttributes: includeDataAttributes2, enforceHeadingHierarchy, headingTracker, wrapImagesInFigures, mode } = opts;
+    const { pageNum, includeDataAttributes: includeDataAttributes2, enforceHeadingHierarchy, headingTracker, wrapImagesInFigures, mode, elState } = opts;
     const objects = (page.content || []).map((id) => ir.objects[id]).filter((obj) => obj && obj.bbox).sort((a, b) => {
       const yDiff = (a.bbox[1] || 0) - (b.bbox[1] || 0);
       if (Math.abs(yDiff) > 10) return yDiff;
       return (a.bbox[0] || 0) - (b.bbox[0] || 0);
     });
     for (const obj of objects) {
-      const dataAttr = includeDataAttributes2 ? ` data-pdf-object="${obj.id}"` : "";
+      const dataAttr = nextEl(elState) + (includeDataAttributes2 ? ` data-pdf-object="${obj.id}"` : "");
       switch (obj.semantic?.role) {
         case "heading":
           html += renderAccessibleHeading(obj, { dataAttr, headingTracker, enforceHeadingHierarchy });
           break;
         case "table":
-          html += renderAccessibleTable(obj, ir, { dataAttr, pageNum });
+          html += renderAccessibleTable(obj, ir, { dataAttr, pageNum, elState });
           break;
         case "list":
-          html += renderAccessibleList(obj, ir, { dataAttr });
+          html += renderAccessibleList(obj, ir, { dataAttr, elState });
           break;
         case "form_field":
           html += renderAccessibleFormField(obj, ir, { dataAttr });
@@ -8446,7 +8479,7 @@ ${customStyles}
           break;
         default:
           if (obj.type === "image") {
-            html += renderAccessibleImage(obj, { dataAttr, wrapImagesInFigures, mode });
+            html += renderAccessibleImage(obj, { dataAttr, wrapImagesInFigures, mode, elState });
           } else if (obj.type === "text") {
             html += renderAccessibleText(obj, { dataAttr });
           }
@@ -8457,7 +8490,7 @@ ${customStyles}
       const vec = ir.vectors[vecId];
       if (!vec) continue;
       if (vec.semantic?.role === "separator") {
-        const dataAttr = includeDataAttributes2 ? ` data-pdf-vector="${vec.id}"` : "";
+        const dataAttr = nextEl(elState) + (includeDataAttributes2 ? ` data-pdf-vector="${vec.id}"` : "");
         html += `    <hr${dataAttr} aria-hidden="true">
 `;
       }
@@ -8467,15 +8500,19 @@ ${customStyles}
   function renderAccessibleHeading(obj, opts) {
     const { dataAttr, headingTracker, enforceHeadingHierarchy } = opts;
     let level = obj.semantic?.level || 2;
+    const minLevel = headingTracker.min || 1;
+    if (level < minLevel) level = minLevel;
     if (enforceHeadingHierarchy) {
       if (level > headingTracker.current + 1 && headingTracker.current > 0) {
         level = headingTracker.current + 1;
       }
+      if (level > 6) level = 6;
       headingTracker.current = level;
     }
     const text = escapeHTML2(obj.semantic?.text || "");
     if (!text) return "";
-    const id = obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`;
+    const elNum = /data-el-num="(\d+)"/.exec(dataAttr)?.[1];
+    const id = elNum ? `h-${elNum}` : obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`;
     return `    <h${level} id="${id}"${dataAttr}>${text}</h${level}>
 `;
   }
@@ -8598,7 +8635,7 @@ ${customStyles}
     return html;
   }
   function renderAccessibleList(obj, ir, opts) {
-    const { dataAttr } = opts;
+    const { dataAttr, elState } = opts;
     const items = obj.semantic?.items || [];
     const ordered = obj.semantic?.ordered || false;
     const tag = ordered ? "ol" : "ul";
@@ -8607,13 +8644,13 @@ ${customStyles}
     if (items.length > 0) {
       for (const item of items) {
         const text = typeof item === "string" ? item : item?.text || "";
-        html += `      <li>${escapeHTML2(text)}</li>
+        html += `      <li${nextEl(elState)}>${escapeHTML2(text)}</li>
 `;
       }
     } else {
       const nearbyItems = findNearbyListItems(obj, ir);
       for (const text of nearbyItems) {
-        html += `      <li>${escapeHTML2(text)}</li>
+        html += `      <li${nextEl(elState)}>${escapeHTML2(text)}</li>
 `;
       }
     }
@@ -8714,18 +8751,26 @@ ${customStyles}
     const isDecorative = obj.accessibility?.decorative || !alt && !caption;
     const role = obj.accessibility?.role || obj.semantic?.role || "";
     const altAttr = isDecorative ? ' alt="" role="presentation"' : ` alt="${escapeHTML2(alt || caption || "Image")}"`;
+    const { elState } = opts;
+    const altText = alt || caption || "";
     let html = "";
     if (wrapImagesInFigures) {
       html += `    <figure${dataAttr}>
 `;
-      html += `      <img src="${escapeHTML2(src)}"${altAttr} loading="lazy">
+      html += '      <span class="transcript-page-image">\n';
+      html += `        <img src="${escapeHTML2(src)}"${altAttr} loading="lazy">
 `;
+      if (!isDecorative && altText) {
+        html += `        <span class="transcript-page-image-alt" aria-hidden="true">${escapeHTML2(altText)}</span>
+`;
+      }
+      html += "      </span>\n";
       if (caption) {
-        html += `      <figcaption>${escapeHTML2(caption)}</figcaption>
+        html += `      <figcaption${nextEl(elState)}>${escapeHTML2(caption)}</figcaption>
 `;
       }
       if (role) {
-        html += `      <span class="image-role visually-hidden">${escapeHTML2(role)}</span>
+        html += `      <span class="image-role sr-only visually-hidden">${escapeHTML2(role)}</span>
 `;
       }
       html += "    </figure>\n";
@@ -8765,10 +8810,26 @@ ${customStyles}
     .skip-page-nav:focus-within { top: 40px; }
 
     /* Visually hidden (screen reader only) */
+    .sr-only,
     .visually-hidden {
       position: absolute; width: 1px; height: 1px;
       padding: 0; margin: -1px; overflow: hidden;
       clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    /* Transcript pages */
+    .docviewer-page-break {
+      border: 0; border-top: 1px dashed #94a3b8; margin: 32px 0 8px;
+    }
+    .transcript-page { padding: 0 20px 24px; }
+    .transcript-page:focus-visible { outline: 3px solid #ff6b00; outline-offset: 4px; }
+    .complexity-warning {
+      border-left: 4px solid #b45309; background: #fffbeb; color: #4a3208;
+      padding: 12px 16px; margin: 0 0 16px; border-radius: 4px;
+    }
+    .transcript-page-image { display: block; }
+    .transcript-page-image-alt {
+      display: block; font-size: 0.9rem; color: #3f3f46; margin-top: 4px;
     }
 
     /* Header */

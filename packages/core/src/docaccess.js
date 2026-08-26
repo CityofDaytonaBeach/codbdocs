@@ -426,6 +426,11 @@ export function exportAccessibleHTML(ir, options = {}) {
     wrapImagesInFigures = true,
     includeDataAttributes = true,
     includeStyles = true,
+    elementNumbering = true,
+    pageBreaks = true,
+    pageHeadings = false,
+    complexityWarnings = true,
+    transcriptNotice = '',
     customStyles = '',
     lang,
   } = options;
@@ -473,11 +478,14 @@ export function exportAccessibleHTML(ir, options = {}) {
   }
 
   // ─── Main Content ─────────────────────────────────────────────────────
-  html += '<main id="main-content" role="main" aria-label="Document content">\n';
+  const elState = { enabled: elementNumbering, n: 0 };
+
+  html += '<main id="main-content" role="main" tabindex="-1" aria-label="Document container">\n';
 
   // ─── ARIA Live Region ─────────────────────────────────────────────────
   if (includeAriaLive) {
-    html += '  <div id="doc-status" role="status" aria-live="polite" class="visually-hidden"></div>\n';
+    const loadedMsg = `Document loaded: ${title}, ${ir.document.pages.length} page${ir.document.pages.length !== 1 ? 's' : ''}.`;
+    html += `  <div id="doc-status" role="status" aria-live="polite" aria-atomic="true" class="sr-only visually-hidden">${escapeHTML(loadedMsg)}</div>\n`;
   }
 
   // ─── Page Navigation ──────────────────────────────────────────────────
@@ -496,7 +504,8 @@ export function exportAccessibleHTML(ir, options = {}) {
   }
 
   // ─── Render Pages ─────────────────────────────────────────────────────
-  let headingTracker = { current: 0, enforced: enforceHeadingHierarchy };
+  // A banner <h1> already carries the document title, so content headings start at h2.
+  let headingTracker = { current: 0, enforced: enforceHeadingHierarchy, min: includeLandmarks ? 2 : 1 };
 
   for (const pageId of ir.document.pages) {
     const page = ir.pages[pageId];
@@ -504,12 +513,30 @@ export function exportAccessibleHTML(ir, options = {}) {
 
     const pageNum = parseInt(pageId.split('_')[1]);
     const pageLabel = page.labels?.print || `Page ${pageNum}`;
-    const dataAttr = includeDataAttributes ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}"` : '';
+    const dataAttr = includeDataAttributes
+      ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}" data-page-number="${pageNum}"`
+      : ` data-page-number="${pageNum}"`;
 
-    html += `\n  <section id="${pageId}" class="pdf-page"${dataAttr} aria-label="${escapeHTML(pageLabel)}">\n`;
+    // Page break marker (announced, matches transcript viewer conventions)
+    if (pageBreaks) {
+      html += `\n  <hr class="docviewer-page-break" data-page-number="${pageNum}" aria-label="${escapeHTML(pageLabel)}">\n`;
+    }
 
-    // Page heading
-    html += `    <h2 class="page-heading" aria-label="${escapeHTML(pageLabel)}">${escapeHTML(pageLabel)}</h2>\n`;
+    html += `  <section id="${pageId}" class="transcript-page pdf-page content"${dataAttr} tabindex="-1" role="group" aria-label="${escapeHTML(pageLabel)}">\n`;
+
+    // Complexity / readability warning
+    const complexity = page.complexity ?? page.analysis?.complexityScore ?? null;
+    const note = page.readabilityNote || page.analysis?.readabilityNote || '';
+    if (complexityWarnings && (note || (typeof complexity === 'number' && complexity >= 70))) {
+      const scoreAttr = typeof complexity === 'number' ? ` data-complexity-score="${complexity}"` : '';
+      const text = note || `${pageLabel} is complex and may be difficult to understand. Its content was transcribed into reading order below.`;
+      html += `    <div class="complexity-warning" data-page-number="${pageNum}"${scoreAttr} data-readability-note="true">${escapeHTML(text)}</div>\n`;
+    }
+
+    // Optional page heading (off by default so document headings keep their own hierarchy)
+    if (pageHeadings) {
+      html += `    <h2 class="page-heading">${escapeHTML(pageLabel)}</h2>\n`;
+    }
 
     html += renderAccessiblePage(page, ir, {
       pageNum,
@@ -518,7 +545,12 @@ export function exportAccessibleHTML(ir, options = {}) {
       headingTracker,
       wrapImagesInFigures,
       mode,
+      elState,
     });
+
+    if (transcriptNotice) {
+      html += `    <p class="sr-only visually-hidden transcript-notice">${escapeHTML(transcriptNotice)}</p>\n`;
+    }
 
     html += '  </section>\n';
   }
@@ -564,11 +596,20 @@ function generateSkipNav(ir) {
   return html;
 }
 
+// ─── Element numbering (stable per-element addressing) ───────────────────────
+
+function nextEl(state) {
+  if (!state || !state.enabled) return '';
+  state.n = (state.n || 0) + 1;
+  state.last = state.n;
+  return ` data-el-num="${state.n}"`;
+}
+
 // ─── Accessible Page Rendering ────────────────────────────────────────────────
 
 function renderAccessiblePage(page, ir, opts) {
   let html = '';
-  const { pageNum, includeDataAttributes, enforceHeadingHierarchy, headingTracker, wrapImagesInFigures, mode } = opts;
+  const { pageNum, includeDataAttributes, enforceHeadingHierarchy, headingTracker, wrapImagesInFigures, mode, elState } = opts;
 
   // Collect all renderable objects sorted by position
   const objects = (page.content || [])
@@ -582,7 +623,7 @@ function renderAccessiblePage(page, ir, opts) {
     });
 
   for (const obj of objects) {
-    const dataAttr = includeDataAttributes ? ` data-pdf-object="${obj.id}"` : '';
+    const dataAttr = nextEl(elState) + (includeDataAttributes ? ` data-pdf-object="${obj.id}"` : '');
 
     switch (obj.semantic?.role) {
       case 'heading':
@@ -590,11 +631,11 @@ function renderAccessiblePage(page, ir, opts) {
         break;
 
       case 'table':
-        html += renderAccessibleTable(obj, ir, { dataAttr, pageNum });
+        html += renderAccessibleTable(obj, ir, { dataAttr, pageNum, elState });
         break;
 
       case 'list':
-        html += renderAccessibleList(obj, ir, { dataAttr });
+        html += renderAccessibleList(obj, ir, { dataAttr, elState });
         break;
 
       case 'form_field':
@@ -611,7 +652,7 @@ function renderAccessiblePage(page, ir, opts) {
 
       default:
         if (obj.type === 'image') {
-          html += renderAccessibleImage(obj, { dataAttr, wrapImagesInFigures, mode });
+          html += renderAccessibleImage(obj, { dataAttr, wrapImagesInFigures, mode, elState });
         } else if (obj.type === 'text') {
           html += renderAccessibleText(obj, { dataAttr });
         }
@@ -624,7 +665,7 @@ function renderAccessiblePage(page, ir, opts) {
     const vec = ir.vectors[vecId];
     if (!vec) continue;
     if (vec.semantic?.role === 'separator') {
-      const dataAttr = includeDataAttributes ? ` data-pdf-vector="${vec.id}"` : '';
+      const dataAttr = nextEl(elState) + (includeDataAttributes ? ` data-pdf-vector="${vec.id}"` : '');
       html += `    <hr${dataAttr} aria-hidden="true">\n`;
     }
   }
@@ -638,18 +679,23 @@ function renderAccessibleHeading(obj, opts) {
   const { dataAttr, headingTracker, enforceHeadingHierarchy } = opts;
   let level = obj.semantic?.level || 2;
 
+  const minLevel = headingTracker.min || 1;
+  if (level < minLevel) level = minLevel;
+
   if (enforceHeadingHierarchy) {
     // Enforce proper nesting: never skip levels
     if (level > headingTracker.current + 1 && headingTracker.current > 0) {
       level = headingTracker.current + 1;
     }
+    if (level > 6) level = 6;
     headingTracker.current = level;
   }
 
   const text = escapeHTML(obj.semantic?.text || '');
   if (!text) return '';
 
-  const id = obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`;
+  const elNum = /data-el-num="(\d+)"/.exec(dataAttr)?.[1];
+  const id = elNum ? `h-${elNum}` : (obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`);
   return `    <h${level} id="${id}"${dataAttr}>${text}</h${level}>\n`;
 }
 
@@ -799,7 +845,7 @@ function renderTableFromNearbyText(obj, ir, pageNum) {
 // ─── List Rendering ───────────────────────────────────────────────────────────
 
 function renderAccessibleList(obj, ir, opts) {
-  const { dataAttr } = opts;
+  const { dataAttr, elState } = opts;
   const items = obj.semantic?.items || [];
   const ordered = obj.semantic?.ordered || false;
   const tag = ordered ? 'ol' : 'ul';
@@ -809,13 +855,13 @@ function renderAccessibleList(obj, ir, opts) {
   if (items.length > 0) {
     for (const item of items) {
       const text = typeof item === 'string' ? item : item?.text || '';
-      html += `      <li>${escapeHTML(text)}</li>\n`;
+      html += `      <li${nextEl(elState)}>${escapeHTML(text)}</li>\n`;
     }
   } else {
     // Try to find list items from nearby text objects
     const nearbyItems = findNearbyListItems(obj, ir);
     for (const text of nearbyItems) {
-      html += `      <li>${escapeHTML(text)}</li>\n`;
+      html += `      <li${nextEl(elState)}>${escapeHTML(text)}</li>\n`;
     }
   }
 
@@ -934,15 +980,23 @@ function renderAccessibleImage(obj, opts) {
 
   const altAttr = isDecorative ? ' alt="" role="presentation"' : ` alt="${escapeHTML(alt || caption || 'Image')}"`;
 
+  const { elState } = opts;
+  const altText = alt || caption || '';
+
   let html = '';
   if (wrapImagesInFigures) {
     html += `    <figure${dataAttr}>\n`;
-    html += `      <img src="${escapeHTML(src)}"${altAttr} loading="lazy">\n`;
+    html += '      <span class="transcript-page-image">\n';
+    html += `        <img src="${escapeHTML(src)}"${altAttr} loading="lazy">\n`;
+    if (!isDecorative && altText) {
+      html += `        <span class="transcript-page-image-alt" aria-hidden="true">${escapeHTML(altText)}</span>\n`;
+    }
+    html += '      </span>\n';
     if (caption) {
-      html += `      <figcaption>${escapeHTML(caption)}</figcaption>\n`;
+      html += `      <figcaption${nextEl(elState)}>${escapeHTML(caption)}</figcaption>\n`;
     }
     if (role) {
-      html += `      <span class="image-role visually-hidden">${escapeHTML(role)}</span>\n`;
+      html += `      <span class="image-role sr-only visually-hidden">${escapeHTML(role)}</span>\n`;
     }
     html += '    </figure>\n';
   } else {
@@ -989,10 +1043,26 @@ function generateAccessibleStyles() {
     .skip-page-nav:focus-within { top: 40px; }
 
     /* Visually hidden (screen reader only) */
+    .sr-only,
     .visually-hidden {
       position: absolute; width: 1px; height: 1px;
       padding: 0; margin: -1px; overflow: hidden;
       clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    /* Transcript pages */
+    .docviewer-page-break {
+      border: 0; border-top: 1px dashed #94a3b8; margin: 32px 0 8px;
+    }
+    .transcript-page { padding: 0 20px 24px; }
+    .transcript-page:focus-visible { outline: 3px solid #ff6b00; outline-offset: 4px; }
+    .complexity-warning {
+      border-left: 4px solid #b45309; background: #fffbeb; color: #4a3208;
+      padding: 12px 16px; margin: 0 0 16px; border-radius: 4px;
+    }
+    .transcript-page-image { display: block; }
+    .transcript-page-image-alt {
+      display: block; font-size: 0.9rem; color: #3f3f46; margin-top: 4px;
     }
 
     /* Header */
