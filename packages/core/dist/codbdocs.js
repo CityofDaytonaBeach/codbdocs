@@ -6698,7 +6698,11 @@ var CodbDocs = (() => {
         }
       }
     }
-    for (const page of pages || []) {
+    const __pages = (contentGraph && contentGraph.pages || []).map((p) => ({
+      pageNum: p.page,
+      text: (p.blocks || []).map((b) => b.text || "").join("\n")
+    }));
+    for (const page of __pages) {
       const text = page.text || "";
       const acronyms = detectAcronyms(text);
       for (const acr of acronyms) {
@@ -10626,5 +10630,10 @@ ${p.text}`).join("\n\n")
   }
   var CodbDocs = { load, configure, canUseWorkers };
   var index_default = CodbDocs;
-  return __toCommonJS(index_exports);
+  var __ns = __toCommonJS(index_exports);
+  __ns.load = load;
+  __ns.configure = configure;
+  __ns.canUseWorkers = canUseWorkers;
+  return __ns;
 })();
+

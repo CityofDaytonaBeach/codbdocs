@@ -1754,6 +1754,7 @@ async function renderPageToCanvas(page, scale) {
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
+export { load, configure, canUseWorkers };
 export const CodbDocs = { load, configure, canUseWorkers };
 export default CodbDocs;
 
