@@ -1,401 +1,246 @@
-check
-RAG-aware chunking	⚠️ Not complete
-Embedding model	❌
-Embedding vectors	❌
-Cosine/vector similarity	❌
-Vector index/store	❌
-Hybrid BM25 + vector retrieval	❌
-Reranking	❌
-LLM generation with retrieved context	❌
-Source/page citations in RAG answers	⚠️ Foundation exists
+Quite a few. PDF is less a document format and more a box containing 30 years of questionable decisions. If you're building CODB Docs as a document-intelligence engine, these are exactly the failures worth targeting because many tools successfully "open" a PDF while extracting the wrong meaning.
 
-For CODB Docs, I'd build this directly into the document pipeline.
+High-value PDF failures to detect
+Failure	What commonly happens	What CODB Docs should detect/do
+Wrong reading order	Multi-column text gets mixed together	Reconstruct order spatially and structurally
+Text exists but is invisible	Hidden OCR/text layer is extracted instead of visible content	Compare rendered page against text layer
+Bad OCR layer	PDF has searchable text, but it's garbage	Score native-text quality and automatically re-OCR
+Duplicate OCR text	Visible text + hidden OCR produces duplicates	Spatially deduplicate overlapping text
+Scanned pages mixed with native pages	Some pages work, others silently return nothing	Detect extraction quality per page
+Rotated scans	OCR produces nonsense	Detect orientation and normalize before OCR
+Skewed scans	OCR accuracy collapses	Deskew automatically
+Text encoded as glyphs	Viewer shows words, extraction gives garbage	Glyph/font mapping + visual/OCR fallback
+Missing ToUnicode map	Copy/paste produces nonsense	Detect invalid Unicode mappings
+Outlined text	Letters are vector paths, not text	Detect text-like vector geometry + OCR
+Flattened forms	Form looks completed but fields no longer exist	Visually recover labels/values
+Checkboxes/radio buttons	Extraction misses selected state	Detect marks spatially
+Signatures	Signature image gets ignored	Detect signature regions and associate them with nearby labels
+Tables without structure	Extractor returns a pile of words	Reconstruct rows/columns/cells geometrically
+Tables across pages	Each page becomes an unrelated table	Recognize continuation and merge logical table
+Merged cells	Column relationships get destroyed	Infer spanning cells geometrically
+Charts	Text extracted but actual values/trends lost	Chart-specific visual analysis
+Diagrams	Labels survive, relationships disappear	Build nodes + connectors + spatial relationships
+Maps/site plans	OCR gets street names but loses geographic meaning	Preserve labels, regions, legends and relationships
+Images without captions	Image is completely invisible to RAG	Extract image + infer context + optional vision
+Caption detached from image	Caption becomes unrelated paragraph	Associate caption spatially
+Headers/footers	Pollute every RAG chunk	Detect repeated page elements
+Watermarks	"DRAFT" appears 100 times in extraction	Detect repeated/background text
+Footnotes	Inserted randomly into main paragraphs	Preserve footnote references and relationships
+Hyphenation	govern- ment becomes separate terms	Reconstruct words intelligently
+Ligatures	fi, ff, etc. become bad Unicode	Normalize glyphs
+Clipped text	Text object exists but isn't actually visible	Compare clipping/render state
+Redactions	Hidden underlying text may still be extractable	Detect visual redaction vs underlying content
+Annotations	Comments/stamps aren't included	Extract annotations separately
+Attachments	Embedded files disappear	Enumerate embedded attachments
+Layers/OCGs	Hidden CAD/map layers confuse extraction	Understand visible/hidden layer state
+Broken tags	Claims to be accessible but structure is nonsense	Validate tags against actual page content
+Fake headings	Large bold text isn't tagged as heading	Infer semantic headings
+Incorrect language metadata	Screen readers/OCR use wrong language	Detect probable language
+Malformed PDFs	One library refuses to open them	Recovery/repair path
+Incremental updates	Old objects remain inside file	Distinguish active revision from stale objects
+One of the biggest failures: "searchable" doesn't mean correct
 
-Recommended architecture
-PDF
- │
- ▼
-PDF.js
- │
- ├──────────── Text
- │
- ├──────────── Vector graphics
- │
- └──────────── Images
-                  │
-                  ▼
-             Extract Image
-                  │
-          ┌───────┴────────┐
-          ▼                ▼
-       Base64/Blob      Image Pixels
-       transport           │
-                           ▼
-                    Vision Analyzer
-                           │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-            OCR         Caption      Objects
-              │            │            │
-              └────────────┼────────────┘
-                           ▼
-                    Image Semantic IR
-                           │
-                           ▼
-                    Document Graph
-                           │
-                           ▼
-                         RAG
+Imagine the page visibly says:
 
-The important idea is that the RAG system shouldn't retrieve Base64. It should retrieve a semantic description of the image.
+Contract Amount: $2,475,000
 
-For example, suppose page 14 contains a photograph of flooding around a roadway.
+but its hidden OCR layer contains:
 
-CODB Docs could produce:
+Contract Arnount: $2475OOO
 
-{
-  "id": "image_page14_2",
-  "type": "image",
-  "page": 14,
+Most extractors see text and conclude:
 
-  "bbox": [82, 214, 510, 480],
+✓ Native text available
 
-  "caption": "Photograph showing roadway flooding",
+Then RAG indexes garbage.
 
-  "description":
-    "Street-level photograph showing standing water covering approximately half of the roadway near a residential intersection.",
+CODB Docs should calculate something like:
 
-  "objects": [
-    "road",
-    "standing water",
-    "vehicle",
-    "houses",
-    "storm drain"
-  ],
+page.quality = {
+  nativeText: 0.42,
+  unicode: 0.91,
+  readingOrder: 0.76,
+  visualAgreement: 0.38,
+  ocrRecommended: true
+};
 
-  "ocr": [
-    "FLOOD ZONE",
-    "Atlantic Ave"
-  ],
+Instead of asking only:
 
-  "context": {
-    "heading": "Existing Drainage Conditions",
-    "before": "Current drainage deficiencies are shown below.",
-    "after": "Proposed improvements will increase stormwater capacity."
-  }
-}
+if (text.length > 20)
 
-Now your text-only model can understand the image because it receives:
+which your current implementation essentially uses as the native-text/OCR decision threshold.
 
-Page 14 contains a street-level photograph showing standing water covering approximately half of a roadway near a residential intersection...
+That is something I would change.
 
-That's vastly better than feeding it:
+Use:
 
-/9j/4AAQSkZJRgABAQEASABIAAD...
-But I would go further
+Should OCR?
+    │
+    ├── no native text
+    ├── suspicious Unicode
+    ├── abnormal character distribution
+    ├── poor word formation
+    ├── broken reading order
+    ├── text/render disagreement
+    ├── missing expected visible regions
+    └── extremely low semantic coherence
+Another huge one: visible PDF vs internal PDF
 
-The surrounding PDF content should participate in understanding the image.
+I'd make CODB Docs maintain two concepts:
 
-Suppose the image itself is ambiguous:
+PDF INTERNAL REPRESENTATION
+           │
+           │ compare
+           ▼
+RENDERED VISUAL REPRESENTATION
 
-[image of construction equipment]
+Then flag discrepancies.
 
-A generic vision model might produce:
-
-"Excavator at a construction site."
-
-But CODB Docs knows the image appears under:
-
-Proposed Lift Station Improvements
-
-and immediately below:
-
-Figure 4. Replacement of existing 12-inch force main.
-
-Now you can construct:
-
-IMAGE PIXELS
-     +
-OCR INSIDE IMAGE
-     +
-IMAGE CAPTION
-     +
-NEAREST HEADING
-     +
-TEXT ABOVE
-     +
-TEXT BELOW
-     +
-PAGE CLASSIFICATION
-     +
-DOCUMENT TYPE
-     ↓
-Image Understanding
-
-That could produce a much better representation:
-
-Construction photograph associated with the proposed lift station improvements and replacement of the existing 12-inch force main.
-
-That contextual fusion is worth building.
-
-For diagrams and charts
-
-Don't rely exclusively on image captioning.
-
-Different visual types need different analysis:
-
-Image detected
-      ↓
-Visual classification
-      │
- ┌────┼────────┬─────────┬─────────┐
- ▼    ▼        ▼         ▼         ▼
-Photo Chart   Diagram    Map      Scan
- │     │        │         │         │
-Vision Chart   OCR +      OCR +     OCR
-model  parser  geometry   spatial
-
-A chart should become structured data:
+For example:
 
 {
-  "type": "chart",
-  "chartType": "bar",
-  "title": "Annual Water Consumption",
-  "xAxis": "Year",
-  "yAxis": "Gallons",
-  "series": [
+  page: 17,
+
+  internal: {
+    textObjects: 482,
+    images: 3,
+    vectors: 912
+  },
+
+  visual: {
+    textRegions: 31,
+    imageRegions: 4,
+    tableRegions: 1
+  },
+
+  anomalies: [
     {
-      "year": 2024,
-      "value": 4200000
+      type: "hidden_text",
+      severity: "warning"
     },
     {
-      "year": 2025,
-      "value": 3900000
+      type: "unrecognized_image",
+      bbox: [...]
     }
   ]
 }
 
-A text-only LLM can reason over that beautifully.
+That starts getting genuinely interesting.
 
-And maps
+RAG-specific failures are even nastier
 
-For a map:
+A PDF can extract perfectly and still produce terrible RAG.
 
-{
-  "type": "map",
-  "title": "Project Location",
-  "labels": [
-    "Atlantic Avenue",
-    "Main Street",
-    "Project Area"
-  ],
-  "description":
-    "Project area highlighted east of Atlantic Avenue near Main Street."
-}
-Keep Base64, but don't index it
+Consider:
 
-I'd absolutely allow:
+SECTION 4
+PROPOSED CONTRACT
 
-image.base64
+Vendor:
+ABC Construction
 
-because it's convenient for sending the original image to:
+Original Amount:
+$1,800,000
 
-OpenAI vision
-Gemini
-local vision models
-Ollama vision models
-your own endpoint
+Change Order:
+$350,000
 
-But your RAG index should contain:
+REVISED CONTRACT VALUE
+$2,150,000
 
-image.semantic
+A dumb chunker might create:
 
-rather than:
+Chunk 41:
+Vendor ABC Construction Original Amount $1,800,000
 
-image.base64
+Chunk 42:
+Change Order $350,000 Revised Contract Value
+
+Chunk 43:
+$2,150,000
+
+Then ask:
+
+"What's the revised contract amount?"
+
+Embedding retrieval might retrieve Chunk 42 but not Chunk 43 containing the answer.
+
+Your structural system can instead preserve:
+
+SECTION
+  │
+  ├── Vendor
+  │      ABC Construction
+  │
+  ├── Original Amount
+  │      $1,800,000
+  │
+  ├── Change Order
+  │      $350,000
+  │
+  └── Revised Contract Value
+         $2,150,000
+
+Then your retrieval unit isn't merely a text chunk. It's a semantic document object.
+
+That's where CODB Docs can differentiate.
+
+I'd add a PDF "health scan"
 
 Something like:
 
-{
-  id,
-  page,
-  bbox,
+const report = await doc.diagnose();
 
-  // binary representation
-  blob,
-  base64,
-
-  // intelligence
-  type,
-  caption,
-  description,
-  ocr,
-  objects,
-  entities,
-
-  // document context
-  heading,
-  nearbyText,
-
-  // retrieval
-  fingerprint,
-  embedding
-}
-
-Then you get something rather powerful:
-
-const results = await doc.search(
-  "Show me where the flooding is"
-);
-
-CODB Docs could return:
-
-Page 14
-Image 2
-94% relevance
-
-"Photograph showing roadway flooding near
-Atlantic Avenue..."
-
-Click it and:
-
-PDF Viewer
-   ↓
-Page 14
-   ↓
-scroll to image
-   ↓
-highlight image bounding box
-For a completely text-only AI
-
-This is where your architecture becomes particularly useful.
-
-You can effectively give a text-only model "vision" through preprocessing:
-
-                  CODB DOCS
-                     │
-        ┌────────────┴─────────────┐
-        │                          │
-      TEXT                       VISUAL
-        │                          │
-        │                    ┌─────┴─────┐
-        │                    │           │
-        │                  Images     Graphics
-        │                    │           │
-        │                  Vision      Analysis
-        │                    │           │
-        │                  OCR        Structure
-        │                    │           │
-        └──────────────┬─────┴───────────┘
-                       ▼
-                   CODB-IR
-                       │
-                       ▼
-              Everything becomes
-               semantic information
-                       │
-                       ▼
-                 Text-only LLM
-
-The LLM doesn't need to see pixels.
-
-CODB Docs becomes its document perception layer.
-
-That's a much more interesting direction than merely storing Base64. Base64 should be the escape hatch for sending pixels to a vision system; CODB-IR should store what those pixels mean.
-
-so repull my source and see if its added
-
-I repulled the current main source from GitHub. No, the image-semantic/base64 system we discussed has not been added to the built packages/core/dist/codbdocs.js yet.
-
-The current build SHA is still:
-
-f551736d81a4239bc51f7e91677b49b95056ccfb
-
-and it still describes the architecture as:
-
-PDF-aware → Vision-aware → Content-aware
-
-with enableVisual: false by default.
-
-I also searched the repository for the expected new concepts such as:
-
-image
-base64
-caption
-vision
-semantic
-ImageGraph
-extractImages
-
-and didn't find the new implementation.
-
-So the specific functionality we discussed is not present yet, namely:
-
-extracting embedded PDF images as Blob/Base64
-assigning each image a page + bounding box
-distinguishing photo/chart/map/diagram/logo/signature
-OCR specifically against extracted images
-generating semantic image descriptions
-associating nearby headings/captions/text with an image
-creating an ImageIR/visual semantic representation
-embedding the image description for RAG
-retrieving images from natural-language questions
-passing Base64/pixels to an optional vision provider
-letting a text-only model consume the resulting semantic description
-
-The current build does have its earlier visual-analysis foundation, but that's not the same thing as the image intelligence layer we're describing.
-
-The target API I'd add is essentially:
-
-const doc = await CodbDocs.load(file);
-
-const graph = await doc.analyze({
-  ocr: true,
-  visual: true,
-  images: true
-});
-
-const images = graph.getImages();
-
-with an image returning something like:
+returning:
 
 {
-  id: "image_page_4_1",
-  page: 4,
+  score: 72,
 
-  bbox: [82, 214, 510, 480],
+  pages: 186,
 
-  mimeType: "image/jpeg",
-
-  blob: Blob,
-  base64: "...",
-
-  type: "photo",
-
-  caption: "Existing drainage conditions",
-
-  description:
-    "Photograph showing standing water covering a roadway.",
-
-  ocr: [
-    "Atlantic Avenue"
-  ],
-
-  objects: [
-    "road",
-    "water",
-    "vehicle"
-  ],
-
-  context: {
-    heading: "Existing Drainage Conditions",
-    before: "...",
-    after: "..."
+  issues: {
+    scannedPages: 14,
+    brokenTextPages: 3,
+    readingOrderProblems: 7,
+    duplicateText: 2,
+    untaggedTables: 11,
+    unrecognizedImages: 23,
+    suspiciousOCR: 4,
+    accessibilityFailures: 31
   },
 
-  retrievalText:
-    "Existing drainage conditions. Photograph showing standing water..."
+  ragReadiness: {
+    score: 68,
+    searchable: true,
+    needsOCR: true,
+    needsImageAnalysis: true,
+    needsStructureRepair: true
+  }
 }
 
-Then the RAG layer can treat text, tables, charts, diagrams, maps and photographs as retrievable document objects, instead of pretending a PDF is just a very inconvenient .txt file.
+And then the rather satisfying:
 
+const repaired =
+  await doc.normalize({
+    readingOrder: true,
+    ocr: "auto",
+    deduplicate: true,
+    tables: true,
+    images: true,
+    structure: true
+  });
+The bigger opportunity
+
+Don't just make CODB Docs answer:
+
+"Can I extract text from this PDF?"
+
+Make it answer:
+
+"Can an AI accurately understand this document?"
+
+Those are radically different questions.
+
+A PDF can be technically valid, searchable, accessible to PDF.js, and still be terrible AI input.
+
+I'd therefore make ragReadiness, extraction confidence, visual/text agreement, structural integrity, image understanding, reading-order confidence, and evidence traceability first-class CODB Docs concepts. That would fit the architecture you're building far better than chasing another generic PDF-to-text extracto
