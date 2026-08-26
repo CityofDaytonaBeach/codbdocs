@@ -1361,43 +1361,47 @@ var CodbDocs = (() => {
 
   // src/query.js
   var QUERY_PATTERNS = [
-    // Dates
-    { patterns: [/what\s+date|when|dates?\s+mentioned|date\s+of/i], entityType: EntityTypes.DATE, label: "dates" },
-    // People
-    { patterns: [/who|person|people|names?|author|prepared\s+by|signed\s+by/i], entityType: EntityTypes.PERSON, label: "people" },
+    // Dates - only match when specifically asking about dates
+    { patterns: [/^what\s+date|^when\s+(?:was|did|is)|dates?\s+mentioned|^date\s+of/i], entityType: EntityTypes.DATE, label: "dates" },
+    // People - only match when specifically asking about people (not "who approved" which is relationship)
+    { patterns: [/^(?:who\s+is|who\s+are|person|people|names?|author|prepared\s+by|signed\s+by)(?:\s|$)/i], entityType: EntityTypes.PERSON, label: "people" },
     // Organizations
-    { patterns: [/organization|company|department|agency|city/i], entityType: EntityTypes.ORGANIZATION, label: "organizations" },
-    // Money
-    { patterns: [/how\s+much|money|amount|cost|price|total|budget|fund|currency|\$/i], entityType: EntityTypes.CURRENCY, label: "amounts" },
+    { patterns: [/^(?:organization|company|department|agency|city)(?:\s|$)|which\s+(?:organization|company|department)/i], entityType: EntityTypes.ORGANIZATION, label: "organizations" },
+    // Money - only match when specifically asking about amounts (not "how much did X cost" which is relationship)
+    { patterns: [/^(?:how\s+much\s+(?:is|are|was|were|does|do|did)\s+the|money|amount|cost|price|total|budget|fund|currency|\$)/i], entityType: EntityTypes.CURRENCY, label: "amounts" },
     // Phone
-    { patterns: [/phone|call|contact|number|telephone/i], entityType: EntityTypes.PHONE, label: "phone numbers" },
+    { patterns: [/^(?:phone|call|contact|telephone)(?:\s|$)|what\s+(?:is\s+the\s+)?phone/i], entityType: EntityTypes.PHONE, label: "phone numbers" },
     // Email
-    { patterns: [/email|e-mail|electronic\s+mail/i], entityType: EntityTypes.EMAIL, label: "emails" },
+    { patterns: [/^(?:email|e-mail|electronic\s+mail)(?:\s|$)|what\s+(?:is\s+the\s+)?email/i], entityType: EntityTypes.EMAIL, label: "emails" },
     // Address
-    { patterns: [/address|location|where|street|avenue|city|zip/i], entityType: EntityTypes.ADDRESS, label: "addresses" },
+    { patterns: [/^(?:address|location|where|street|avenue|city|zip)(?:\s|$)|what\s+(?:is\s+the\s+)?address/i], entityType: EntityTypes.ADDRESS, label: "addresses" },
     // Tables
-    { patterns: [/table|data|spreadsheet|grid|column/i], blockType: BlockTypes.TABLE, label: "tables" },
+    { patterns: [/^(?:table|data|spreadsheet|grid|column)(?:\s|$)|show\s+(?:me\s+)?(?:the\s+)?table/i], blockType: BlockTypes.TABLE, label: "tables" },
     // Forms
-    { patterns: [/form|field|input|application|fill|checkbox/i], blockType: BlockTypes.FORM_FIELD, label: "form fields" },
+    { patterns: [/^(?:form|field|input|application|fill|checkbox)(?:\s|$)|show\s+(?:me\s+)?(?:the\s+)?form/i], blockType: BlockTypes.FORM_FIELD, label: "form fields" },
     // Headings
-    { patterns: [/heading|title|section|chapter|outline|toc/i], blockType: BlockTypes.HEADING, label: "headings" },
+    { patterns: [/^(?:heading|title|section|chapter|outline|toc)(?:\s|$)|list\s+(?:the\s+)?(?:sections|headings)/i], blockType: BlockTypes.HEADING, label: "headings" },
     // Lists
-    { patterns: [/list|items|bullet|numbered/i], blockType: BlockTypes.LIST, label: "lists" },
+    { patterns: [/^(?:list|items|bullet|numbered)(?:\s|$)|show\s+(?:me\s+)?(?:the\s+)?list/i], blockType: BlockTypes.LIST, label: "lists" },
     // Signatures
-    { patterns: [/signature|signed|sign\s*here/i], blockType: BlockTypes.SIGNATURE, label: "signatures" },
+    { patterns: [/^(?:signature|signed|sign\s*here)(?:\s|$)|where\s+(?:is\s+the\s+)?signature/i], blockType: BlockTypes.SIGNATURE, label: "signatures" },
     // Ordinances
-    { patterns: [/ordinance/i], entityType: EntityTypes.ORDINANCE_NUMBER, label: "ordinances" },
+    { patterns: [/^(?:ordinance)(?:\s|$)|which\s+ordinance/i], entityType: EntityTypes.ORDINANCE_NUMBER, label: "ordinances" },
     // Resolutions
-    { patterns: [/resolution/i], entityType: EntityTypes.RESOLUTION_NUMBER, label: "resolutions" },
+    { patterns: [/^(?:resolution)(?:\s|$)|which\s+resolution/i], entityType: EntityTypes.RESOLUTION_NUMBER, label: "resolutions" },
     // Permits
-    { patterns: [/permit/i], entityType: EntityTypes.PERMIT_NUMBER, label: "permits" },
+    { patterns: [/^(?:permit)(?:\s|$)|which\s+permit/i], entityType: EntityTypes.PERMIT_NUMBER, label: "permits" },
     // Invoices
-    { patterns: [/invoice/i], blockType: "invoice_hint", label: "invoice content" },
+    { patterns: [/^(?:invoice)(?:\s|$)|show\s+(?:me\s+)?(?:the\s+)?invoice/i], blockType: "invoice_hint", label: "invoice content" },
     // Summary
-    { patterns: [/summary|summarize|overview|brief|what\s+is\s+this/i], special: "summary", label: "summary" }
+    { patterns: [/^(?:summary|summarize|overview|brief|what\s+is\s+this)(?:\s|$)/i], special: "summary", label: "summary" }
   ];
   function executeQuery(contentGraph, query) {
     const lower = query.toLowerCase().trim();
+    const relationshipResult = extractRelationshipQuery(lower);
+    if (relationshipResult) {
+      return relationshipResult;
+    }
     for (const { patterns, entityType, blockType, special, label } of QUERY_PATTERNS) {
       for (const pattern of patterns) {
         if (pattern.test(lower)) {
@@ -1417,6 +1421,34 @@ var CodbDocs = (() => {
     }
     const results = contentGraph.find(query);
     return { type: "text-search", label: "text matches", results, query, count: results.length };
+  }
+  function extractRelationshipQuery(lower) {
+    const relationPatterns = [
+      { pattern: /who\s+(approved?|signed?|authorized?|created?|wrote|submitted?)\s+(?:the\s+)?(.+?)(?:\?|$)/i, relation: "approvedBy", expected: "person" },
+      { pattern: /who\s+(approved?|signed?|authorized?|created?|wrote|submitted?)\s+(.+?)(?:\?|$)/i, relation: "signedBy", expected: "person" },
+      { pattern: /what\s+(?:is\s+the\s+)?(?:amount|cost|price|value|total)\s+(?:of|for)\s+(?:the\s+)?(.+?)(?:\?|$)/i, relation: "hasAmount", expected: "currency" },
+      { pattern: /how\s+much\s+(?:is|are|was|were|does|do|did)\s+(?:the\s+)?(.+?)(?:\?|$)/i, relation: "hasAmount", expected: "currency" },
+      { pattern: /when\s+(?:was|did|is)\s+(?:the\s+)?(.+?)(?:\?|$)/i, relation: "occurredOn", expected: "date" },
+      { pattern: /where\s+(?:is|are|was|were)\s+(?:the\s+)?(.+?)(?:\?|$)/i, relation: "locatedAt", expected: "address" }
+    ];
+    for (const { pattern, relation, expected } of relationPatterns) {
+      const match = lower.match(pattern);
+      if (match) {
+        const subject = match[2] || match[1];
+        return {
+          type: "relationship",
+          relation,
+          subject: subject?.trim(),
+          expected,
+          query: lower,
+          label: `relationship: ${relation}`,
+          results: [],
+          // Would need to query the concept graph for actual results
+          count: 0
+        };
+      }
+    }
+    return null;
   }
   function executeAsk(contentGraph, question) {
     const queryResult = executeQuery(contentGraph, question);
@@ -1446,10 +1478,14 @@ var CodbDocs = (() => {
     }
     if (type === EntityTypes.CURRENCY) {
       const amounts = results.map((r) => ({ value: r.numericValue || r.value, text: r.value }));
-      const total = amounts.reduce((s, a) => s + (a.value || 0), 0);
-      answer = `Found ${results.length} monetary value(s): ${results.map((r) => r.value).join(", ")}`;
-      if (total > 0) answer += `
-Total: $${total.toLocaleString()}`;
+      const shouldAggregate = /total|sum|add\s+up|combined|aggregate|altogether|all\s+together/i.test(query);
+      let answer2 = "";
+      if (shouldAggregate) {
+        const total = amounts.reduce((s, a) => s + (a.value || 0), 0);
+        answer2 = `Found ${results.length} monetary value(s). Total: $${total.toLocaleString()}`;
+      } else {
+        answer2 = `Found ${results.length} monetary value(s): ${results.map((r) => r.value).join(", ")}`;
+      }
       confidence = 0.85;
       evidence = results.map((r) => ({ text: r.value, page: r.page, bbox: r.bbox }));
     }
@@ -10065,6 +10101,81 @@ ${customStyles}
       graph.hybridSearch = (query, options) => hybridSearch(graph, query, options);
       graph.detectIntent = (query) => detectIntent(query);
       graph.decomposeQuery = (query) => decomposeQuery(query);
+      graph.planQuery = (question) => {
+        const lower = question.toLowerCase().trim();
+        const intent = detectIntent(lower);
+        const subjectPatterns = [
+          /(?:about|for|of|regarding)\s+(?:the\s+)?(\w[\w\s]*?)(?:\?|$)/i,
+          /(?:what|which|who)\s+(?:is|are|was|were)\s+(?:the\s+)?(\w[\w\s]*?)(?:\?|$)/i,
+          /(\w+)\s+(?:amount|cost|price|value|total|budget)/i
+        ];
+        let subject = [];
+        for (const pat of subjectPatterns) {
+          const m = lower.match(pat);
+          if (m && m[1]) {
+            subject.push(m[1].trim());
+          }
+        }
+        const anchors = [];
+        const currencyMatch = lower.match(/\$[\d,]+(?:\.\d{2})?/g);
+        if (currencyMatch) anchors.push(...currencyMatch.map((v) => ({ type: "currency", value: v })));
+        const dateMatch = lower.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g);
+        if (dateMatch) anchors.push(...dateMatch.map((v) => ({ type: "date", value: v })));
+        const expected = [];
+        if (/who|person|people|name|author|approved?\s+by|signed?\s+by/i.test(lower)) {
+          expected.push("person");
+        }
+        if (/how\s+much|amount|cost|price|total|budget|fund|\$/i.test(lower)) {
+          expected.push("currency");
+        }
+        if (/when|date/i.test(lower)) {
+          expected.push("date");
+        }
+        if (/where|address|location/i.test(lower)) {
+          expected.push("address");
+        }
+        const relations = [];
+        const relationPatterns = [
+          { pattern: /approved?\s+by/i, relation: "approvedBy" },
+          { pattern: /signed?\s+by/i, relation: "signedBy" },
+          { pattern: /funded?\s+by/i, relation: "fundedBy" },
+          { pattern: /authored?\s+by/i, relation: "authoredBy" },
+          { pattern: /submitted?\s+by/i, relation: "submittedBy" },
+          { pattern: /created?\s+by/i, relation: "createdBy" }
+        ];
+        for (const { pattern, relation } of relationPatterns) {
+          if (pattern.test(lower)) relations.push(relation);
+        }
+        let operation = null;
+        if (/total|sum|add\s+up|combined|aggregate/i.test(lower)) {
+          operation = "SUM";
+        } else if (/how\s+many|count|number\s+of/i.test(lower)) {
+          operation = "COUNT";
+        } else if (/average|avg|mean/i.test(lower)) {
+          operation = "AVG";
+        } else if (/highest|most|maximum|max|largest|biggest/i.test(lower)) {
+          operation = "MAX";
+        } else if (/lowest|least|minimum|min|smallest/i.test(lower)) {
+          operation = "MIN";
+        } else if (/before|prior\s+to|earlier\s+than/i.test(lower)) {
+          operation = "BEFORE";
+        } else if (/after|since|later\s+than/i.test(lower)) {
+          operation = "AFTER";
+        } else if (/between|from.*to/i.test(lower)) {
+          operation = "BETWEEN";
+        } else if (/group\s+by|per|each|every/i.test(lower)) {
+          operation = "GROUP_BY";
+        }
+        return {
+          query: question,
+          intent,
+          subject,
+          expected,
+          anchors,
+          relations,
+          operation
+        };
+      };
       graph.count = (criteria) => operatorCount(graph, criteria);
       graph.sum = (criteria) => operatorSum(graph, criteria);
       graph.max = (criteria) => operatorMax(graph, criteria);
@@ -10140,6 +10251,33 @@ ${customStyles}
       graph.createWorkspace = (options) => createWorkspace(options);
       graph.saveCache = async (pdfBuffer) => saveToCache(pdfBuffer, graph.toJSON());
       graph.loadCache = async (pdfBuffer) => loadFromCache(pdfBuffer);
+      graph.createAccessibleView = (options = {}) => {
+        const {
+          mode = "accessible",
+          includeDataAttributes: includeDataAttributes2 = true,
+          enforceHeadingHierarchy = true,
+          wrapImagesInFigures = true
+        } = options;
+        const ir2 = graph._ir || {};
+        return exportAccessibleHTML(ir2, {
+          mode,
+          includeDataAttributes: includeDataAttributes2,
+          enforceHeadingHierarchy,
+          wrapImagesInFigures
+        });
+      };
+      graph.auditAccessibility = () => {
+        const ir2 = graph._ir || {};
+        return wcagAudit(ir2);
+      };
+      graph.remediateAccessibility = () => {
+        const ir2 = graph._ir || {};
+        return remediateAccessibility(ir2);
+      };
+      graph.getAccessibilityReport = () => {
+        const ir2 = graph._ir || {};
+        return generateAccessibilityReport(ir2);
+      };
       return graph;
     }
     /**

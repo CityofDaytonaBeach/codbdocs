@@ -1024,6 +1024,98 @@ class CodbDoc {
     graph.detectIntent = (query) => detectIntent(query);
     graph.decomposeQuery = (query) => decomposeQuery(query);
 
+    /**
+     * Plan a query: extract intent, subject, expected entities, anchors, relations, operation.
+     * Returns a structured plan for retrieval.
+     */
+    graph.planQuery = (question) => {
+      const lower = question.toLowerCase().trim();
+      const intent = detectIntent(lower);
+
+      // Extract subject (the main thing being asked about)
+      const subjectPatterns = [
+        /(?:about|for|of|regarding)\s+(?:the\s+)?(\w[\w\s]*?)(?:\?|$)/i,
+        /(?:what|which|who)\s+(?:is|are|was|were)\s+(?:the\s+)?(\w[\w\s]*?)(?:\?|$)/i,
+        /(\w+)\s+(?:amount|cost|price|value|total|budget)/i,
+      ];
+      let subject = [];
+      for (const pat of subjectPatterns) {
+        const m = lower.match(pat);
+        if (m && m[1]) {
+          subject.push(m[1].trim());
+        }
+      }
+
+      // Extract anchors (specific values mentioned)
+      const anchors = [];
+      const currencyMatch = lower.match(/\$[\d,]+(?:\.\d{2})?/g);
+      if (currencyMatch) anchors.push(...currencyMatch.map(v => ({ type: 'currency', value: v })));
+
+      const dateMatch = lower.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g);
+      if (dateMatch) anchors.push(...dateMatch.map(v => ({ type: 'date', value: v })));
+
+      // Extract expected entity type
+      const expected = [];
+      if (/who|person|people|name|author|approved?\s+by|signed?\s+by/i.test(lower)) {
+        expected.push('person');
+      }
+      if (/how\s+much|amount|cost|price|total|budget|fund|\$/i.test(lower)) {
+        expected.push('currency');
+      }
+      if (/when|date/i.test(lower)) {
+        expected.push('date');
+      }
+      if (/where|address|location/i.test(lower)) {
+        expected.push('address');
+      }
+
+      // Extract relations
+      const relations = [];
+      const relationPatterns = [
+        { pattern: /approved?\s+by/i, relation: 'approvedBy' },
+        { pattern: /signed?\s+by/i, relation: 'signedBy' },
+        { pattern: /funded?\s+by/i, relation: 'fundedBy' },
+        { pattern: /authored?\s+by/i, relation: 'authoredBy' },
+        { pattern: /submitted?\s+by/i, relation: 'submittedBy' },
+        { pattern: /created?\s+by/i, relation: 'createdBy' },
+      ];
+      for (const { pattern, relation } of relationPatterns) {
+        if (pattern.test(lower)) relations.push(relation);
+      }
+
+      // Determine operation
+      let operation = null;
+      if (/total|sum|add\s+up|combined|aggregate/i.test(lower)) {
+        operation = 'SUM';
+      } else if (/how\s+many|count|number\s+of/i.test(lower)) {
+        operation = 'COUNT';
+      } else if (/average|avg|mean/i.test(lower)) {
+        operation = 'AVG';
+      } else if (/highest|most|maximum|max|largest|biggest/i.test(lower)) {
+        operation = 'MAX';
+      } else if (/lowest|least|minimum|min|smallest/i.test(lower)) {
+        operation = 'MIN';
+      } else if (/before|prior\s+to|earlier\s+than/i.test(lower)) {
+        operation = 'BEFORE';
+      } else if (/after|since|later\s+than/i.test(lower)) {
+        operation = 'AFTER';
+      } else if (/between|from.*to/i.test(lower)) {
+        operation = 'BETWEEN';
+      } else if (/group\s+by|per|each|every/i.test(lower)) {
+        operation = 'GROUP_BY';
+      }
+
+      return {
+        query: question,
+        intent,
+        subject,
+        expected,
+        anchors,
+        relations,
+        operation,
+      };
+    };
+
     // Deterministic reasoning operators
     graph.count = (criteria) => operatorCount(graph, criteria);
     graph.sum = (criteria) => operatorSum(graph, criteria);
@@ -1123,6 +1215,55 @@ class CodbDoc {
     // Persistence
     graph.saveCache = async (pdfBuffer) => saveToCache(pdfBuffer, graph.toJSON());
     graph.loadCache = async (pdfBuffer) => loadFromCache(pdfBuffer);
+
+    /**
+     * Create a headless accessible view of the document.
+     * Returns semantic HTML structure without UI/design decisions.
+     * The consuming app (React/Lovable/JS) decides presentation.
+     */
+    graph.createAccessibleView = (options = {}) => {
+      const {
+        mode = 'accessible',
+        includeDataAttributes = true,
+        enforceHeadingHierarchy = true,
+        wrapImagesInFigures = true,
+      } = options;
+
+      // Get the IR from the graph
+      const ir = graph._ir || {};
+
+      // Use docaccess.js to generate accessible HTML
+      return exportAccessibleHTML(ir, {
+        mode,
+        includeDataAttributes,
+        enforceHeadingHierarchy,
+        wrapImagesInFigures,
+      });
+    };
+
+    /**
+     * Run a WCAG 2.1 AA accessibility audit on the document.
+     */
+    graph.auditAccessibility = () => {
+      const ir = graph._ir || {};
+      return wcagAudit(ir);
+    };
+
+    /**
+     * Auto-remediate common accessibility issues.
+     */
+    graph.remediateAccessibility = () => {
+      const ir = graph._ir || {};
+      return remediateAccessibility(ir);
+    };
+
+    /**
+     * Generate a full accessibility report (HTML + text).
+     */
+    graph.getAccessibilityReport = () => {
+      const ir = graph._ir || {};
+      return generateAccessibilityReport(ir);
+    };
 
     return graph;
   }
