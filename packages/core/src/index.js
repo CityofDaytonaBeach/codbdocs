@@ -155,6 +155,19 @@ import {
   normalizeDocument,
 } from './quality.js';
 
+import {
+  detectRotationSkew,
+  detectGlyphIssues,
+  detectOutlinedText,
+  detectFlattenedForms,
+  detectCheckboxes,
+  detectCrossPageTables,
+  associateCaptionsWithImages,
+  detectFootnotes,
+  detectLanguage,
+  detectMalformedPDF,
+} from './edgecases.js';
+
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const DEFAULTS = {
@@ -474,6 +487,45 @@ class CodbDoc {
               irPage.tagValidation = validateTags(irPage, structureTree, content.items);
             } catch (e) { /* tag validation may fail */ }
           }
+          
+          // Detect rotation and skew
+          try {
+            irPage.rotationSkew = detectRotationSkew(irPage, content.items, vectors);
+          } catch (e) { /* rotation/skew detection may fail */ }
+          
+          // Detect glyph issues
+          try {
+            irPage.glyphIssues = detectGlyphIssues(irPage, content.items);
+          } catch (e) { /* glyph issue detection may fail */ }
+          
+          // Detect outlined text
+          if (vectors.length > 0) {
+            try {
+              irPage.outlinedText = detectOutlinedText(vectors, content.items);
+            } catch (e) { /* outlined text detection may fail */ }
+          }
+          
+          // Detect flattened forms
+          try {
+            irPage.flattenedForms = detectFlattenedForms(vectors, content.items, annotations);
+          } catch (e) { /* flattened form detection may fail */ }
+          
+          // Detect checkboxes and radio buttons
+          if (vectors.length > 0) {
+            try {
+              irPage.checkboxes = detectCheckboxes(vectors, content.items);
+            } catch (e) { /* checkbox detection may fail */ }
+          }
+          
+          // Detect footnotes
+          try {
+            irPage.footnotes = detectFootnotes(content.items, pageSize);
+          } catch (e) { /* footnote detection may fail */ }
+          
+          // Detect language
+          try {
+            irPage.language = detectLanguage(content.items);
+          } catch (e) { /* language detection may fail */ }
         }
 
         // Detect reading order
@@ -506,6 +558,13 @@ class CodbDoc {
           visualComparison: irPage.visualComparison,
           redactions: irPage.redactions,
           tagValidation: irPage.tagValidation,
+          rotationSkew: irPage.rotationSkew,
+          glyphIssues: irPage.glyphIssues,
+          outlinedText: irPage.outlinedText,
+          flattenedForms: irPage.flattenedForms,
+          checkboxes: irPage.checkboxes,
+          footnotes: irPage.footnotes,
+          language: irPage.language,
           repeatedElements,
         };
 
@@ -700,6 +759,44 @@ class CodbDoc {
         factors: readiness.factors,
         recommendations: readiness.recommendations,
       };
+    };
+
+    // Add edge case methods
+    graph.getRotationSkew = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.rotationSkew || { rotation: 0, skewAngle: 0, isRotated: false, isSkewed: false };
+    };
+    graph.getGlyphIssues = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.glyphIssues || { issues: [], hasGlyphIssues: false };
+    };
+    graph.getOutlinedText = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.outlinedText || { hasOutlinedText: false, candidates: [], count: 0 };
+    };
+    graph.getFlattenedForms = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.flattenedForms || { hasFlattenedForms: false, candidates: [], recoveredFields: [] };
+    };
+    graph.getCheckboxes = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.checkboxes || { count: 0, checkboxes: [], checked: 0, unchecked: 0 };
+    };
+    graph.getFootnotes = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.footnotes || { footnotes: [], footnoteRefs: [], associations: [], count: 0 };
+    };
+    graph.getLanguage = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.language || { language: 'unknown', confidence: 0 };
+    };
+    graph.getCrossPageTables = () => detectCrossPageTables(pageResults, ir);
+    graph.associateCaptions = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      const pageData = ir.pages[pageId];
+      const images = pageData?.images || [];
+      const contentItems = (pageData?.content || []).map(id => ir.objects?.[id]).filter(Boolean).map(obj => obj.raw);
+      return associateCaptionsWithImages(pageData, contentItems, images);
     };
 
     return graph;
@@ -1057,3 +1154,16 @@ export {
   diagnoseDocument,
   normalizeDocument,
 } from './quality.js';
+
+export {
+  detectRotationSkew,
+  detectGlyphIssues,
+  detectOutlinedText,
+  detectFlattenedForms,
+  detectCheckboxes,
+  detectCrossPageTables,
+  associateCaptionsWithImages,
+  detectFootnotes,
+  detectLanguage,
+  detectMalformedPDF,
+} from './edgecases.js';
