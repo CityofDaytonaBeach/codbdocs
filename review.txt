@@ -1,950 +1,194 @@
-https://www.civicplus.com/web-accessibility-software/docaccess/pdf-accessibility-tools/?device=c&utm_term=docaccess&utm_campaign=CP3+21+DocAccess&utm_source=google&utm_medium=ppc&utm_content=AdGroup+DocAccess&matchtype={BidMatchType}&gad_source=1&gad_campaignid=23717603237&gbraid=0AAAAADRG8TjlEIaia9wtA7EJRLdKaO_1n&gclid=Cj0KCQjwnbrUBhDOARIsAKKhPpd4kIU2mgrPMaB2_xAfQ-91XasoeKS4Ah50GLwXvatxrDqufrZpljUaAvQgEALw_wcB
+Exactly. CODB Docs should be headless. It should build the accessible/intelligent document representation and provide the data and behaviors. The consuming React, Lovable, Vue, or JavaScript app decides entirely what it looks like.
 
+Think:
 
-Yes. I would add the DocAccess-style accessible document experience as a completely optional layer on top of CODB Docs, without changing your existing parser, IR, RAG, analyze(), ask(), or viewer behavior.
+CODB Docs = engine
+User's app = UI
 
-The uploaded feature list fits this approach particularly well because the central DocAccess idea is an accessible HTML alternative representation, while keeping the original PDF available.
-
-Add a new access module
-
-Don't rewrite existing modules. Add:
-
-packages/core/src/
-├── index.js
-├── brain.js
-├── content.js
-├── rag.js
-├── quality.js
-├── edgecases.js
-├── pdfir.js
-│
-└── access/
-    ├── index.js
-    ├── transcript.js
-    ├── semantics.js
-    ├── outline.js
-    ├── tables.js
-    ├── images.js
-    ├── navigation.js
-    ├── search.js
-    ├── qa.js
-    ├── accessibility.js
-    ├── print.js
-    └── diagnostics.js
-
-Its job is simply:
-
-Existing CODB analysis
-        ↓
-DocumentGraph + CODB-IR
-        ↓
-NEW Access Layer
-        ↓
-Accessible Document Model
-        ↓
-HTML / Search / Q&A / Navigation
-
-Your existing system remains untouched.
-
-New API
-
-I'd make it this simple:
-
-const doc = await CodbDocs.load(file);
-
-const graph = await doc.analyze();
+CODB Docs should produce something like:
 
 const access = await graph.createAccessibleView();
 
-Then:
+const data = access.toJSON();
 
-access.html
-access.outline
-access.sections
-access.images
-access.tables
-access.search()
-access.ask()
-access.audit()
-access.print()
-
-Nothing changes for existing users doing:
-
-graph.find()
-graph.ask()
-graph.toRAG()
-graph.getIR()
-graph.getImages()
-1. Accessible HTML transcript
-
-The uploaded requirements specifically call for semantic HTML, screen-reader-friendly content, responsive presentation, searchable text and structured sections.
-
-Add:
-
-const html = access.toHTML({
-  semantic: true,
-  responsive: true,
-  landmarks: true,
-  skipLinks: true
-});
-
-Generate:
-
-<article>
-  <header>
-    <h1>City Commission Agenda</h1>
-  </header>
-
-  <nav aria-label="Document outline">
-    ...
-  </nav>
-
-  <main>
-    <section>
-      <h2>Financial Impact</h2>
-
-      <p>...</p>
-
-      <table>
-        ...
-      </table>
-    </section>
-  </main>
-</article>
-
-But generate it from CODB-IR, not raw extracted text.
-
-That's important.
-
-2. Semantic reconstruction
-
-Create:
-
-buildAccessibleDocument(graph)
-
-It transforms:
-
-PDF Objects
-+
-reading order
-+
-structure
-+
-geometry
-+
-content graph
-+
-tables
-+
-images
-
-into:
+Returning:
 
 {
-  type: "document",
+  document: {
+    title: "City Commission Agenda",
+    language: "en"
+  },
 
-  children: [
+  outline: [
     {
-      type: "section",
-      heading: "...",
+      id: "financial-impact",
+      title: "Financial Impact",
       level: 1,
-
-      children: [...]
+      page: 17
     }
-  ]
-}
-
-This gives you the logical structure the source describes, including headings, sections, paragraphs, lists, links, tables, images, captions and reading order.
-
-3. Automatic document outline
-
-You already have much of the required information.
-
-Expose:
-
-access.getOutline()
-
-returning:
-
-[
-  {
-    id: "executive-summary",
-    title: "Executive Summary",
-    level: 1,
-    page: 2
-  },
-
-  {
-    id: "revenue",
-    title: "Revenue",
-    level: 1,
-    page: 14
-  },
-
-  {
-    id: "property-taxes",
-    title: "Property Taxes",
-    level: 2,
-    page: 16
-  }
-]
-
-Then the UI can create clickable navigation.
-
-The feature list specifically describes an automatically generated interactive document outline.
-
-4. Accessible tables
-
-This should use your table reconstruction engine.
-
-Instead of:
-
-<div>
-Account $425,000
-</div>
-
-produce:
-
-<table>
-  <caption>Financial Impact</caption>
-
-  <thead>
-    <tr>
-      <th scope="col">Account</th>
-      <th scope="col">Amount</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    <tr>
-      <td>001-200-513000</td>
-      <td>$425,000</td>
-    </tr>
-  </tbody>
-</table>
-
-The uploaded requirements explicitly identify header cells, data cells and row/column relationships as accessibility concerns.
-
-Your geometry-aware system is particularly useful here.
-
-5. Accessible images
-
-Add:
-
-access.getImages()
-
-with:
-
-{
-  id: "image_17_3",
-
-  page: 17,
-
-  role: "figure",
-
-  caption:
-    "Proposed redevelopment area",
-
-  alt:
-    "Proposed redevelopment area",
-
-  context:
-    "Project Location",
-
-  sourceObject:
-    "pdf_image_821"
-}
-
-Without a vision model, don't pretend you can identify arbitrary visual content.
-
-Instead derive descriptions from:
-
-caption
-nearby text
-parent heading
-OCR
-figure label
-surrounding paragraph
-PDF metadata
-
-If confidence is insufficient:
-
-{
-  alt: null,
-  requiresDescription: true
-}
-
-That is much safer than confidently hallucinating that a drainage map is a delightful photograph of a lake.
-
-6. Search
-
-Don't build another search engine.
-
-Wrap yours:
-
-access.search("road resurfacing")
-
-Internally:
-
-graph.find(...)
-
-but return accessible-document objects:
-
-{
-  section: "Capital Projects",
-  page: 81,
-  text: "...",
-  htmlId: "section-capital-projects",
-  sourceObjectIds: [...]
-}
-
-Click result:
-
-access.navigateTo(result);
-7. Ask a Question
-
-Again, reuse your existing model-free system.
-
-const result =
-  access.ask(
-    "How much money is allocated to road resurfacing?"
-  );
-
-Return:
-
-{
-  answer: "$4,250,000",
-
-  confidence: .96,
-
-  section: "Capital Improvements",
-
-  page: 82,
-
-  htmlTarget:
-    "#capital-improvements-road-resurfacing",
-
-  evidence: [...]
-}
-
-The reference functionality combines natural-language document questions with source highlighting.
-
-Your version has an advantage because you can preserve:
-
-answer
-+
-PDF page
-+
-bbox
-+
-PDF object
-+
-HTML element
-
-So one answer can jump to either representation.
-
-8. Dual-source highlighting
-
-This is worth implementing carefully.
-
-access.highlight(result)
-
-could highlight:
-
-HTML
-<mark>
-$4,250,000
-</mark>
-
-AND:
-
-Original PDF
-page 82
-bbox [x,y,w,h]
-
-So the UI gets:
-
-                 ANSWER
-                    │
-             $4,250,000
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
- Accessible HTML         Original PDF
-      highlight            highlight
-          │                   │
-     Section 8              Page 82
-
-That's excellent provenance.
-
-9. Reading modes
-
-I'd actually go beyond the source feature set.
-
-Add:
-
-access.setMode("standard");
-access.setMode("simple");
-access.setMode("reader");
-access.setMode("high-contrast");
-access.setMode("large-text");
-
-And allow CSS variables:
-
---codb-font-size
---codb-line-height
---codb-spacing
---codb-content-width
-
-No need to regenerate the document.
-
-10. Cognitive/simple reading mode
-
-You can't reliably rewrite text to sixth-grade reading level without language intelligence, and you don't want a model.
-
-Don't fake it.
-
-Instead provide:
-
-shorter line width
-larger spacing
-clear section separation
-one section at a time
-hide decorative material
-expand/collapse sections
-highlight current paragraph
-reading ruler
-
-That's genuinely useful and deterministic.
-
-11. Keyboard navigation
-
-Automatically create:
-
-<a href="#document-content">
-  Skip to document
-</a>
-
-and keyboard commands:
-
-H     next heading
-Shift+H previous heading
-
-T     next table
-Shift+T previous table
-
-I     next image
-
-/     search
-
-Esc   close panel
-
-The source specifically identifies keyboard-only operation and support for alternative input methods.
-
-Don't override established browser/screen-reader shortcuts blindly, though. Make custom shortcuts configurable.
-
-12. Screen-reader output
-
-Generate proper:
-
-<main>
-<nav>
-<section>
-<h1-h6>
-<p>
-<ul>
-<ol>
-<table>
-<caption>
-<th>
-<a>
-<figure>
-<figcaption>
-
-rather than an ARIA theme park.
-
-Use native HTML semantics first.
-
-ARIA only where HTML can't express the relationship.
-
-13. Print mode
-
-Expose:
-
-access.print();
-
-and:
-
-access.toPrintableHTML();
-
-CSS:
-
-@media print {
-  nav,
-  .codb-toolbar,
-  .codb-search {
-    display: none;
-  }
-
-  article {
-    width: 100%;
-  }
-}
-
-Print-friendly HTML is also part of the source feature set.
-
-14. Accessibility diagnostics
-
-This can reuse your existing audit system.
-
-access.audit()
-
-return:
-
-{
-  score: 94,
-
-  issues: {
-    headings: 2,
-    images: 3,
-    tables: 1,
-    readingOrder: 0,
-    links: 1
-  },
-
-  recommendations: [...]
-}
-
-Then administrators can see exactly what couldn't be safely reconstructed.
-
-15. Confidence everywhere
-
-This is something I'd add beyond DocAccess.
-
-Every reconstructed object:
-
-{
-  type: "heading",
-
-  text: "Financial Impact",
-
-  confidence: .98,
-
-  inferredFrom: [
-    "font-size",
-    "font-weight",
-    "spacing",
-    "section-position"
-  ]
-}
-
-Image:
-
-{
-  type: "figure",
-
-  alt:
-    "Proposed project area",
-
-  confidence: .72,
-
-  inferredFrom: [
-    "caption",
-    "nearby-heading"
-  ]
-}
-
-Table:
-
-{
-  type: "table",
-
-  confidence: .94,
-
-  inferredFrom: [
-    "column-alignment",
-    "row-spacing",
-    "header-pattern"
-  ]
-}
-
-Now accessibility decisions are explainable.
-
-16. Human-review queue
-
-Even browser-only software can support:
-
-access.getReviewItems()
-
-returning:
-
-[
-  {
-    type: "image_alt",
-    page: 31,
-    confidence: .31
-  },
-
-  {
-    type: "table_structure",
-    page: 42,
-    confidence: .54
-  }
-]
-
-Your application can present those to an administrator.
-
-After correction:
-
-access.resolve(item.id, {
-  alt:
-    "Map showing the proposed development area"
-});
-
-This matches the sensible principle in the source that complicated pages sometimes need human review rather than pretending automation never fails.
-
-17. Translation should be an adapter
-
-Don't bake translation into CODB Docs.
-
-Provide:
-
-access.translate({
-  provider,
-  language: "es"
-});
-
-Then users can supply:
-
-Google
-Azure
-DeepL
-custom
-browser-native future API
-
-The core stays model-free and offline.
-
-Translation becomes optional.
-
-18. Website PDF discovery should be another package
-
-Do NOT put crawling inside core.
-
-Create later:
-
-@codbdocs/discovery
-
-API:
-
-const crawler =
-  CodbDiscovery.create({
-    origin:
-      "https://www.example.gov"
-  });
-
-const documents =
-  await crawler.discover();
-
-The reference service automatically discovers existing and newly published PDFs.
-
-But that's a website/service capability, not PDF parsing.
-
-Keep your architecture clean.
-
-19. React component
-
-Add to @codbdocs/react:
-
-<CodbAccessibleDocument
-  graph={graph}
-/>
-
-Optional pieces:
-
-<CodbDocumentOutline />
-<CodbDocumentSearch />
-<CodbDocumentQA />
-<CodbAccessibilityToolbar />
-<CodbAccessibleContent />
-<CodbOriginalPDF />
-
-Then Lovable could literally do:
-
-<CodbAccessibleDocument
-  graph={graph}
-  showOriginalPDF
-  enableSearch
-  enableQA
-  enablePrint
-/>
-
-That's the experience you want.
-
-20. Don't touch existing behavior
-
-This is the critical architectural rule.
-
-Current:
-
-const graph =
-  await doc.analyze();
-
-graph.find()
-graph.ask()
-graph.toRAG()
-graph.getIR()
-
-continues working exactly as it does today.
-
-New:
-
-const access =
-  await graph.createAccessibleView();
-
-is additive.
-
-I'd even dynamically import it:
-
-graph.createAccessibleView =
-  async options => {
-
-    const {
-      createAccessibleView
-    } =
-      await import(
-        "./access/index.js"
-      );
-
-    return createAccessibleView(
-      graph,
-      options
-    );
-  };
-
-That means applications that don't use accessibility don't even have to load the additional code.
-
-The complete addition
-                         CODB DOCS CORE
-                              │
-                       EXISTING SYSTEM
-                              │
-          ┌───────────────────┼───────────────────┐
-          │                   │                   │
-       PDF-IR             ContentGraph           RAG
-          │                   │                   │
-          └───────────────────┼───────────────────┘
-                              │
-                       DocumentGraph
-                              │
-                EXISTING API UNCHANGED
-                              │
-                 ┌────────────┴────────────┐
-                 │                         │
-          Existing consumers       OPTIONAL ACCESS
-                                         │
-                              createAccessibleView()
-                                         │
-                       ┌─────────────────┼─────────────────┐
-                       ▼                 ▼                 ▼
-                 Semantic HTML       Navigation         Search
-                       │                 │                 │
-                  Tables/images       Outline            Q&A
-                       │                 │                 │
-                       └─────────────────┼─────────────────┘
-                                         ▼
-                                Accessible Viewer
-                                         │
-                         ┌───────────────┼──────────────┐
-                         ▼               ▼              ▼
-                    Screen Reader     Mobile         Print
-                         │
-                    Keyboard
-
-That gives you a DocAccess-style feature without turning CODB Docs into a DocAccess clone. More importantly, it leverages things you've already built that an HTML-transcript service doesn't inherently have: original PDF object IDs, coordinates, vectors, reading order, entities, relationships, quality diagnostics and your model-free retrieval architecture. The source itself points toward exactly this combination of accessible HTML plus structured JSON, geometry, citations and model-independent retrieval as a way to go beyond treating accessibility and document intelligence as separate systems.
-
-I would call the feature CODB Accessible View, with graph.createAccessibleView() as the boundary. Clean, optional, backward-compatible, and it doesn't require dismantling the rather elaborate machine you've already built.
-
-pull my core and let me know if this is added already
-
-I pulled the current main branch again. No, the full CODB Accessible View feature we just designed has not been added yet. The latest tree SHA I see is 6561493a....
-
-The interesting part is that a substantial portion of the foundation already exists, so you do not need to rebuild your system.
-
-Accessible View capability	Current core
-PDF-IR	✅ Already present
-HTML export	✅ Already present
-Accessibility tree	✅ Already present
-Accessibility audit	✅ Already present
-Reading-order reconstruction	✅ Already present
-Structure extraction	✅ Already present
-Images in IR	✅ Schema present
-Semantic roles	✅ Already present
-Object provenance/confidence	✅ Already present
-Bounding boxes	✅ Already present
-Outline extraction	✅ Already present
-Search / find()	✅ Already present
-Q&A / ask()	✅ Already present
-Highlighting	✅ Already present
-createAccessibleView()	❌ Missing
-Dedicated accessible-document model	❌ Missing
-Accessible View module/package	❌ Missing
-HTML ↔ PDF dual highlighting	❌ Missing as unified feature
-access.search()	❌ Missing wrapper
-access.ask()	❌ Missing wrapper
-access.getReviewItems()	❌ Missing
-Accessible reader modes	❌ Missing
-Print-specific accessible API	❌ Missing
-Confidence-driven human review queue	❌ Missing
-React <CodbAccessibleDocument>	❌ Missing
-
-Your current index.js already imports:
-
-detectReadingOrder
-getReadingOrderSequence
-validateReadingOrder
-auditAccessibility
-generateAccessibilityTree
-exportHTML
-
-from pdfir.js.
-
-And PDF-IR explicitly describes its architecture as:
-
-PDF → PDF-IR → { Fidelity Engine, Intelligence Engine }
-
-PDF-IR → HTML / Markdown / JSON / Accessible Document
-
-So amusingly, your architecture was already pointing toward this feature before we gave it a name.
-
-Your IR is also already suitable
-
-For example, text objects retain:
-
-{
-  type: "text",
-
-  raw: {
-    glyphs,
-    font,
-    fontSize,
-    transform,
-    text,
-    encoding
-  },
-
-  semantic: {
-    role,
-    level,
-    text
-  },
+  ],
+
+  sections: [
+    {
+      id: "financial-impact",
+      heading: "Financial Impact",
+      content: [...]
+    }
+  ],
+
+  tables: [...],
+  images: [...],
+  links: [...],
 
   accessibility: {
-    role
-  },
-
-  provenance: {
-    method: "native",
-    confidence: 1.0
-  },
-
-  bbox
+    score: 96,
+    issues: [...]
+  }
 }
 
-That's precisely the sort of information the Accessible View needs.
+Then the developer decides whether that becomes a DocAccess-looking page, a custom city website, a Lovable component, a mobile interface, or something entirely different.
 
-Pages also already contain dedicated collections for:
+For example, React could do:
 
-content: [],
-vectors: [],
-images: [],
-annotations: [],
-forms: []
+function AccessibleDocument({ access }) {
+  return (
+    <main>
+      <MyNavigation
+        items={access.outline}
+      />
 
-which is another strong foundation.
+      <MyDocumentContent
+        sections={access.sections}
+      />
+    </main>
+  );
+}
 
-What I'd add now
+Or somebody could make something completely different:
 
-Don't change PDFIR, analyze(), find(), ask(), or your existing RAG architecture.
+<Tabs>
+  <Tab title="Document">
+    <AccessibleContent />
+  </Tab>
 
-Add one module:
+  <Tab title="Original PDF">
+    <PDFViewer />
+  </Tab>
 
-packages/core/src/accessible.js
+  <Tab title="Search">
+    <Search />
+  </Tab>
+</Tabs>
 
-It should consume what you already generate:
+CODB Docs shouldn't care.
 
-                       EXISTING CORE
-                            │
-             ┌──────────────┼──────────────┐
-             ▼              ▼              ▼
-           PDF-IR       DocumentGraph   ContentGraph
-             │              │              │
-             └──────────────┼──────────────┘
-                            │
-                            ▼
-                   NEW accessible.js
-                            │
-                    createAccessibleView()
-                            │
-          ┌─────────────────┼─────────────────┐
-          ▼                 ▼                 ▼
-         HTML             Search             Q&A
-          │                 │                 │
-       Outline          Highlight         Evidence
-          │                                   │
-       Tables                              PDF bbox
-          │                                   │
-       Images                            HTML target
-          │
-    Accessibility
+Even toHTML() should be mostly unstyled
 
-Then expose exactly one additional method:
+I'd have:
 
-const graph = await doc.analyze();
+access.toHTML()
 
-const access =
-    await graph.createAccessibleView();
+generate semantic HTML, not a designed website:
 
-From there:
+<article>
+  <h1>Budget Report</h1>
 
-access.toHTML();
+  <section id="financial-impact">
+    <h2>Financial Impact</h2>
 
-access.getOutline();
+    <p>...</p>
 
-access.search(
-  "road resurfacing"
-);
+    <table>
+      <caption>Funding Accounts</caption>
+      ...
+    </table>
+  </section>
+</article>
 
-access.ask(
-  "How much is allocated to road resurfacing?"
-);
+Not this:
 
-access.audit();
+<div
+  style="
+    background:#123456;
+    border-radius:20px;
+    box-shadow:...
+  "
+>
 
-access.getReviewItems();
+Please spare the SDK from becoming an interior decorator.
 
-access.toPrintableHTML();
-One other important finding
+The application controls:
 
-Your dist build is still stale.
+fonts
+colors
+spacing
+dark/light mode
+mobile layout
+navigation position
+toolbar
+buttons
+search interface
+Q&A interface
+PDF placement
+animations
+branding
+accessibility controls
 
-The repository currently shows:
+CODB Docs controls:
 
-src/index.js
-SHA cc8a250...
-40,442 bytes
+document structure
+semantic HTML
+reading order
+headings
+tables
+lists
+links
+images
+captions
+alt-text/context
+search
+Q&A
+evidence
+page numbers
+bounding boxes
+accessibility semantics
+confidence
+diagnostics
+I would actually provide three output levels
 
-while:
+Raw data:
 
-dist/codbdocs.js
-SHA f551736...
-59,108 bytes
+access.toJSON()
 
-and that's the same older dist SHA we've encountered repeatedly.
+Maximum design freedom.
 
-So the newer core features are in src, but someone loading your jsDelivr URL:
+Semantic HTML:
 
-packages/core/dist/codbdocs.js
+access.toHTML()
 
-still isn't necessarily getting them.
+Ready to insert into an application and style with CSS.
 
-Bottom line: Accessible View itself is not added yet, but I'd estimate roughly 70% of the underlying machinery is already present. You mostly need a new orchestration/presentation layer that turns your existing PDF-IR + accessibility + search + Q&A + highlighting capabilities into one unified createAccessibleView() feature. That is much preferable to touching the current engine and discovering three weeks later that a "small accessibility change" has somehow murdered table extraction.
+React primitives/hooks:
+
+const {
+  document,
+  outline,
+  sections,
+  search,
+  ask,
+  navigate
+} = useCodbAccessible(graph);
+
+But avoid forcing:
+
+<CodbAccessibleDocument />
+
+as the only route. You could provide a reference component for convenience, but the hooks/data API should be the important product.
+
+That also makes it excellent for Lovable. You could tell Lovable:
+
+Use @codbdocs/react to generate the accessible document model. Design the interface using our existing application components and branding.
+
+Lovable handles appearance while CODB Docs handles the rather less glamorous problem of figuring out what a deranged 417-page PDF actually means.
+
+So yes: add the feature to core as a headless document-building API, not as a predetermined UI. That's the architecture I'd recommend.
