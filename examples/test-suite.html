@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodbDocs Comprehensive Test Suite</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { margin-bottom: 20px; color: #333; }
+    .upload-area { background: white; border: 2px dashed #ccc; border-radius: 8px; padding: 40px; text-align: center; margin-bottom: 20px; cursor: pointer; }
+    .upload-area:hover { border-color: #007bff; background: #f8f9ff; }
+    .upload-area.dragover { border-color: #007bff; background: #e3f2fd; }
+    .results { background: white; border-radius: 8px; padding: 20px; margin-top: 20px; }
+    .test-section { margin-bottom: 20px; border: 1px solid #eee; border-radius: 4px; padding: 15px; }
+    .test-section h3 { color: #007bff; margin-bottom: 10px; }
+    .test-pass { color: #28a745; }
+    .test-fail { color: #dc3545; }
+    .test-pending { color: #ffc107; }
+    pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; }
+    .summary { background: #e9ecef; padding: 15px; border-radius: 4px; margin-top: 20px; }
+    .progress { width: 100%; height: 20px; background: #e9ecef; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+    .progress-bar { height: 100%; background: #007bff; transition: width 0.3s; }
+    #status { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CodbDocs Comprehensive Test Suite</h1>
+    
+    <div class="upload-area" id="uploadArea">
+      <p>Drag & drop a PDF file here or click to select</p>
+      <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+    </div>
+    
+    <div class="progress">
+      <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+    </div>
+    <div id="status">Ready to test</div>
+    
+    <div class="results" id="results" style="display: none;">
+      <h2>Test Results</h2>
+      <div id="testResults"></div>
+      <div class="summary" id="summary"></div>
+    </div>
+  </div>
+
+  <script src="vendor/pdf.js/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.js/pdf.worker.min.js';
+  </script>
+  <script src="vendor/tesseract.js/tesseract.min.js"></script>
+  <script src="packages/core/dist/codbdocs.js"></script>
+  
+  <script>
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const progressBar = document.getElementById('progressBar');
+    const statusDiv = document.getElementById('status');
+    const resultsDiv = document.getElementById('results');
+    const testResultsDiv = document.getElementById('testResults');
+    const summaryDiv = document.getElementById('summary');
+
+    let testResults = [];
+    let totalTests = 0;
+    let passedTests = 0;
+
+    // Event listeners
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/pdf') {
+        runTests(file);
+      }
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) runTests(e.target.files[0]);
+    });
+
+    function updateProgress(percent, message) {
+      progressBar.style.width = percent + '%';
+      statusDiv.textContent = message;
+    }
+
+    function logTest(name, passed, details = '') {
+      totalTests++;
+      if (passed) passedTests++;
+      testResults.push({ name, passed, details });
+      
+      const div = document.createElement('div');
+      div.className = 'test-section';
+      div.innerHTML = `
+        <h3 class="${passed ? 'test-pass' : 'test-fail'}">${passed ? '✓' : '✗'} ${name}</h3>
+        ${details ? `<pre>${details}</pre>` : ''}
+      `;
+      testResultsDiv.appendChild(div);
+    }
+
+    async function runTests(file) {
+      resultsDiv.style.display = 'block';
+      testResultsDiv.innerHTML = '';
+      testResults = [];
+      totalTests = 0;
+      passedTests = 0;
+
+      updateProgress(5, 'Loading PDF...');
+      
+      try {
+        const doc = await CodbDocs.load(file);
+        logTest('Document Loading', true, `Loaded ${doc.pageCount} pages`);
+
+        // Test 1: Basic Text Extraction
+        updateProgress(10, 'Testing text extraction...');
+        try {
+          const textResult = await doc.extractText({ ocr: false });
+          logTest('Text Extraction', 
+            textResult.pageCount > 0 && textResult.fullText.length > 0,
+            `Pages: ${textResult.pageCount}, Text length: ${textResult.fullText.length}`
+          );
+        } catch (e) {
+          logTest('Text Extraction', false, e.message);
+        }
+
+        // Test 2: Full Analysis
+        updateProgress(20, 'Running full analysis...');
+        let graph;
+        try {
+          graph = await doc.analyze({ ocr: true });
+          logTest('Full Analysis', true, `Analysis completed`);
+        } catch (e) {
+          logTest('Full Analysis', false, e.message);
+          return;
+        }
+
+        // Test 3: Document Summary
+        updateProgress(30, 'Testing summary...');
+        try {
+          const summary = graph.getSummary();
+          logTest('Document Summary', 
+            summary.pageCount > 0 && summary.wordCount >= 0,
+            JSON.stringify(summary, null, 2)
+          );
+        } catch (e) {
+          logTest('Document Summary', false, e.message);
+        }
+
+        // Test 4: Query System
+        updateProgress(35, 'Testing queries...');
+        try {
+          const dates = graph.query("what dates are mentioned?");
+          logTest('Query - Dates', 
+            Array.isArray(dates.results),
+            `Found ${dates.results.length} dates`
+          );
+        } catch (e) {
+          logTest('Query - Dates', false, e.message);
+        }
+
+        // Test 5: Content Search
+        updateProgress(40, 'Testing content search...');
+        try {
+          const results = graph.find("text");
+          logTest('Content Search', 
+            Array.isArray(results),
+            `Found ${results.length} results`
+          );
+        } catch (e) {
+          logTest('Content Search', false, e.message);
+        }
+
+        // Test 6: Ask Feature
+        updateProgress(45, 'Testing ask feature...');
+        try {
+          const answer = graph.ask("What is this document about?");
+          logTest('Ask Feature', 
+            answer && typeof answer.answer === 'string',
+            `Answer: ${answer.answer?.substring(0, 100)}...`
+          );
+        } catch (e) {
+          logTest('Ask Feature', false, e.message);
+        }
+
+        // Test 7: Document Type
+        updateProgress(50, 'Testing document type...');
+        try {
+          const docType = graph.getDocumentType();
+          logTest('Document Type', 
+            docType && typeof docType.type === 'string',
+            `Type: ${docType.type} (${Math.round((docType.confidence || 0) * 100)}%)`
+          );
+        } catch (e) {
+          logTest('Document Type', false, e.message);
+        }
+
+        // Test 8: Accessibility Audit
+        updateProgress(55, 'Testing accessibility...');
+        try {
+          const audit = graph.auditAccessibility();
+          logTest('Accessibility Audit', 
+            audit && typeof audit.score === 'number',
+            `Score: ${audit.score}, Issues: ${audit.issues?.length || 0}`
+          );
+        } catch (e) {
+          logTest('Accessibility Audit', false, e.message);
+        }
+
+        // Test 9: Accessibility Tree
+        updateProgress(60, 'Testing accessibility tree...');
+        try {
+          const tree = graph.getAccessibilityTree();
+          logTest('Accessibility Tree', 
+            tree && tree.type === 'Document',
+            `Root type: ${tree?.type}`
+          );
+        } catch (e) {
+          logTest('Accessibility Tree', false, e.message);
+        }
+
+        // Test 10: HTML Export
+        updateProgress(65, 'Testing HTML export...');
+        try {
+          const html = graph.toHTML({ mode: 'accessible' });
+          logTest('HTML Export', 
+            typeof html === 'string' && html.length > 0,
+            `HTML length: ${html.length} chars`
+          );
+        } catch (e) {
+          logTest('HTML Export', false, e.message);
+        }
+
+        // Test 11: Vectors
+        updateProgress(70, 'Testing vectors...');
+        try {
+          const vectors = graph.getVectors(1);
+          logTest('Vector Extraction', 
+            Array.isArray(vectors),
+            `Found ${vectors.length} vectors`
+          );
+        } catch (e) {
+          logTest('Vector Extraction', false, e.message);
+        }
+
+        // Test 12: Structure Tree
+        updateProgress(72, 'Testing structure tree...');
+        try {
+          const structTree = graph.getStructureTree(1);
+          logTest('Structure Tree', 
+            true, // May be null for non-tagged PDFs
+            structTree ? 'Structure tree found' : 'No structure tree (non-tagged PDF)'
+          );
+        } catch (e) {
+          logTest('Structure Tree', false, e.message);
+        }
+
+        // Test 13: Annotations
+        updateProgress(74, 'Testing annotations...');
+        try {
+          const annotations = graph.getAnnotations(1);
+          logTest('Annotations', 
+            Array.isArray(annotations),
+            `Found ${annotations.length} annotations`
+          );
+        } catch (e) {
+          logTest('Annotations', false, e.message);
+        }
+
+        // Test 14: Reading Order
+        updateProgress(76, 'Testing reading order...');
+        try {
+          const readingOrder = graph.getReadingOrder(1);
+          logTest('Reading Order', 
+            Array.isArray(readingOrder),
+            `Found ${readingOrder.length} items in reading order`
+          );
+        } catch (e) {
+          logTest('Reading Order', false, e.message);
+        }
+
+        // Test 15: Content Blocks
+        updateProgress(78, 'Testing content blocks...');
+        try {
+          const blocks = graph.getBlocks();
+          logTest('Content Blocks', 
+            Array.isArray(blocks),
+            `Found ${blocks.length} content blocks`
+          );
+        } catch (e) {
+          logTest('Content Blocks', false, e.message);
+        }
+
+        // Test 16: Entities
+        updateProgress(80, 'Testing entities...');
+        try {
+          const entities = graph.getEntities();
+          logTest('Entities', 
+            Array.isArray(entities),
+            `Found ${entities.length} entities`
+          );
+        } catch (e) {
+          logTest('Entities', false, e.message);
+        }
+
+        // Test 17: JSON Export
+        updateProgress(82, 'Testing JSON export...');
+        try {
+          const json = graph.toJSON();
+          logTest('JSON Export', 
+            json && typeof json === 'object',
+            `JSON keys: ${Object.keys(json).join(', ')}`
+          );
+        } catch (e) {
+          logTest('JSON Export', false, e.message);
+        }
+
+        // Test 18: Extended Features - Metadata
+        updateProgress(84, 'Testing metadata...');
+        try {
+          const metadata = graph.getMetadata();
+          logTest('Document Metadata', 
+            typeof metadata === 'object',
+            `Title: ${metadata.title || 'N/A'}, Author: ${metadata.author || 'N/A'}`
+          );
+        } catch (e) {
+          logTest('Document Metadata', false, e.message);
+        }
+
+        // Test 19: Extended Features - Navigation
+        updateProgress(86, 'Testing navigation...');
+        try {
+          const outline = graph.getOutline();
+          logTest('Document Outline', 
+            Array.isArray(outline),
+            `Found ${outline.length} bookmarks`
+          );
+        } catch (e) {
+          logTest('Document Outline', false, e.message);
+        }
+
+        // Test 20: Extended Features - Security
+        updateProgress(88, 'Testing security...');
+        try {
+          const security = graph.getSecurity();
+          logTest('Security Info', 
+            typeof security === 'object',
+            `Encrypted: ${security.encrypted}`
+          );
+        } catch (e) {
+          logTest('Security Info', false, e.message);
+        }
+
+        // Test 21: Extended Features - Marked Content
+        updateProgress(90, 'Testing marked content...');
+        try {
+          const markedContent = graph.getMarkedContent(1);
+          logTest('Marked Content', 
+            Array.isArray(markedContent),
+            `Found ${markedContent.length} marked content sequences`
+          );
+        } catch (e) {
+          logTest('Marked Content', false, e.message);
+        }
+
+        // Test 22: Extended Features - Artifacts
+        updateProgress(92, 'Testing artifacts...');
+        try {
+          const artifacts = graph.getArtifacts(1);
+          logTest('Artifacts', 
+            Array.isArray(artifacts),
+            `Found ${artifacts.length} artifacts`
+          );
+        } catch (e) {
+          logTest('Artifacts', false, e.message);
+        }
+
+        // Test 23: Extended Features - Glyphs
+        updateProgress(94, 'Testing glyphs...');
+        try {
+          const glyphs = graph.getGlyphs(1);
+          logTest('Glyphs', 
+            Array.isArray(glyphs),
+            `Found ${glyphs.length} glyphs`
+          );
+        } catch (e) {
+          logTest('Glyphs', false, e.message);
+        }
+
+        // Test 24: Extended Features - Remediations
+        updateProgress(96, 'Testing remediations...');
+        try {
+          const remediations = graph.getRemediations();
+          logTest('Remediations', 
+            Array.isArray(remediations),
+            `Found ${remediations.length} suggested fixes`
+          );
+        } catch (e) {
+          logTest('Remediations', false, e.message);
+        }
+
+        // Test 25: RAG Output
+        updateProgress(98, 'Testing RAG output...');
+        try {
+          const ragOutput = graph.toRAG({ chunkStrategy: 'semantic' });
+          logTest('RAG Output', 
+            ragOutput && ragOutput.chunks && ragOutput.chunks.length > 0,
+            `Chunks: ${ragOutput.chunks.length}, Entities: ${ragOutput.entities?.length || 0}`
+          );
+        } catch (e) {
+          logTest('RAG Output', false, e.message);
+        }
+
+        // Test 26: Chunks
+        updateProgress(99, 'Testing chunks...');
+        try {
+          const chunks = graph.createChunks({ strategy: 'semantic' });
+          logTest('Chunking', 
+            Array.isArray(chunks) && chunks.length > 0,
+            `Created ${chunks.length} chunks`
+          );
+        } catch (e) {
+          logTest('Chunking', false, e.message);
+        }
+
+        // Test 27: Cross-page Context
+        updateProgress(100, 'Testing cross-page context...');
+        try {
+          const context = graph.getCrossPageContext();
+          logTest('Cross-page Context', 
+            typeof context === 'object',
+            `Entities: ${context.globalEntities?.length || 0}, Relationships: ${context.entityRelationships?.length || 0}`
+          );
+        } catch (e) {
+          logTest('Cross-page Context', false, e.message);
+        }
+
+        // Summary
+        summaryDiv.innerHTML = `
+          <h3>Test Summary</h3>
+          <p><strong>Total Tests:</strong> ${totalTests}</p>
+          <p><strong>Passed:</strong> <span class="test-pass">${passedTests}</span></p>
+          <p><strong>Failed:</strong> <span class="test-fail">${totalTests - passedTests}</span></p>
+          <p><strong>Success Rate:</strong> ${Math.round((passedTests / totalTests) * 100)}%</p>
+        `;
+
+        updateProgress(100, 'All tests completed!');
+
+      } catch (error) {
+        logTest('Critical Error', false, error.message);
+        updateProgress(100, 'Test failed: ' + error.message);
+      }
+    }
+  </script>
+</body>
+</html>

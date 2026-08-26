@@ -24,9 +24,11 @@ export default function App() {
       {result && (
         <>
           <p style={{ fontFamily: 'monospace', fontSize: 13, color: '#57616F' }}>
-            {result.stats.nativeCount} native · {result.stats.ocrCount} ocr'd · {result.stats.wordCount} words
+            {result.getSummary().wordCount} words · {result.getSummary().pageCount} pages
           </p>
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.6 }}>{result.fullText}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.6 }}>
+            {result.text.getPageText(1)}
+          </pre>
         </>
       )}
     </div>

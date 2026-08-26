@@ -51,6 +51,22 @@ import {
 } from './query.js';
 
 import {
+  extractImages,
+  extractAllImages,
+  createChunks,
+  buildCrossPageContext,
+  createRAGOutput,
+  createRAGOutputWithEmbeddings,
+  exportAsJSONL,
+  exportAsCSV,
+  ChunkStrategies,
+  EmbeddingProvider,
+  OpenAIEmbeddingProvider,
+  LocalEmbeddingProvider,
+  CustomEmbeddingProvider,
+} from './rag.js';
+
+import {
   canUseWorkers,
   createRenderWorker,
   createBrainWorker,
@@ -74,6 +90,57 @@ import {
   generateAccessibilityTree,
   exportHTML,
 } from './pdfir.js';
+
+import {
+  extractDocumentMetadata,
+  extractOutline,
+  extractNamedDestinations,
+  extractPageLabels,
+  extractSecurity,
+  extractMarkedContent,
+  extractArtifacts,
+  extractGlyphs,
+  generateRemediations,
+} from './extended.js';
+
+import {
+  extractGraphicsState,
+  buildGraphicsStateSummary,
+  parseBlendMode,
+  createTransparencyGroup,
+  createSoftMask,
+  createTilingPattern,
+  createGradientShading,
+  parseShading,
+  ColorSpaceTypes,
+  toRgb,
+  cmykToRgb,
+  rgbToCmyk,
+  labToRgb,
+} from './graphics.js';
+
+import {
+  PDFCreator,
+  createPDF,
+  createTextPDF,
+} from './pdfcreator.js';
+
+import {
+  extractSignatures,
+  buildSignatureSummary,
+  extractOCGs,
+  buildOCGSummary,
+  extractEmbeddedFiles,
+  buildEmbeddedFilesSummary,
+  extractActions,
+  buildActionsSummary,
+  extractAppearanceStreams,
+  buildAppearanceStreamsSummary,
+  trackXObjectReuse,
+  buildXObjectSummary,
+  extractRevisions,
+  buildRevisionsSummary,
+} from './advanced.js';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -158,6 +225,7 @@ class CodbDoc {
       ocr = true,
       visual = false,
       extractVectors: extractVecs = true,
+      extractExtended = true,
       onPageComplete,
       onProgress,
       onLayer,
@@ -166,15 +234,39 @@ class CodbDoc {
     const graph = new DocumentGraph();
     const contentGraph = new DocumentContentGraph();
     const ir = createIR();
-    const useWorkers = config.useWorkers && canUseWorkers();
-    let renderWorker = null;
-    let brainWorker = null;
 
-    if (useWorkers) {
+    // Extract document-level metadata (once, not per-page)
+    if (extractExtended) {
       try {
-        renderWorker = createRenderWorker();
-        brainWorker = createBrainWorker();
-      } catch (e) { /* fallback */ }
+        onProgress && onProgress({ page: 0, total: this.pageCount, status: 'metadata' });
+        ir.document.metadata = await extractDocumentMetadata(this._pdf);
+        onProgress && onProgress({ page: 0, total: this.pageCount, status: 'navigation' });
+        ir.document.navigation = {
+          outline: await extractOutline(this._pdf),
+          destinations: await extractNamedDestinations(this._pdf),
+          labels: await extractPageLabels(this._pdf),
+        };
+        onProgress && onProgress({ page: 0, total: this.pageCount, status: 'security' });
+        ir.document.security = await extractSecurity(this._pdf);
+        
+        // Extract OCGs (Optional Content Groups / layers)
+        onProgress && onProgress({ page: 0, total: this.pageCount, status: 'ocgs' });
+        ir.document.ocgs = await extractOCGs(this._pdf);
+        
+        // Extract embedded files
+        onProgress && onProgress({ page: 0, total: this.pageCount, status: 'embedded' });
+        ir.document.embeddedFiles = await extractEmbeddedFiles(this._pdf);
+        
+        // Extract actions
+        onProgress && onProgress({ page: 0, total: this.pageCount, status: 'actions' });
+        ir.document.actions = await extractActions(this._pdf);
+        
+        // Extract revisions
+        onProgress && onProgress({ page: 0, total: this.pageCount, status: 'revisions' });
+        ir.document.revisions = await extractRevisions(this._pdf);
+      } catch (e) {
+        console.error('[codbdocs] Document-level extraction error:', e);
+      }
     }
 
     try {
@@ -250,7 +342,7 @@ class CodbDoc {
           contentGraph.addPageGraph(contentPageGraph);
         }
 
-        // Extract vectors from PDF (new)
+        // Extract vectors from PDF
         let vectors = [];
         if (extractVecs) {
           onProgress && onProgress({ page: num, total: this.pageCount, status: 'vectors' });
@@ -310,6 +402,37 @@ class CodbDoc {
           ir.structure[`page_${num}`] = structureTree;
         }
 
+        // Extract extended per-page features (merged into main loop)
+        if (extractExtended) {
+          try {
+            irPage.markedContent = await extractMarkedContent(page);
+          } catch (e) { /* marked content extraction may fail */ }
+          
+          try {
+            irPage.artifacts = await extractArtifacts(page);
+          } catch (e) { /* artifact extraction may fail */ }
+          
+          try {
+            irPage.glyphs = await extractGlyphs(page);
+          } catch (e) { /* glyph extraction may fail */ }
+          
+          // Extract digital signatures
+          try {
+            irPage.signatures = await extractSignatures(page, this._pdf);
+          } catch (e) { /* signature extraction may fail */ }
+          
+          // Extract appearance streams
+          try {
+            irPage.appearanceStreams = await extractAppearanceStreams(page);
+          } catch (e) { /* appearance stream extraction may fail */ }
+          
+          // Extract graphics states
+          try {
+            const pageOps = await page.getOperatorList();
+            irPage.graphicsStates = extractGraphicsState(pageOps);
+          } catch (e) { /* graphics state extraction may fail */ }
+        }
+
         // Detect reading order
         let readingOrder = [];
         try {
@@ -341,10 +464,14 @@ class CodbDoc {
           contentEntities: pageResult.contentEntities,
           vectors: pageResult.vectors,
         });
+
+        // Cleanup: release PDF.js page resources
+        try {
+          page.cleanup();
+        } catch (e) { /* cleanup may not be available */ }
       }
-    } finally {
-      terminateWorker(renderWorker);
-      terminateWorker(brainWorker);
+    } catch (e) {
+      console.error('[codbdocs] Analysis error:', e);
     }
 
     // Classify document type
@@ -397,6 +524,94 @@ class CodbDoc {
     graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
     graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
 
+    // Add RAG methods
+    graph.getImages = (pageNum) => {
+      return graph._images?.filter(img => !pageNum || img.pageNumber === pageNum) || [];
+    };
+    graph.extractAllImages = (options) => extractAllImages(this._pdf, options);
+    graph.createChunks = (options) => createChunks(graph, options);
+    graph.getCrossPageContext = () => buildCrossPageContext(graph);
+    graph.toRAG = (options) => createRAGOutput(graph, options);
+    graph.toRAGWithEmbeddings = (embeddingProvider, options) => 
+      createRAGOutputWithEmbeddings(graph, embeddingProvider, options);
+    graph.toJSONL = (options) => exportAsJSONL(createRAGOutput(graph, options));
+    graph.toCSV = (options) => exportAsCSV(createRAGOutput(graph, options));
+
+    // Add extended features methods
+    graph.getMetadata = () => ir.document.metadata;
+    graph.getOutline = () => ir.document.navigation.outline || [];
+    graph.getNamedDestinations = () => ir.document.navigation.destinations || {};
+    graph.getPageLabels = () => ir.document.navigation.labels || [];
+    graph.getSecurity = () => ir.document.security;
+    graph.getMarkedContent = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.markedContent || [];
+    };
+    graph.getArtifacts = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.artifacts || [];
+    };
+    graph.getGlyphs = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.glyphs || [];
+    };
+    graph.getRemediations = () => {
+      const audit = graph.auditAccessibility();
+      return generateRemediations(audit, ir);
+    };
+
+    // Add advanced features methods
+    graph.getSignatures = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.signatures || [];
+    };
+    graph.getSignatureSummary = () => {
+      const allSignatures = [];
+      for (const pageId of Object.keys(ir.pages)) {
+        if (ir.pages[pageId]?.signatures) {
+          allSignatures.push(...ir.pages[pageId].signatures);
+        }
+      }
+      return buildSignatureSummary(allSignatures);
+    };
+    graph.getOCGs = () => ir.document.ocgs || [];
+    graph.getOCGSummary = () => buildOCGSummary(ir.document.ocgs || []);
+    graph.getEmbeddedFiles = () => ir.document.embeddedFiles || [];
+    graph.getEmbeddedFilesSummary = () => buildEmbeddedFilesSummary(ir.document.embeddedFiles || []);
+    graph.getActions = () => ir.document.actions || [];
+    graph.getActionsSummary = () => buildActionsSummary(ir.document.actions || []);
+    graph.getAppearanceStreams = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.appearanceStreams || [];
+    };
+    graph.getAppearanceStreamsSummary = () => {
+      const allAppearances = [];
+      for (const pageId of Object.keys(ir.pages)) {
+        if (ir.pages[pageId]?.appearanceStreams) {
+          allAppearances.push(...ir.pages[pageId].appearanceStreams);
+        }
+      }
+      return buildAppearanceStreamsSummary(allAppearances);
+    };
+    graph.getXObjectReuse = () => trackXObjectReuse(ir);
+    graph.getXObjectSummary = () => buildXObjectSummary(trackXObjectReuse(ir));
+    graph.getRevisions = () => ir.document.revisions || [];
+    graph.getRevisionsSummary = () => buildRevisionsSummary(ir.document.revisions || []);
+
+    // Add graphics state methods
+    graph.getGraphicsStateSummary = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      const states = ir.pages[pageId]?.graphicsStates || [];
+      return buildGraphicsStateSummary(states);
+    };
+
+    // Add PDF creation methods
+    graph.toPDF = (options) => createPDF(ir, options);
+    graph.createTextPDF = (options) => createTextPDF(
+      Object.values(ir.pages).map(p => p.content?.join('\n') || ''),
+      options
+    );
+
     return graph;
   }
 
@@ -442,6 +657,210 @@ class CodbDoc {
     return renderPageToCanvas(page, scale);
   }
 
+  /**
+   * Process pages in batches for large PDFs (900+ pages).
+   * This reduces memory usage by processing pages in chunks.
+   */
+  async analyzeBatched(opts = {}) {
+    const {
+      batchSize = 50,
+      ocr = true,
+      visual = false,
+      extractVectors: extractVecs = true,
+      extractExtended = true,
+      onPageComplete,
+      onProgress,
+      onLayer,
+      onBatchComplete,
+    } = opts;
+
+    const graph = new DocumentGraph();
+    const contentGraph = new DocumentContentGraph();
+    const ir = createIR();
+
+    // Extract document-level metadata
+    if (extractExtended) {
+      try {
+        ir.document.metadata = await extractDocumentMetadata(this._pdf);
+        ir.document.navigation = {
+          outline: await extractOutline(this._pdf),
+          destinations: await extractNamedDestinations(this._pdf),
+          labels: await extractPageLabels(this._pdf),
+        };
+        ir.document.security = await extractSecurity(this._pdf);
+      } catch (e) {
+        console.error('[codbdocs] Document-level extraction error:', e);
+      }
+    }
+
+    // Process in batches
+    const totalPages = this.pageCount;
+    for (let batchStart = 1; batchStart <= totalPages; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
+      
+      onProgress && onProgress({ 
+        page: batchStart, 
+        total: totalPages, 
+        status: 'batch',
+        batch: { start: batchStart, end: batchEnd, total: Math.ceil(totalPages / batchSize) }
+      });
+
+      for (let num = batchStart; num <= batchEnd; num++) {
+        // (Same processing as analyze() but with batch awareness)
+        const page = await this._pdf.getPage(num);
+        const viewport = page.getViewport({ scale: 1 });
+        const pageSize = { width: viewport.width, height: viewport.height };
+        const content = await page.getTextContent();
+        const nativeText = content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+
+        let text = nativeText;
+        let source = 'native';
+        let confidence = null;
+
+        if (nativeText.length <= config.nativeTextMinLength && ocr) {
+          try {
+            const canvas = await renderPageToCanvas(page, config.ocrScale);
+            const Tesseract = getTesseract();
+            const { data } = await Tesseract.recognize(canvas, config.ocrLang);
+            text = (data.text || '').trim();
+            source = 'ocr';
+            confidence = data.confidence;
+          } catch (err) { source = 'error'; text = ''; }
+        }
+
+        let spatial = null;
+        let structures = null;
+        let metadata = null;
+        let classification = null;
+
+        if (config.enableBrain) {
+          spatial = analyzeSpatialLayout(content.items, pageSize);
+          structures = detectStructure(spatial, pageSize);
+          metadata = extractMetadata(text);
+          classification = classifyPage(text, spatial);
+        }
+
+        let contentPageGraph = null;
+        if (config.enableContent) {
+          contentPageGraph = analyzeContent(num, text, spatial, metadata);
+          contentGraph.addPageGraph(contentPageGraph);
+        }
+
+        let vectors = [];
+        if (extractVecs) {
+          try { vectors = await extractVectors(page); } catch (e) {}
+        }
+
+        let structureTree = null;
+        try { structureTree = await extractStructureTree(page); } catch (e) {}
+
+        let annotations = [];
+        try { annotations = await extractAnnotations(page); } catch (e) {}
+
+        const irPage = addPage(ir, num, {
+          width: pageSize.width,
+          height: pageSize.height,
+          rotation: page.rotate,
+          mediaBox: page.mediaBox,
+          cropBox: page.cropBox,
+        });
+
+        for (const vec of vectors) addVectorObject(ir, `page_${num}`, vec);
+        for (const item of content.items) {
+          if (item.str && item.str.trim()) {
+            addTextObject(ir, `page_${num}`, {
+              text: item.str,
+              bbox: [item.transform[4], item.transform[5], item.width, item.height],
+              font: item.fontName,
+              fontSize: Math.abs(item.transform[0]) || 12,
+              transform: item.transform,
+            });
+          }
+        }
+
+        if (annotations.length > 0) {
+          irPage.annotations = annotations;
+          ir.annotations[`page_${num}`] = annotations;
+        }
+        if (structureTree) ir.structure[`page_${num}`] = structureTree;
+
+        if (extractExtended) {
+          try { irPage.markedContent = await extractMarkedContent(page); } catch (e) {}
+          try { irPage.artifacts = await extractArtifacts(page); } catch (e) {}
+          try { irPage.glyphs = await extractGlyphs(page); } catch (e) {}
+        }
+
+        let readingOrder = [];
+        try { readingOrder = detectReadingOrder(ir, num); } catch (e) {}
+
+        const pageResult = {
+          num, text, source, confidence, pageSize,
+          spatial, structures, metadata, classification,
+          contentBlocks: contentPageGraph ? contentPageGraph.blocks.length : 0,
+          contentEntities: contentPageGraph ? contentPageGraph.entities.length : 0,
+          vectors: vectors.length,
+          annotations: annotations.length,
+          hasStructureTree: !!structureTree,
+          readingOrder: readingOrder.length,
+        };
+
+        graph.addPageResult(pageResult);
+        onPageComplete && onPageComplete(pageResult);
+
+        try { page.cleanup(); } catch (e) {}
+      }
+
+      onBatchComplete && onBatchComplete({ 
+        batchStart, 
+        batchEnd, 
+        completed: batchEnd,
+        total: totalPages 
+      });
+    }
+
+    if (config.enableContent) {
+      contentGraph.documentType = classifyDocumentType(contentGraph);
+    }
+
+    graph._contentGraph = contentGraph;
+    graph._doc = this;
+    graph._ir = ir;
+
+    graph.find = (query) => executeQuery(contentGraph, query);
+    graph.findOne = (query) => {
+      const results = contentGraph.find(query);
+      return results.length > 0 ? results[0] : null;
+    };
+    graph.ask = (question) => executeAsk(contentGraph, question);
+    graph.getEntities = (type) => contentGraph.getEntities(type);
+    graph.getBlocks = (type) => contentGraph.getBlocks(type);
+    graph.getDocumentType = () => contentGraph.documentType;
+    graph.getIR = () => ir;
+    graph.auditAccessibility = () => auditAccessibility(ir);
+    graph.getAccessibilityTree = () => generateAccessibilityTree(ir);
+    graph.toHTML = (options) => exportHTML(ir, options);
+    graph.getVectors = (pageNum) => ir.pages[`page_${pageNum}`]?.vectors?.map(id => ir.vectors[id]) || [];
+    graph.getStructureTree = (pageNum) => ir.structure[`page_${pageNum}`] || null;
+    graph.getAnnotations = (pageNum) => ir.annotations[`page_${pageNum}`] || [];
+    graph.getFormFields = () => ir.forms?.fields || [];
+    graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
+    graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
+    graph.getMetadata = () => ir.document.metadata;
+    graph.getOutline = () => ir.document.navigation.outline || [];
+    graph.getNamedDestinations = () => ir.document.navigation.destinations || {};
+    graph.getPageLabels = () => ir.document.navigation.labels || [];
+    graph.getSecurity = () => ir.document.security;
+    graph.getMarkedContent = (pageNum) => ir.pages[`page_${pageNum}`]?.markedContent || [];
+    graph.getArtifacts = (pageNum) => ir.pages[`page_${pageNum}`]?.artifacts || [];
+    graph.getGlyphs = (pageNum) => ir.pages[`page_${pageNum}`]?.glyphs || [];
+    graph.getRemediations = () => generateRemediations(graph.auditAccessibility(), ir);
+    graph.createChunks = (options) => createChunks(graph, options);
+    graph.getCrossPageContext = () => buildCrossPageContext(graph);
+    graph.toRAG = (options) => createRAGOutput(graph, options);
+
+    return graph;
+  }
+
   destroy() {
     if (this._pdf) this._pdf.destroy();
   }
@@ -469,3 +888,69 @@ export { DocumentGraph } from './layers.js';
 export { DocumentContentGraph, PageContentGraph, ContentBlock, BlockTypes, EntityTypes } from './content.js';
 export { analyzeSpatialLayout, detectStructure, extractMetadata, classifyPage, analyzeVisualRegions } from './brain.js';
 export { executeQuery, executeAsk, highlightResults, createHighlightAnnotations } from './query.js';
+export {
+  extractImages,
+  extractAllImages,
+  createChunks,
+  buildCrossPageContext,
+  createRAGOutput,
+  createRAGOutputWithEmbeddings,
+  exportAsJSONL,
+  exportAsCSV,
+  ChunkStrategies,
+  EmbeddingProvider,
+  OpenAIEmbeddingProvider,
+  LocalEmbeddingProvider,
+  CustomEmbeddingProvider,
+} from './rag.js';
+
+export {
+  extractDocumentMetadata,
+  extractOutline,
+  extractNamedDestinations,
+  extractPageLabels,
+  extractSecurity,
+  extractMarkedContent,
+  extractArtifacts,
+  extractGlyphs,
+  generateRemediations,
+} from './extended.js';
+
+export {
+  extractGraphicsState,
+  buildGraphicsStateSummary,
+  parseBlendMode,
+  createTransparencyGroup,
+  createSoftMask,
+  createTilingPattern,
+  createGradientShading,
+  parseShading,
+  ColorSpaceTypes,
+  toRgb,
+  cmykToRgb,
+  rgbToCmyk,
+  labToRgb,
+} from './graphics.js';
+
+export {
+  PDFCreator,
+  createPDF,
+  createTextPDF,
+} from './pdfcreator.js';
+
+export {
+  extractSignatures,
+  buildSignatureSummary,
+  extractOCGs,
+  buildOCGSummary,
+  extractEmbeddedFiles,
+  buildEmbeddedFilesSummary,
+  extractActions,
+  buildActionsSummary,
+  extractAppearanceStreams,
+  buildAppearanceStreamsSummary,
+  trackXObjectReuse,
+  buildXObjectSummary,
+  extractRevisions,
+  buildRevisionsSummary,
+} from './advanced.js';

@@ -232,7 +232,7 @@
   }
 
   function renderSummary(graph) {
-    const s = graph.getSummary().results;
+    const s = graph.getSummary();
     document.getElementById('summaryContent').innerHTML = `
       <div>
         ${Object.entries(s.blockTypes || {}).map(([t, c]) =>

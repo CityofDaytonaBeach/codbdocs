@@ -384,7 +384,7 @@ function extractZipCodes(text) {
   for (const m of text.matchAll(pattern)) {
     const zip = m[0];
     // Filter out likely non-zip numbers
-    if (!seen.has(zip) && !/^\d{5}$/.test(zip) || true) {
+    if (!seen.has(zip)) {
       zips.push({ raw: zip, position: m.index });
       seen.add(zip);
     }
