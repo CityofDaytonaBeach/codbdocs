@@ -499,7 +499,11 @@ export function extractRelationships(contentGraph, conceptGraph) {
   }
 
   // 6. Definition-based relationships (acronyms, "hereinafter referred to as")
-  for (const page of pages || []) {
+  const definitionPages = (contentGraph?.pages || []).map((p) => ({
+    pageNum: p.page,
+    text: (p.blocks || []).map((b) => b.text || '').join('\n'),
+  }));
+  for (const page of definitionPages) {
     const text = page.text || '';
     const acronyms = detectAcronyms(text);
     for (const acr of acronyms) {
