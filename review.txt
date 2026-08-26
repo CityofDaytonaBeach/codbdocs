@@ -1,116 +1,431 @@
-I pulled main again. There was a new repository update, but unfortunately the actual core code did not change. The tree moved from 5320dbf9... to e2ad1b26..., while the source SHAs remain the same. The change appears to be mainly review.txt, which now contains the previous review.
+Yes. This time it actually updated. Not just review.txt doing interpretive dance around the requested changes.
 
-What's still remaining
-Headless Accessible View is still missing. There is still no accessible.js or access/ module and therefore no graph.createAccessibleView(). This is the layer that should build semantic accessible content while leaving UI/design entirely to the consuming React/Lovable/JS app.
-query.js has not been updated. Its SHA remains c4c6ed..., so the query problems identified previously remain: overlapping intent regexes, subject context not being preserved, who effectively targeting people too broadly, and how much targeting currency too broadly.
-Relationship-aware retrieval still needs completion. The desired flow should be:
-"Who approved the $425,000 contract?"
-        ↓
-intent: relationship_lookup
-subject: contract
-anchor: $425,000
-relation: approvedBy
-expected: PERSON
-        ↓
-Document Graph
-        ↓
-best matching relationship
-        ↓
-answer + page + bbox + evidence
+The main tree changed to:
 
-rather than simply finding every PERSON entity.
+279fde7d1234842290e0da7ffe930ac4aed435f4
 
-Currency aggregation needs query awareness. CODB should only perform SUM when the question actually requests a total, sum, combined amount, aggregate, etc. Otherwise original amount + change order + revised amount can produce a beautifully precise but completely wrong total.
-A proper query planner is still missing. I'd want:
-graph.planQuery(question)
+And there are major real code changes.
 
-producing something like:
+Most importantly, I can now see:
 
-{
-  intent: "value_lookup",
-  subject: ["contract"],
-  expected: ["currency"],
-  anchors: [],
-  relations: [],
-  operation: null
+concepts.js added: 70,590 bytes
+docaccess.js added: 51,845 bytes
+expansion.js added: 18,057 bytes
+persistence.js added
+workspace.js added
+workers.js significantly expanded
+query.js changed
+rag.js changed
+pdfir.js changed
+index.js grew from ~40 KB to ~60 KB
+test directory added
+README significantly expanded
+
+And the big one:
+
+dist is finally rebuilt
+
+Old:
+
+dist/codbdocs.js
+59,108 bytes
+SHA f551736...
+
+New:
+
+dist/codbdocs.js
+386,938 bytes
+SHA 54ce8c42...
+
+So your jsDelivr core build is finally reflecting the expanded source.
+
+This means the previous stale-CDN problem is resolved in the repository.
+
+Also, docaccess.js now exists, which strongly indicates the headless accessible-document layer we were discussing has been implemented rather than merely contemplated in a text file.
+
+concepts.js also suggests the deterministic Concept Graph/semantic layer has landed, and workspace.js + persistence.js indicate the production architecture is moving into multi-document and cached/browser-persistent territory.
+
+This is a substantial update, not a cosmetic one.
+
+I would next inspect docaccess.js, concepts.js, the new query.js, index.js, and tests specifically for correctness and integration. The feature checklist has clearly changed enough that my previous "remaining gaps" list is now obsolete.
+
+inspect all and report if ready for production
+
+I inspected the current core architecture, new retrieval layer, accessibility system, persistence, rebuilt distribution, and test setup. My verdict: not production-ready yet. It is much closer, but I would classify it as a strong beta / release candidate, roughly 8/10.
+
+The architecture is now legitimately substantial. The remaining blockers are mostly validation and a few correctness/integration problems, rather than missing grand features.
+
+Production-readiness report
+Area	Status	Assessment
+PDF extraction	🟢	Strong
+PDF-IR / provenance	🟢	Strong
+Quality-based OCR	🟢	Now integrated
+Native/OCR fusion	🟢	Added
+Concept Graph	🟢	Added
+Relationship extraction	🟢	Added
+10-channel hybrid retrieval	🟢	Implemented in new engine
+Query planning	🟢	Added in concepts.js
+Deterministic reasoning	🟢	COUNT/SUM/AVG/MIN/MAX/etc.
+Table querying	🟢	Added
+Terminology learning	🟢	Added
+Accessibility HTML	🟢	Extensive
+WCAG auditing	🟡	Useful, but claims need tightening
+IndexedDB persistence	🟢	Added
+Workspaces	🟢	Added
+Workers	🟢	Present
+dist build	🟢	Finally rebuilt
+Automated regression tests	🔴	Not actually running
+CI/CD validation	🔴	Missing
+Legacy Q&A correctness	🔴	Still contains old bugs
+Production evidence/benchmarks	🔴	Missing
+
+The new concepts.js really does implement the architecture we discussed: Concept Graph, relationship extraction, multi-signal fingerprints, ten-channel hybrid retrieval, query planning, evidence ranking, deterministic operators, reranking, table querying and terminology learning.
+
+The biggest blocker: your tests are fake right now
+
+This is the first thing I would fix.
+
+You created:
+
+test/corpus/
+  ground-truth.json
+  run-tests.js
+
+which looks encouraging.
+
+But run-tests.js literally says:
+
+// This would run the actual tests with CodbDocs
+// For now, just report what would be tested
+
+and every test gets:
+
+status: 'pending'
+
+The runner then increments:
+
+summary.pending
+
+rather than actually loading PDFs, analyzing them, executing queries and comparing results.
+
+So right now you have a test specification, not a regression suite.
+
+That's the primary reason I won't call it production-ready.
+
+There is no CI workflow
+
+I checked .github/workflows and there isn't one.
+
+That means GitHub currently isn't automatically verifying:
+
+syntax
+imports
+build
+tests
+dist freshness
+API compatibility
+retrieval regression
+
+before changes reach main.
+
+For a library approaching 400 KB of bundled code with this many interconnected systems, that's too risky.
+
+You want:
+
+push / PR
+   ↓
+npm install
+   ↓
+lint
+   ↓
+unit tests
+   ↓
+PDF corpus tests
+   ↓
+build
+   ↓
+verify dist
+   ↓
+browser smoke tests
+   ↓
+PASS → merge
+I found an important architectural inconsistency
+
+Your new retrieval system is sophisticated, but query.js still contains the old simplistic Q&A implementation.
+
+For example, it still has:
+
+for (const { patterns, entityType ... }
+     of QUERY_PATTERNS) {
+
+  if (pattern.test(lower)) {
+
+    const results =
+      contentGraph.getEntities(entityType);
+
+    return ...
+  }
 }
 
-Then retrieval operates from that plan.
+So the old problem remains there.
 
-Deterministic operators remain worth adding: SUM, COUNT, AVG, MIN, MAX, COMPARE, BEFORE, AFTER, BETWEEN, and GROUP BY. These are especially valuable because your model-free engine can execute them deterministically instead of asking an LLM to perform interpretive arithmetic.
-Concept Graph remains a major intelligence upgrade. You want relationships such as:
-contract ↔ agreement ↔ award
-vendor ↔ contractor ↔ supplier
-SOF ↔ Sufficiency of Funds
-cost ↔ amount ↔ value
-approve ↔ authorize ↔ adopt
+Question:
 
-with document-derived aliases and terminology added automatically.
+Who approved the contract?
 
-Evidence fusion/indexing should become first-class. Instead of one search strategy:
-Exact
-+ BM25
-+ fuzzy
-+ phrase
-+ concept
-+ entity
-+ structure
-+ spatial
-+ relationships
+can still become:
+
+who
+ ↓
+PERSON
+ ↓
+return all people
+
+while your new concepts.js has the much better machinery for:
+
+relationship_lookup
++
+contract
++
+approvedBy
++
+PERSON
+
+You now effectively have two brains.
+
+One is sophisticated:
+
+concepts.js
+
+and one is the older:
+
+query.js
+
+The public API needs to consistently route sophisticated queries through the new engine.
+
+The dangerous automatic money total is still there
+
+query.js still does:
+
+const total =
+  amounts.reduce(
+    (s, a) =>
+      s + (a.value || 0),
+    0
+  );
+
+and then:
+
+if (total > 0)
+  answer +=
+    `Total: $${total.toLocaleString()}`
+
+That is still unsafe.
+
+A PDF containing:
+
+Original Contract    $1,000,000
+Change Order           $250,000
+Revised Contract     $1,250,000
+
+can produce:
+
+Total: $2,500,000
+
+when nobody asked for a total.
+
+Your new deterministic reasoning engine already solves the conceptual problem. Only execute SUM when the query planner identifies a summation intent.
+
+So delete automatic aggregation from legacy executeAsk().
+
+The summary bug is still present
+
+This remains:
+
+const { results } = queryResult;
+
+if (results.length === 0) {
+
+before:
+
+if (type === 'summary') {
+
+But:
+
+contentGraph.getSummary()
+
+appears conceptually to return an object.
+
+Therefore:
+
+results.length
+
+isn't a valid generic assumption.
+
+Not catastrophic, but it's exactly the kind of inconsistency proper unit tests would catch immediately.
+
+OCR architecture improved substantially
+
+This part is now much better.
+
+Your new analyze() calculates text quality before deciding whether OCR is necessary and then performs native/OCR fusion when the native extraction falls below the configured quality threshold.
+
+That's exactly the change I previously recommended.
+
+You now effectively have:
+
+Native extraction
+       ↓
+Quality assessment
+       ↓
+    acceptable?
+    /        \
+  yes        no
+   │          │
+native       OCR
+              │
+       native/OCR fusion
+              │
+         final evidence
+
+That moves this from "OCR fallback based on character count" toward an actual document-quality engine.
+
+Accessibility is impressive, but change one claim
+
+docaccess.js is extensive. It checks headings, tables, alt text, language, form labels, keyboard accessibility, contrast and multiple WCAG criteria, and it generates accessible semantic HTML.
+
+But the header currently says:
+
+WCAG 2.1 AA-compliant accessible HTML export
+
+I would change that to:
+
+WCAG 2.1 AA-oriented accessible HTML generation and automated auditing
+
+Why?
+
+Because software cannot safely guarantee that arbitrary generated output is WCAG-conformant merely because automated checks passed.
+
+For example, an image can technically have:
+
+alt="image"
+
+and pass the existence test while still having useless alternative text.
+
+Similarly, correct reading order and meaningful table relationships can require human judgment.
+
+So keep:
+
+wcagAudit()
+
+but avoid marketing:
+
+guaranteed WCAG compliant
+
+unless you've independently validated the resulting output.
+
+That's a legal/product-risk issue as much as a coding issue.
+
+Persistence is good but needs versioning
+
+IndexedDB caching is cleanly implemented using:
+
+SHA-256(PDF)
+
+as the cache key, with TTL support.
+
+But I'd change the key from effectively:
+
+PDF hash
+
+to:
+
+PDF hash
++
+CODB Docs version
++
+IR schema version
++
+analysis configuration
+
+Otherwise:
+
+user analyzes PDF with CODB 1.0
         ↓
-adaptive ranking
+cached
 
-and every result should explain why it matched.
+CODB 1.1 changes IR/schema
+        ↓
+same PDF hash
+        ↓
+old cached representation returned
 
-dist/codbdocs.js is still stale. This remains a major production issue. Its SHA is still f551736..., while src/index.js is cc8a250.... So the jsDelivr dist URL you've been using is still serving the older build.
-Production regression tests/CI are still important. I'd specifically make CI fail when src changed without rebuilding dist, because apparently humans cannot be trusted to remember generated bundles. A nasty-PDF corpus should also verify reading order, OCR fallback, tables, images, accessibility, query answers, page citations and bounding boxes.
-Priority now
+Welcome to one of software engineering's traditional forms of recreational suffering.
 
-I wouldn't add more PDF extraction features yet. Your extraction system is already unusually broad. I'd finish these four layers:
+Use something like:
 
-P0  Build/update dist automatically
-P0  Fix contextual query planning
-P1  Relationship + Concept Graph retrieval
-P1  Add headless createAccessibleView()
+{
+  pdfHash,
+  engineVersion: "1.0.0",
+  irVersion: "1.2",
+  configHash
+}
+dist is finally healthy structurally
 
-then
+This was previously your biggest operational problem.
 
-P1  Evidence fusion/ranking
-P1  Deterministic reasoning operators
-P2  IndexedDB persistence/caching
-P2  Full regression benchmark suite
+It's now:
 
-Once those are complete, the architecture becomes much more cohesive:
+dist/codbdocs.js
+386,938 bytes
+SHA 54ce8c42...
 
-PDF
- ↓
-CODB-IR
- ↓
-Document Graph
- ├── structure
- ├── entities
- ├── tables
- ├── images
- ├── spatial relationships
- └── provenance
- ↓
-Concept Graph
- ↓
-Query Planner
- ↓
-Evidence Fusion
- ↓
-Relationship Reasoning
- ↓
-Answer / Search Result
- ├── confidence
- ├── explanation
- ├── page
- ├── bbox
- └── source object
- ↓
-Headless Accessible View
- ↓
-React / Lovable / JS decides presentation
+instead of the ancient ~59 KB build.
 
-That's the remaining path I'd concentrate on. You're no longer missing a mountain of PDF features. You're missing the orchestration layer that turns the mountain into one coherent engine.
+So the public jsDelivr build now appears to contain the expanded system.
+
+That is a major improvement.
+
+What I require before calling it production-ready
+
+You don't need another giant feature sprint.
+
+You need a hardening sprint:
+
+Route graph.ask() and advanced searching through the new Concept/Query Planner engine rather than leaving the legacy query.js path authoritative.
+Remove unconditional currency summation.
+Fix the summary object/array handling.
+Turn test/corpus/run-tests.js into real executable tests.
+Put actual ugly PDFs into the corpus.
+Test expected answer and page/bbox/evidence, not just text.
+Add unit tests for Concept Graph, query planning, operators, terminology expansion and accessibility output.
+Add GitHub Actions.
+Fail CI if dist doesn't match source.
+Add cache/schema/version invalidation.
+Add malformed-PDF/fuzz tests and memory limits.
+Benchmark retrieval quality and publish the numbers.
+
+Then establish release gates such as:
+
+Build                       PASS
+Unit tests                  100%
+Corpus tests                ≥95%
+Page citation accuracy      ≥98%
+Exact entity retrieval      ≥98%
+Table relationship accuracy ≥95%
+Malformed PDF crash rate    0%
+1000-page memory test       PASS
+Accessibility HTML tests    PASS
+Legacy API compatibility    PASS
+dist/source validation      PASS
+Verdict
+
+Feature complete enough for 1.0? Yes.
+
+Ready for serious beta testing in Lovable/React/JavaScript apps? Yes.
+
+Ready to call production-grade today? No.
+
+What's missing is no longer innovation. It's proof.
+
+You now have the model-free Concept Graph, deterministic retrieval, query planner, reasoning operators, document IR, OCR fusion, accessibility generation, persistence, workspace support, workers and a rebuilt distributable. That's a remarkably broad engine. But until the test runner stops proudly reporting that every test is pending, we don't actually know whether those pieces survive contact with hundreds of hostile real-world PDFs.
