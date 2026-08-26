@@ -142,6 +142,19 @@ import {
   buildRevisionsSummary,
 } from './advanced.js';
 
+import {
+  analyzeTextQuality,
+  compareVisualInternal,
+  detectRepeatedElements,
+  normalizeText,
+  detectRedactions,
+  validateTags,
+  calculateRAGReadiness,
+  reconstructTable,
+  diagnoseDocument,
+  normalizeDocument,
+} from './quality.js';
+
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const DEFAULTS = {
@@ -268,6 +281,10 @@ class CodbDoc {
         console.error('[codbdocs] Document-level extraction error:', e);
       }
     }
+
+    // Store page results and content items for repeated elements detection
+    graph._pageResults = {};
+    graph._allContentItems = {};
 
     try {
       for (let num = 1; num <= this.pageCount; num++) {
@@ -431,6 +448,32 @@ class CodbDoc {
             const pageOps = await page.getOperatorList();
             irPage.graphicsStates = extractGraphicsState(pageOps);
           } catch (e) { /* graphics state extraction may fail */ }
+          
+          // Analyze text quality
+          try {
+            irPage.textQuality = analyzeTextQuality(irPage, content.items, pageSize);
+          } catch (e) { /* text quality analysis may fail */ }
+          
+          // Compare visual vs internal
+          if (visualRegions) {
+            try {
+              irPage.visualComparison = compareVisualInternal(irPage, visualRegions, content.items);
+            } catch (e) { /* visual comparison may fail */ }
+          }
+          
+          // Detect redactions
+          if (vectors.length > 0) {
+            try {
+              irPage.redactions = detectRedactions(vectors, content.items);
+            } catch (e) { /* redaction detection may fail */ }
+          }
+          
+          // Validate tags
+          if (structureTree) {
+            try {
+              irPage.tagValidation = validateTags(irPage, structureTree, content.items);
+            } catch (e) { /* tag validation may fail */ }
+          }
         }
 
         // Detect reading order
@@ -438,6 +481,15 @@ class CodbDoc {
         try {
           readingOrder = detectReadingOrder(ir, num);
         } catch (e) { /* reading order detection may fail */ }
+
+        // Detect repeated elements (watermarks, headers, footers)
+        let repeatedElements = null;
+        if (num === this.pageCount) {
+          // Only run on last page to collect all pages' data
+          try {
+            repeatedElements = detectRepeatedElements(graph._pageResults || {}, graph._allContentItems || {});
+          } catch (e) { /* repeated element detection may fail */ }
+        }
 
         // Build page result
         const pageResult = {
@@ -450,9 +502,16 @@ class CodbDoc {
           annotations: annotations.length,
           hasStructureTree: !!structureTree,
           readingOrder: readingOrder.length,
+          textQuality: irPage.textQuality,
+          visualComparison: irPage.visualComparison,
+          redactions: irPage.redactions,
+          tagValidation: irPage.tagValidation,
+          repeatedElements,
         };
 
         graph.addPageResult(pageResult);
+        graph._pageResults[`page_${num}`] = pageResult;
+        graph._allContentItems[`page_${num}`] = content.items;
         onPageComplete && onPageComplete(pageResult);
         onLayer && onLayer({
           page: num,
@@ -611,6 +670,37 @@ class CodbDoc {
       Object.values(ir.pages).map(p => p.content?.join('\n') || ''),
       options
     );
+
+    // Add quality and health methods
+    graph.diagnose = () => diagnoseDocument(pageResults, graph);
+    graph.normalize = (options) => normalizeDocument(graph, options);
+    graph.getTextQuality = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.textQuality || null;
+    };
+    graph.getVisualComparison = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.visualComparison || null;
+    };
+    graph.getRepeatedElements = () => {
+      return pageResults[0]?.repeatedElements || { watermarks: [], headers: [], footers: [], pageNumbers: [] };
+    };
+    graph.getRedactions = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.redactions || [];
+    };
+    graph.getTagValidation = (pageNum) => {
+      const pageId = `page_${pageNum}`;
+      return ir.pages[pageId]?.tagValidation || { valid: false, issues: [] };
+    };
+    graph.getRAGReadiness = () => {
+      const readiness = calculateRAGReadiness(pageResults, null, null, pageResults[0]?.repeatedElements || {});
+      return {
+        score: Math.round(readiness.score * 100),
+        factors: readiness.factors,
+        recommendations: readiness.recommendations,
+      };
+    };
 
     return graph;
   }
@@ -954,3 +1044,16 @@ export {
   extractRevisions,
   buildRevisionsSummary,
 } from './advanced.js';
+
+export {
+  analyzeTextQuality,
+  compareVisualInternal,
+  detectRepeatedElements,
+  normalizeText,
+  detectRedactions,
+  validateTags,
+  calculateRAGReadiness,
+  reconstructTable,
+  diagnoseDocument,
+  normalizeDocument,
+} from './quality.js';
