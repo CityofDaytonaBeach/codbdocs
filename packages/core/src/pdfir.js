@@ -109,6 +109,41 @@ export function addTextObject(ir, pageId, data) {
 }
 
 /**
+ * Materialize OCR (or native/OCR fusion) page text as a text object when a
+ * page produced no native text objects. Scanned / "flat" PDFs have an empty
+ * text layer, so without this the markdown/text/RAG/HTML exporters would emit
+ * an empty page even though OCR recovered real content.
+ *
+ * Returns the created object, or null if there was nothing to materialize
+ * (e.g. the page already has native text objects) or if no text was provided.
+ */
+export function materializeOCRObject(ir, pageId, { text, source, confidence, pageSize } = {}) {
+  const body = (text || '').replace(/\s+/g, ' ').trim();
+  if (!body) return null;
+  const page = ir.pages[pageId];
+  const hasTextObjects = (page?.content || []).some(id => ir.objects[id]?.type === 'text');
+  if (hasTextObjects) return null;
+
+  const size = pageSize || { width: page?.width || 0, height: page?.height || 0 };
+  const obj = addTextObject(ir, pageId, {
+    text: body,
+    bbox: [0, 0, size.width, size.height],
+    font: null,
+    fontSize: null,
+    color: null,
+    transform: null,
+  });
+  if (obj) {
+    obj.raw.source = source || 'ocr';
+    obj.raw.textSource = source || 'ocr';
+    obj.raw.confidence = confidence != null ? confidence : null;
+    obj.provenance.method = source || 'ocr';
+    obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
+  }
+  return obj;
+}
+
+/**
  * Add a vector/path object to a page.
  */
 export function addVectorObject(ir, pageId, data) {

@@ -141,6 +141,7 @@ import {
   createIR,
   addPage,
   addTextObject,
+  materializeOCRObject,
   addVectorObject,
   addObject,
   extractVectors,
@@ -447,11 +448,17 @@ class CodbDoc {
         const viewport = page.getViewport({ scale: 1 });
         const pageSize = { width: viewport.width, height: viewport.height };
         const content = await page.getTextContent();
-        const nativeText = content.items
+        // Raw native text, then cleaned of control bytes / broken-glyph fill so
+        // machine-readable and human-readable outputs stay readable even when
+        // the source encoding is fragmented. computeTextQuality() still reads
+        // the raw items, so a corrupt/control-byte-laden layer still trips the
+        // OCR quality gate.
+        const nativeTextRaw = content.items
           .map(it => it.str)
           .join(' ')
           .replace(/\s+/g, ' ')
           .trim();
+        const nativeText = cleanControlBytes(nativeTextRaw);
 
         let text = nativeText;
         let source = 'native';
@@ -483,7 +490,10 @@ class CodbDoc {
           }
         } else if (qualityScore < config.qualityThreshold && !ocr) {
           source = 'skipped';
-          text = '';
+          // OCR isn't available/requested, but the page still has recoverable
+          // native text (possibly fragmented/control-byte-laden). Keep the
+          // cleaned native text so RAG/JSONL/exporters aren't silently emptied.
+          text = nativeText;
         }
 
         // Brain analysis (Layer 2: Vision-aware)
@@ -570,26 +580,12 @@ class CodbDoc {
         // object so markdown/text/RAG/HTML exporters all carry the content
         // instead of emitting an empty page.
         if (source === 'ocr' || source === 'fusion') {
-          const hasTextObjects = (irPage.content || []).some(id => ir.objects[id]?.type === 'text');
-          const ocrBody = (text || '').replace(/\s+/g, ' ').trim();
-          if (!hasTextObjects && ocrBody) {
-            const obj = addTextObject(ir, `page_${num}`, {
-              text: ocrBody,
-              bbox: [0, 0, pageSize.width, pageSize.height],
-              font: null,
-              fontSize: null,
-              color: null,
-              transform: null,
-            });
-            // Tag the object as OCR-derived so downstream can tell provenance.
-            if (obj) {
-              obj.raw.source = source;
-              obj.raw.textSource = source;
-              obj.raw.confidence = confidence;
-              obj.provenance.method = source;
-              obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
-            }
-          }
+          materializeOCRObject(ir, `page_${num}`, {
+            text,
+            source,
+            confidence,
+            pageSize,
+          });
         }
 
         // Add annotations to IR
@@ -1428,7 +1424,9 @@ class CodbDoc {
       onProgress && onProgress({ page: num, total: this.pageCount, status: 'reading' });
       const page = await this._pdf.getPage(num);
       const content = await page.getTextContent();
-      const nativeText = content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+      const nativeText = cleanControlBytes(
+        content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim()
+      );
 
       let text = nativeText;
       let source = 'native';
@@ -1442,9 +1440,11 @@ class CodbDoc {
           const { data } = await Tesseract.recognize(canvas, config.ocrLang);
           text = (data.text || '').trim();
           source = 'ocr';
-        } catch { text = ''; source = 'error'; }
+        } catch { text = nativeText; source = 'error'; }
       } else if (qualityScore < config.qualityThreshold) {
-        source = 'skipped'; text = '';
+        // OCR off and quality is low, but keep the recoverable cleaned native
+        // text so extraction isn't silently empty.
+        source = 'skipped'; text = nativeText;
       }
       pages.push({ num, text, source });
     }
@@ -1514,7 +1514,9 @@ class CodbDoc {
         const viewport = page.getViewport({ scale: 1 });
         const pageSize = { width: viewport.width, height: viewport.height };
         const content = await page.getTextContent();
-        const nativeText = content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+        const nativeText = cleanControlBytes(
+          content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim()
+        );
 
         let text = nativeText;
         let source = 'native';
@@ -1530,7 +1532,11 @@ class CodbDoc {
             text = (data.text || '').trim();
             source = 'ocr';
             confidence = data.confidence;
-          } catch (err) { source = 'error'; text = ''; }
+          } catch (err) { source = 'error'; text = nativeText; }
+        } else if (qualityScore < config.qualityThreshold && !ocr) {
+          // Keep recoverable cleaned native text when OCR is skipped.
+          source = 'skipped';
+          text = nativeText;
         }
 
         let spatial = null;
@@ -1679,6 +1685,19 @@ class CodbDoc {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Strip control bytes (C0/DEL/C1) and replacement-glyph fill from a raw text
+ * run so it reads cleanly. Keep whitespace, printable ASCII, and legitimate
+ * Unicode (letters, smart punctuation). Used so fragmented/corrupt-encoding
+ * native text is still usable in exports even when OCR is off.
+ */
+function cleanControlBytes(raw) {
+  return String(raw || '')
+    .replace(/[\u0000\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F\u0080-\u009F\uFFFC\uFFFD]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
 
 /**
  * Compute text quality score for OCR decision.

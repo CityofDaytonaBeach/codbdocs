@@ -2677,6 +2677,32 @@ ${p.text}`).join(`
     ir.pages[pageId]?.content.push(id);
     return ir.objects[id];
   }
+  function materializeOCRObject(ir, pageId, { text, source, confidence, pageSize } = {}) {
+    const body = (text || "").replace(/\s+/g, " ").trim();
+    if (!body)
+      return null;
+    const page = ir.pages[pageId];
+    const hasTextObjects = (page?.content || []).some((id) => ir.objects[id]?.type === "text");
+    if (hasTextObjects)
+      return null;
+    const size = pageSize || { width: page?.width || 0, height: page?.height || 0 };
+    const obj = addTextObject(ir, pageId, {
+      text: body,
+      bbox: [0, 0, size.width, size.height],
+      font: null,
+      fontSize: null,
+      color: null,
+      transform: null
+    });
+    if (obj) {
+      obj.raw.source = source || "ocr";
+      obj.raw.textSource = source || "ocr";
+      obj.raw.confidence = confidence != null ? confidence : null;
+      obj.provenance.method = source || "ocr";
+      obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
+    }
+    return obj;
+  }
   function addVectorObject(ir, pageId, data) {
     const id = generateId("vec");
     ir.vectors[id] = {
@@ -10252,7 +10278,8 @@ ${customStyles}
           const viewport = page.getViewport({ scale: 1 });
           const pageSize = { width: viewport.width, height: viewport.height };
           const content = await page.getTextContent();
-          const nativeText = content.items.map((it) => it.str).join(" ").replace(/\s+/g, " ").trim();
+          const nativeTextRaw = content.items.map((it) => it.str).join(" ").replace(/\s+/g, " ").trim();
+          const nativeText = cleanControlBytes(nativeTextRaw);
           let text = nativeText;
           let source = "native";
           let confidence = null;
@@ -10280,7 +10307,7 @@ ${customStyles}
             }
           } else if (qualityScore < config.qualityThreshold && !ocr) {
             source = "skipped";
-            text = "";
+            text = nativeText;
           }
           let spatial = null;
           let structures = null;
@@ -10346,25 +10373,12 @@ ${customStyles}
             }
           }
           if (source === "ocr" || source === "fusion") {
-            const hasTextObjects = (irPage.content || []).some((id) => ir.objects[id]?.type === "text");
-            const ocrBody = (text || "").replace(/\s+/g, " ").trim();
-            if (!hasTextObjects && ocrBody) {
-              const obj = addTextObject(ir, `page_${num}`, {
-                text: ocrBody,
-                bbox: [0, 0, pageSize.width, pageSize.height],
-                font: null,
-                fontSize: null,
-                color: null,
-                transform: null
-              });
-              if (obj) {
-                obj.raw.source = source;
-                obj.raw.textSource = source;
-                obj.raw.confidence = confidence;
-                obj.provenance.method = source;
-                obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
-              }
-            }
+            materializeOCRObject(ir, `page_${num}`, {
+              text,
+              source,
+              confidence,
+              pageSize
+            });
           }
           if (annotations.length > 0) {
             irPage.annotations = annotations;
@@ -11043,7 +11057,7 @@ ${customStyles}
         onProgress && onProgress({ page: num, total: this.pageCount, status: "reading" });
         const page = await this._pdf.getPage(num);
         const content = await page.getTextContent();
-        const nativeText = content.items.map((it) => it.str).join(" ").replace(/\s+/g, " ").trim();
+        const nativeText = cleanControlBytes(content.items.map((it) => it.str).join(" ").replace(/\s+/g, " ").trim());
         let text = nativeText;
         let source = "native";
         const qualityScore = computeTextQuality(content.items, page.getViewport({ scale: 1 }));
@@ -11056,12 +11070,12 @@ ${customStyles}
             text = (data.text || "").trim();
             source = "ocr";
           } catch {
-            text = "";
+            text = nativeText;
             source = "error";
           }
         } else if (qualityScore < config.qualityThreshold) {
           source = "skipped";
-          text = "";
+          text = nativeText;
         }
         pages.push({ num, text, source });
       }
@@ -11120,7 +11134,7 @@ ${p.text}`).join(`
           const viewport = page.getViewport({ scale: 1 });
           const pageSize = { width: viewport.width, height: viewport.height };
           const content = await page.getTextContent();
-          const nativeText = content.items.map((it) => it.str).join(" ").replace(/\s+/g, " ").trim();
+          const nativeText = cleanControlBytes(content.items.map((it) => it.str).join(" ").replace(/\s+/g, " ").trim());
           let text = nativeText;
           let source = "native";
           let confidence = null;
@@ -11135,8 +11149,11 @@ ${p.text}`).join(`
               confidence = data.confidence;
             } catch (err) {
               source = "error";
-              text = "";
+              text = nativeText;
             }
+          } else if (qualityScore < config.qualityThreshold && !ocr) {
+            source = "skipped";
+            text = nativeText;
           }
           let spatial = null;
           let structures = null;
@@ -11288,6 +11305,9 @@ ${p.text}`).join(`
       if (this._pdf)
         this._pdf.destroy();
     }
+  }
+  function cleanControlBytes(raw) {
+    return String(raw || "").replace(/[\u0000\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F\u0080-\u009F\uFFFC\uFFFD]/g, "").replace(/[ \t]+/g, " ").trim();
   }
   function computeTextQuality(contentItems, pageSize) {
     if (!contentItems || contentItems.length === 0)
