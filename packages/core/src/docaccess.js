@@ -22,6 +22,8 @@
  *   - Auto-remediation of common issues
  */
 
+import { buildRAGContext } from './exporters.js';
+
 // ─── Escape HTML ──────────────────────────────────────────────────────────────
 
 function escapeHTML(str) {
@@ -524,27 +526,7 @@ export function exportAccessibleHTML(ir, options = {}) {
  * No AI runs here — this just gives an AI full grounded context.
  */
 function buildAccessibleRAGPayload(ir) {
-  const pages = (ir.document.pages || []).map(pageId => {
-    const page = ir.pages[pageId];
-    if (!page) return null;
-    const text = (page.content || [])
-      .map(id => ir.objects[id])
-      .filter(o => o && o.type === 'text' && o.semantic?.text)
-      .map(o => o.semantic.text)
-      .join(' ');
-    return { page: page.num, text };
-  }).filter(Boolean);
-
-  return {
-    format: 'codbdocs-rag-v1',
-    source: ir.document.metadata?.title || 'PDF document',
-    title: ir.document.metadata?.title || null,
-    author: ir.document.metadata?.author || null,
-    pageCount: (ir.document.pages || []).length,
-    pages,
-    fullText: pages.map(p => `[Page ${p.page}]\n${p.text}`).join('\n\n'),
-    metadata: ir.document.metadata || {},
-  };
+  return buildRAGContext(ir, null);
 }
 
 function generateSkipNav(ir) {
@@ -913,7 +895,7 @@ function renderAccessibleFormField(obj, ir, opts) {
 
 function renderAccessibleLink(obj, opts) {
   const { dataAttr } = opts;
-  const href = obj.accessibility?.href || obj.semantic?.url || '#';
+  const href = obj.accessibility?.href || obj.semantic?.url || obj.raw?.href || obj.raw?.url || '#';
   const text = escapeHTML(obj.semantic?.text || '');
   const target = obj.accessibility?.target || '';
   const ariaLabel = obj.accessibility?.ariaLabel || '';
@@ -921,6 +903,7 @@ function renderAccessibleLink(obj, opts) {
   let attrs = dataAttr;
   if (ariaLabel) attrs += ` aria-label="${escapeHTML(ariaLabel)}"`;
   if (target === '_blank') attrs += ' target="_blank" rel="noopener noreferrer"';
+  if (href !== '#') attrs += ' target="_blank" rel="noopener noreferrer"';
 
   return `    <p><a href="${escapeHTML(href)}"${attrs}>${text}</a></p>\n`;
 }

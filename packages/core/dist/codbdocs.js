@@ -1589,13 +1589,35 @@
         if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
           const imgName = args[0];
           try {
+            if (typeof page.objs?.has === "function" && !page.objs.has(imgName)) {
+              continue;
+            }
             const imgData = await new Promise((resolve, reject) => {
-              page.objs.get(imgName, (data) => {
-                if (data)
-                  resolve(data);
-                else
-                  reject(new Error(`Image ${imgName} not found`));
-              });
+              let settled = false;
+              const timer = setTimeout(() => {
+                if (!settled) {
+                  settled = true;
+                  reject(new Error(`Image ${imgName} timed out`));
+                }
+              }, 5000);
+              try {
+                page.objs.get(imgName, (data) => {
+                  if (settled)
+                    return;
+                  settled = true;
+                  clearTimeout(timer);
+                  if (data)
+                    resolve(data);
+                  else
+                    reject(new Error(`Image ${imgName} not found`));
+                });
+              } catch (cbErr) {
+                if (!settled) {
+                  settled = true;
+                  clearTimeout(timer);
+                  reject(cbErr);
+                }
+              }
             });
             if (imgData && imgData.width && imgData.height) {
               const canvas = document.createElement("canvas");
@@ -2272,6 +2294,305 @@
     return HAS_OFFSCREEN && HAS_WORKERS;
   }
 
+  // src/exporters.js
+  function mdEscape(text) {
+    return String(text || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/^([#>*+\-]|\d+\.)\s*/gm, "\\$&");
+  }
+  function buildRAGContext(ir, contentGraph) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page)
+        return null;
+      const blocks = [];
+      const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean);
+      for (const obj of objects) {
+        if (obj.type === "text" && obj.semantic?.text) {
+          blocks.push({
+            type: obj.semantic.role || "text",
+            text: obj.semantic.text,
+            bbox: obj.bbox || null,
+            fontSize: obj.raw?.fontSize || null,
+            font: obj.raw?.font || null,
+            color: obj.raw?.color || null
+          });
+        } else if (obj.type === "image") {
+          blocks.push({
+            type: "image",
+            alt: obj.accessibility?.alt || obj.semantic?.caption || "",
+            caption: obj.semantic?.caption || "",
+            bbox: obj.bbox || null,
+            width: obj.raw?.width || null,
+            height: obj.raw?.height || null
+          });
+        } else if (obj.type === "link") {
+          blocks.push({
+            type: "link",
+            text: obj.semantic?.text || "",
+            url: obj.raw?.url || null,
+            dest: obj.raw?.dest || null,
+            bbox: obj.bbox || null
+          });
+        }
+      }
+      const text = objects.filter((o) => o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
+      const pageEntities = contentGraph ? (contentGraph.pages || []).find((pg) => pg.page === page.num)?.entities || [] : [];
+      return {
+        page: page.num,
+        size: { width: page.width, height: page.height },
+        text,
+        blocks,
+        entities: pageEntities
+      };
+    }).filter(Boolean);
+    const entityTypes = {};
+    const blockTypes = {};
+    const content = contentGraph || {};
+    (content.allBlocks || []).forEach((b) => {
+      blockTypes[b.type] = (blockTypes[b.type] || 0) + 1;
+    });
+    (content.allEntities || []).forEach((e) => {
+      entityTypes[e.type] = (entityTypes[e.type] || 0) + 1;
+    });
+    return {
+      format: "codbdocs-rag-v2",
+      source: ir.document.metadata?.title || "PDF document",
+      title: ir.document.metadata?.title || null,
+      author: ir.document.metadata?.author || null,
+      createdAt: ir.document.metadata?.creationDate || ir.document.metadata?.modDate || null,
+      documentType: content.documentType || ir.document.type || null,
+      pageCount: (ir.document.pages || []).length,
+      pages,
+      fullText: pages.map((p) => `[Page ${p.page}]
+${p.text}`).join(`
+
+`),
+      blockTypes,
+      entityTypes,
+      tables: content.allTables ? content.allTables.map((t) => t.toJSON ? t.toJSON() : t) : [],
+      relationships: content.allRelationships || [],
+      metadata: ir.document.metadata || {},
+      security: ir.document.security ? summarizeSecurity(ir.document.security) : null,
+      outline: ir.document.navigation?.outline || []
+    };
+  }
+  function summarizeSecurity(security) {
+    if (!security)
+      return null;
+    const out = {};
+    for (const [k, v] of Object.entries(security)) {
+      if (typeof v === "boolean" || typeof v === "string" || typeof v === "number") {
+        out[k] = v;
+      }
+    }
+    return out;
+  }
+  function flowLines(objects, { lineTolerance = 1 } = {}) {
+    const texts = objects.filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => {
+      const b = o.bbox || [0, 0, 0, 0];
+      return { o, x: b[0], y: b[1], w: b[2], h: b[3] || 0, cy: b[1] + (b[3] || 0) / 2 };
+    });
+    if (!texts.length)
+      return [];
+    const medianH = texts.map((t) => t.h).sort((a, b) => a - b)[Math.floor(texts.length / 2)] || 1;
+    const tol = Math.max(2, medianH * 0.45 * lineTolerance);
+    const lines = [];
+    const sortedByY = [...texts].sort((a, b) => b.cy - a.cy);
+    for (const t of sortedByY) {
+      let placed = null;
+      for (let i = lines.length - 1;i >= 0; i--) {
+        const line = lines[i];
+        const lineY = line.reduce((s, x) => s + x.cy, 0) / line.length;
+        if (Math.abs(t.cy - lineY) <= tol) {
+          placed = line;
+          break;
+        }
+      }
+      if (placed)
+        placed.push(t);
+      else
+        lines.push([t]);
+    }
+    const lineTexts = lines.map((line) => line.sort((a, b) => a.x - b.x).map((t) => String(t.o.semantic.text).replace(/\s+/g, " ").trim()).filter(Boolean).join(" ").replace(/\s+/g, " ")).filter((t) => t.length);
+    const paragraphs = [];
+    for (const lt of lineTexts)
+      paragraphs.push([lt]);
+    return paragraphs;
+  }
+  function toMarkdown(ir, contentGraph) {
+    const out = [];
+    const title = ir.document.metadata?.title || "Document";
+    const author = ir.document.metadata?.author || "";
+    out.push(`# ${title}`);
+    if (author)
+      out.push(`
+_By ${author}_`);
+    out.push("");
+    for (const pageId of ir.document.pages || []) {
+      const page = ir.pages[pageId];
+      if (!page)
+        continue;
+      const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean).sort(byReadingOrder);
+      let inTable = false;
+      let pending = [];
+      const flush = () => {
+        if (pending.length) {
+          for (const par of flowLines(pending)) {
+            out.push(mdEscape(par.join(" ")));
+            out.push("");
+          }
+          pending = [];
+        }
+      };
+      for (const obj of objects) {
+        const role = obj.semantic?.role || "text";
+        if (obj.type === "text" && obj.semantic?.text) {
+          const text = String(obj.semantic.text).replace(/\s+/g, " ").trim();
+          if (!text)
+            continue;
+          switch (role) {
+            case "heading": {
+              flush();
+              const level = Math.min(6, Math.max(2, obj.semantic.level || 2));
+              out.push(`${"#".repeat(level)} ${mdEscape(text)}`);
+              out.push("");
+              break;
+            }
+            case "list":
+            default:
+              pending.push(obj);
+              break;
+          }
+        } else if (obj.type === "image") {
+          flush();
+          const alt = obj.accessibility?.alt || obj.semantic?.caption || "Image";
+          out.push(`![${mdEscape(alt)}](${obj.raw?.src ? "" : ""})`);
+          if (obj.semantic?.caption) {
+            out.push(`*${mdEscape(obj.semantic.caption)}*`);
+          }
+          out.push("");
+        } else if (obj.type === "link") {
+          flush();
+          const text = obj.semantic?.text || obj.raw?.url || "link";
+          const href = obj.raw?.url || obj.raw?.href || "#";
+          out.push(`[${mdEscape(text)}](${href})`);
+          out.push("");
+        } else if (role === "separator") {
+          flush();
+          out.push("---");
+          out.push("");
+        }
+      }
+      flush();
+    }
+    return out.join(`
+`).replace(/\n{3,}/g, `
+
+`).trim() + `
+`;
+  }
+  function toReflowedText(ir) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page)
+        return null;
+      const objs = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && (o.type === "text" || o.type === "link") && (o.semantic?.text || o.raw?.url));
+      const paragraphs = flowLines(objs).map((par) => par.join(" "));
+      return { page: page.num, text: paragraphs.join(`
+
+`) };
+    }).filter(Boolean);
+    return {
+      pageCount: pages.length,
+      pages,
+      fullText: pages.map((p) => `--- page ${p.page} ---
+${p.text}`).join(`
+
+`)
+    };
+  }
+  function toFullJSON(ir, contentGraph) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page)
+        return null;
+      return {
+        id: pageId,
+        page: page.num,
+        size: { width: page.width, height: page.height },
+        rotation: page.rotation || 0,
+        mediaBox: page.mediaBox || null,
+        cropBox: page.cropBox || null,
+        labels: page.labels || null,
+        background: page.background || null,
+        textObjects: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text").map((o) => ({
+          id: o.id,
+          text: o.semantic?.text || "",
+          role: o.semantic?.role || "text",
+          level: o.semantic?.level || null,
+          bbox: o.bbox || null,
+          font: o.raw?.font || null,
+          fontSize: o.raw?.fontSize || null,
+          color: o.raw?.color || null,
+          transform: o.raw?.transform || null
+        })),
+        images: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "image").map((o) => ({
+          id: o.id,
+          bbox: o.bbox || null,
+          width: o.raw?.width || null,
+          height: o.raw?.height || null,
+          alt: o.accessibility?.alt || "",
+          caption: o.semantic?.caption || "",
+          src: o.raw?.src || null
+        })),
+        links: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "link").map((o) => ({
+          id: o.id,
+          bbox: o.bbox || null,
+          text: o.semantic?.text || "",
+          url: o.raw?.url || null,
+          dest: o.raw?.dest || null
+        })),
+        vectors: (page.vectors || []).map((id) => ir.vectors[id]).filter(Boolean),
+        annotations: page.annotations || [],
+        markedContent: page.markedContent || [],
+        artifacts: page.artifacts || []
+      };
+    }).filter(Boolean);
+    const payload = {
+      format: "codbdocs-full-json",
+      version: ir.version || "1.0",
+      document: {
+        id: ir.document.id || null,
+        title: ir.document.metadata?.title || null,
+        author: ir.document.metadata?.author || null,
+        type: contentGraph?.documentType || ir.document.type || null,
+        metadata: ir.document.metadata || {},
+        security: ir.document.security || {},
+        outline: ir.document.navigation?.outline || [],
+        labels: ir.document.navigation?.labels || []
+      },
+      pageCount: pages.length,
+      pages
+    };
+    if (contentGraph) {
+      payload.content = {
+        documentType: contentGraph.documentType || null,
+        blocks: contentGraph.allBlocks ? contentGraph.allBlocks.map((b) => b.toJSON ? b.toJSON() : b) : [],
+        entities: contentGraph.allEntities || [],
+        tables: contentGraph.allTables ? contentGraph.allTables.map((t) => t.toJSON ? t.toJSON() : t) : [],
+        relationships: contentGraph.allRelationships || [],
+        summary: contentGraph.getSummary ? contentGraph.getSummary() : null
+      };
+    }
+    return payload;
+  }
+  function byReadingOrder(a, b) {
+    const ay = a.bbox?.[1] || 0;
+    const by = b.bbox?.[1] || 0;
+    if (Math.abs(ay - by) > 10)
+      return by - ay;
+    return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
+  }
+
   // src/pdfir.js
   function createIR() {
     return {
@@ -2334,6 +2655,7 @@
         glyphs: data.glyphs || [],
         font: data.font || null,
         fontSize: data.fontSize || 12,
+        color: data.color || null,
         transform: data.transform || [1, 0, 0, 1, 0, 0],
         text: data.text || "",
         encoding: data.encoding || null
@@ -2836,30 +3158,7 @@
   `;
   }
   function buildRAGPayload(ir) {
-    const pages = (ir.document.pages || []).map((pageId) => {
-      const page = ir.pages[pageId];
-      if (!page)
-        return null;
-      const text = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
-      return { page: page.num, text };
-    }).filter(Boolean);
-    const entities = {};
-    const title = ir.document.metadata?.title || null;
-    const author = ir.document.metadata?.author || null;
-    return {
-      format: "codbdocs-rag-v1",
-      source: title || "PDF document",
-      title,
-      author,
-      pageCount: (ir.document.pages || []).length,
-      pages,
-      fullText: pages.map((p) => `[Page ${p.page}]
-${p.text}`).join(`
-
-`),
-      metadata: ir.document.metadata || {},
-      entities
-    };
+    return buildRAGContext(ir, null);
   }
   function renderPageVisual(page, ir, attrs) {
     let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + "px;height:" + (page.height || 0) + `px;">
@@ -2876,7 +3175,8 @@ ${p.text}`).join(`
         continue;
       if (obj.type === "text") {
         const bbox = obj.bbox || [];
-        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;">${escapeHTML(obj.semantic?.text || "")}</div>
+        const style = textRunStyle(obj);
+        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic?.text || "")}</div>
 `;
       } else if (obj.type === "image") {
         const bbox = obj.bbox || [];
@@ -2888,6 +3188,11 @@ ${p.text}`).join(`
           html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
 `;
         }
+      } else if (obj.type === "link") {
+        const bbox = obj.bbox || [];
+        const href = escapeHTML(obj.raw?.href || "#");
+        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML(obj.semantic?.text || obj.raw?.url || "link")}</a>
+`;
       }
     }
     html += `</div>
@@ -2936,8 +3241,13 @@ ${p.text}`).join(`
 `;
         html += `</ul>
 `;
+      } else if (obj.type === "link") {
+        const href = escapeHTML(obj.raw?.href || "#");
+        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML(obj.semantic?.text || obj.raw?.url || "link")}</a>
+`;
       } else if (obj.type === "text" && obj.semantic?.text) {
-        html += `<p${dataAttr}>${escapeHTML(obj.semantic.text)}</p>
+        const style = textRunStyle(obj);
+        html += `<p${dataAttr}${style ? ' style="' + style + '"' : ""}>${escapeHTML(obj.semantic.text)}</p>
 `;
       }
     }
@@ -2953,6 +3263,24 @@ ${p.text}`).join(`
     html += `</div>
 `;
     return html;
+  }
+  function textRunStyle(obj) {
+    let style = "";
+    const font = obj.raw?.font;
+    if (font) {
+      style += `font-family:${sanitizeFontName(font)}, system-ui, sans-serif;`;
+    }
+    const color = obj.raw?.color;
+    if (color) {
+      style += `color:${escapeCSSColor(color)};`;
+    }
+    return style;
+  }
+  function sanitizeFontName(name) {
+    return String(name).replace(/[^A-Za-z0-9]+/g, " ").replace(/^\d+\s?/, "").trim() || "sans-serif";
+  }
+  function escapeCSSColor(color) {
+    return String(color).replace(/[^0-9A-Za-z#.,()% ]/g, "");
   }
   function renderVectorVisual(vec, attrs) {
     if (!vec.bbox)
@@ -8590,26 +8918,7 @@ ${customStyles}
     return html;
   }
   function buildAccessibleRAGPayload(ir) {
-    const pages = (ir.document.pages || []).map((pageId) => {
-      const page = ir.pages[pageId];
-      if (!page)
-        return null;
-      const text = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
-      return { page: page.num, text };
-    }).filter(Boolean);
-    return {
-      format: "codbdocs-rag-v1",
-      source: ir.document.metadata?.title || "PDF document",
-      title: ir.document.metadata?.title || null,
-      author: ir.document.metadata?.author || null,
-      pageCount: (ir.document.pages || []).length,
-      pages,
-      fullText: pages.map((p) => `[Page ${p.page}]
-${p.text}`).join(`
-
-`),
-      metadata: ir.document.metadata || {}
-    };
+    return buildRAGContext(ir, null);
   }
   function generateSkipNav(ir) {
     let html = `<!-- Skip Navigation -->
@@ -8955,7 +9264,7 @@ ${p.text}`).join(`
   }
   function renderAccessibleLink(obj, opts) {
     const { dataAttr } = opts;
-    const href = obj.accessibility?.href || obj.semantic?.url || "#";
+    const href = obj.accessibility?.href || obj.semantic?.url || obj.raw?.href || obj.raw?.url || "#";
     const text = escapeHTML2(obj.semantic?.text || "");
     const target = obj.accessibility?.target || "";
     const ariaLabel = obj.accessibility?.ariaLabel || "";
@@ -8963,6 +9272,8 @@ ${p.text}`).join(`
     if (ariaLabel)
       attrs += ` aria-label="${escapeHTML2(ariaLabel)}"`;
     if (target === "_blank")
+      attrs += ' target="_blank" rel="noopener noreferrer"';
+    if (href !== "#")
       attrs += ' target="_blank" rel="noopener noreferrer"';
     return `    <p><a href="${escapeHTML2(href)}"${attrs}>${text}</a></p>
 `;
@@ -10029,13 +10340,60 @@ ${p.text}`).join(`
                 bbox: [item.transform[4], item.transform[5], item.width, item.height],
                 font: item.fontName,
                 fontSize: Math.abs(item.transform[0]) || 12,
+                color: item.color || item.fillColor || null,
                 transform: item.transform
               });
+            }
+          }
+          if (source === "ocr" || source === "fusion") {
+            const hasTextObjects = (irPage.content || []).some((id) => ir.objects[id]?.type === "text");
+            const ocrBody = (text || "").replace(/\s+/g, " ").trim();
+            if (!hasTextObjects && ocrBody) {
+              const obj = addTextObject(ir, `page_${num}`, {
+                text: ocrBody,
+                bbox: [0, 0, pageSize.width, pageSize.height],
+                font: null,
+                fontSize: null,
+                color: null,
+                transform: null
+              });
+              if (obj) {
+                obj.raw.source = source;
+                obj.raw.textSource = source;
+                obj.raw.confidence = confidence;
+                obj.provenance.method = source;
+                obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
+              }
             }
           }
           if (annotations.length > 0) {
             irPage.annotations = annotations;
             ir.annotations[`page_${num}`] = annotations;
+            for (const ann of annotations) {
+              if (ann.type && ann.type === "link") {
+                const href = ann.url || (ann.dest ? `#${ann.dest}` : null);
+                if (!href)
+                  continue;
+                addObject(ir, `page_${num}`, {
+                  type: "link",
+                  raw: {
+                    url: ann.url || null,
+                    dest: ann.dest || null,
+                    href,
+                    rect: ann.rect || null
+                  },
+                  semantic: {
+                    role: "link",
+                    text: ann.contents || null
+                  },
+                  accessibility: {
+                    role: "link"
+                  },
+                  bbox: ann.rect ? [ann.rect[0], ann.rect[1], ann.rect[2] - ann.rect[0], ann.rect[3] - ann.rect[1]] : null,
+                  provenance: { method: "annotation", confidence: 1 }
+                });
+              }
+            }
           }
           if (structureTree) {
             ir.structure[`page_${num}`] = structureTree;
@@ -10298,6 +10656,46 @@ ${p.text}`).join(`
       graph.toRAGWithEmbeddings = (embeddingProvider, options) => createRAGOutputWithEmbeddings(graph, embeddingProvider, options);
       graph.toJSONL = (options) => exportAsJSONL(createRAGOutput(graph, options));
       graph.toCSV = (options) => exportAsCSV(createRAGOutput(graph, options));
+      graph.toMarkdown = () => toMarkdown(ir, contentGraph);
+      graph.toText = () => toReflowedText(ir);
+      graph.exportFull = () => toFullJSON(ir, contentGraph);
+      graph.toRAG = (options) => {
+        if (options && options.format === "v2") {
+          return buildRAGContext(ir, contentGraph);
+        }
+        return createRAGOutput(graph, options);
+      };
+      graph.getRAGContext = () => buildRAGContext(ir, contentGraph);
+      graph.toExport = (format, options = {}) => {
+        switch ((format || "").toLowerCase()) {
+          case "markdown":
+          case "md":
+            return graph.toMarkdown();
+          case "text":
+          case "txt":
+            return graph.toText();
+          case "full":
+          case "json":
+          case "geometry":
+            return graph.exportFull();
+          case "rag":
+          case "ragcontext":
+            return graph.getRAGContext();
+          case "jsonl":
+            return graph.toJSONL(options);
+          case "csv":
+            return graph.toCSV(options);
+          case "html":
+          case "accessible":
+            return graph.toAccessibleHTML(options);
+          case "visual":
+          case "intelligent":
+          case "selectable":
+            return graph.toHTML({ mode: format, ...options });
+          default:
+            return graph.getRAGContext();
+        }
+      };
       graph.getMetadata = () => ir.document.metadata;
       graph.getOutline = () => ir.document.navigation.outline || [];
       graph.getNamedDestinations = () => ir.document.navigation.destinations || {};
@@ -10925,6 +11323,17 @@ ${p.text}`).join(`
     const uniqueChars = new Set(allText.replace(/\s/g, "")).size;
     if (uniqueChars < 10 && wordCount > 10)
       score -= 0.15;
+    const garbageChars = allText.replace(/[\uFFFD\uFFFC\u0000\u0001-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+    const garbageCount = allText.length - garbageChars.length;
+    const garbageWords = (allText.match(/\S*[\uFFFD\uFFFC]\S*/g) || []).length;
+    const garbageRatio = allText.length > 0 ? garbageCount / allText.length : 0;
+    const garbageWordRatio = wordCount > 0 ? garbageWords / wordCount : 0;
+    if (garbageWordRatio > 0.4 || garbageRatio > 0.05)
+      score -= 0.65;
+    else if (garbageWordRatio > 0.2 || garbageRatio > 0.02)
+      score -= 0.4;
+    else if (garbageRatio > 0.005)
+      score -= 0.2;
     return Math.max(0, Math.min(1, score));
   }
   function inferImageRole(img, contentItems, pageSize) {

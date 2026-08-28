@@ -559,8 +559,36 @@ class CodbDoc {
               bbox: [item.transform[4], item.transform[5], item.width, item.height],
               font: item.fontName,
               fontSize: Math.abs(item.transform[0]) || 12,
+              color: item.color || item.fillColor || null,
               transform: item.transform,
             });
+          }
+        }
+
+        // Gap: scanned/flat pages have no native text items, but OCR (or
+        // native/OCR fusion) produced page text. Materialize it as a text
+        // object so markdown/text/RAG/HTML exporters all carry the content
+        // instead of emitting an empty page.
+        if (source === 'ocr' || source === 'fusion') {
+          const hasTextObjects = (irPage.content || []).some(id => ir.objects[id]?.type === 'text');
+          const ocrBody = (text || '').replace(/\s+/g, ' ').trim();
+          if (!hasTextObjects && ocrBody) {
+            const obj = addTextObject(ir, `page_${num}`, {
+              text: ocrBody,
+              bbox: [0, 0, pageSize.width, pageSize.height],
+              font: null,
+              fontSize: null,
+              color: null,
+              transform: null,
+            });
+            // Tag the object as OCR-derived so downstream can tell provenance.
+            if (obj) {
+              obj.raw.source = source;
+              obj.raw.textSource = source;
+              obj.raw.confidence = confidence;
+              obj.provenance.method = source;
+              obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
+            }
           }
         }
 
@@ -568,6 +596,35 @@ class CodbDoc {
         if (annotations.length > 0) {
           irPage.annotations = annotations;
           ir.annotations[`page_${num}`] = annotations;
+
+          // Register link annotations as IR objects so renderers can emit
+          // real <a> links and RAG/JSON exports carry navigation objects.
+          for (const ann of annotations) {
+            if (ann.type && ann.type === 'link') {
+              const href = ann.url || (ann.dest ? `#${ann.dest}` : null);
+              if (!href) continue;
+              addObject(ir, `page_${num}`, {
+                type: 'link',
+                raw: {
+                  url: ann.url || null,
+                  dest: ann.dest || null,
+                  href,
+                  rect: ann.rect || null,
+                },
+                semantic: {
+                  role: 'link',
+                  text: ann.contents || null,
+                },
+                accessibility: {
+                  role: 'link',
+                },
+                bbox: ann.rect
+                  ? [ann.rect[0], ann.rect[1], ann.rect[2] - ann.rect[0], ann.rect[3] - ann.rect[1]]
+                  : null,
+                provenance: { method: 'annotation', confidence: 1.0 },
+              });
+            }
+          }
         }
 
         // Add structure tree to IR
@@ -898,6 +955,34 @@ class CodbDoc {
       createRAGOutputWithEmbeddings(graph, embeddingProvider, options);
     graph.toJSONL = (options) => exportAsJSONL(createRAGOutput(graph, options));
     graph.toCSV = (options) => exportAsCSV(createRAGOutput(graph, options));
+
+    // Multi-format exporters (offline, pure functions)
+    graph.toMarkdown = () => toMarkdown(ir, contentGraph);
+    graph.toText = () => toReflowedText(ir);
+    graph.exportFull = () => toFullJSON(ir, contentGraph);
+    graph.toRAG = (options) => {
+      if (options && options.format === 'v2') {
+        return buildRAGContext(ir, contentGraph);
+      }
+      return createRAGOutput(graph, options);
+    };
+    graph.getRAGContext = () => buildRAGContext(ir, contentGraph);
+    graph.toExport = (format, options = {}) => {
+      switch ((format || '').toLowerCase()) {
+        case 'markdown': case 'md': return graph.toMarkdown();
+        case 'text': case 'txt': return graph.toText();
+        case 'full': case 'json': case 'geometry': return graph.exportFull();
+        case 'rag': case 'ragcontext': return graph.getRAGContext();
+        case 'jsonl': return graph.toJSONL(options);
+        case 'csv': return graph.toCSV(options);
+        case 'html': case 'accessible':
+          return graph.toAccessibleHTML(options);
+        case 'visual': case 'intelligent': case 'selectable':
+          return graph.toHTML({ mode: format, ...options });
+        default:
+          return graph.getRAGContext();
+      }
+    };
 
     // Add extended features methods
     graph.getMetadata = () => ir.document.metadata;
@@ -1639,6 +1724,23 @@ function computeTextQuality(contentItems, pageSize) {
   // 6. Character variety (too few unique characters suggests OCR failure)
   const uniqueChars = new Set(allText.replace(/\s/g, '')).size;
   if (uniqueChars < 10 && wordCount > 10) score -= 0.15;
+
+  // 7. Replacement-glyph / encoding garbage ratio.
+  // Fuzzy "flat" scans that carry a corrupt text layer emit U+FFFD, control
+  // bytes, or long runs of the same "undefined" glyph. Penalize so the OCR
+  // quality gate fires even when the page looks text-rich (but is garbage),
+  // otherwise the wrong native words would win and OCR would never run.
+  const garbageChars = allText.replace(/[\uFFFD\uFFFC\u0000\u0001-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  const garbageCount = allText.length - garbageChars.length;
+  const garbageWords = (allText.match(/\S*[\uFFFD\uFFFC]\S*/g) || []).length;
+  const garbageRatio = allText.length > 0 ? garbageCount / allText.length : 0;
+  // When most words carry a broken-glyph byte, the native layer is effectively
+  // unreadable — that is the classic "fuzzy flat with corrupt text" scan, so
+  // the penalty must overwhelm the score and force OCR.
+  const garbageWordRatio = wordCount > 0 ? garbageWords / wordCount : 0;
+  if (garbageWordRatio > 0.4 || garbageRatio > 0.05) score -= 0.65;
+  else if (garbageWordRatio > 0.2 || garbageRatio > 0.02) score -= 0.4;
+  else if (garbageRatio > 0.005) score -= 0.2;
 
   return Math.max(0, Math.min(1, score));
 }

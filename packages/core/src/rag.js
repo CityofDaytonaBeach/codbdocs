@@ -52,12 +52,32 @@ export async function extractImages(page, options = {}) {
         const imgName = args[0];
         
         try {
+          // Some PDFs reference images (e.g. soft-mask/SMask siblings, broken
+          // indirect references) that pdf.js never materializes through
+          // page.objs. If page.objs.has() reports it missing, skip immediately;
+          // otherwise guard the callback with a timeout so a never-firing
+          // callback can't hang document extraction indefinitely.
+          if (typeof page.objs?.has === 'function' && !page.objs.has(imgName)) {
+            continue;
+          }
+
           // Get image data from PDF.js
           const imgData = await new Promise((resolve, reject) => {
-            page.objs.get(imgName, (data) => {
-              if (data) resolve(data);
-              else reject(new Error(`Image ${imgName} not found`));
-            });
+            let settled = false;
+            const timer = setTimeout(() => {
+              if (!settled) { settled = true; reject(new Error(`Image ${imgName} timed out`)); }
+            }, 5000);
+            try {
+              page.objs.get(imgName, (data) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                if (data) resolve(data);
+                else reject(new Error(`Image ${imgName} not found`));
+              });
+            } catch (cbErr) {
+              if (!settled) { settled = true; clearTimeout(timer); reject(cbErr); }
+            }
           });
           
           if (imgData && imgData.width && imgData.height) {

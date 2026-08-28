@@ -17,8 +17,17 @@
  * Escape simple markdown special characters in plain text so user content
  * doesn't get misinterpreted as structure when it shouldn't be.
  */
+/**
+ * Escape bare user text for safe Markdown output WITHOUT mangling ordinary
+ * punctuation (numbers like "$697,000.00", dates, ordinance "2025-63"). Only
+ * backslashes/backticks and line-leading structure markers are escaped, so
+ * flowing paragraphs and tabular figures stay readable.
+ */
 function mdEscape(text) {
-  return String(text || '').replace(/([\\`*_{}\[\]()#+\-.!|>])/g, '\\$1');
+  return String(text || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/^([#>*+\-]|\d+\.)\s*/gm, '\\$&');
 }
 
 /**
@@ -53,6 +62,14 @@ export function buildRAGContext(ir, contentGraph) {
           bbox: obj.bbox || null,
           width: obj.raw?.width || null,
           height: obj.raw?.height || null,
+        });
+      } else if (obj.type === 'link') {
+        blocks.push({
+          type: 'link',
+          text: obj.semantic?.text || '',
+          url: obj.raw?.url || null,
+          dest: obj.raw?.dest || null,
+          bbox: obj.bbox || null,
         });
       }
     }
@@ -114,6 +131,56 @@ function summarizeSecurity(security) {
 }
 
 /**
+ * Group text objects into visual lines (same baseline) and then into
+ * paragraphs, preserving reading order. Joins words on a line with spaces
+ * so per-glyph/word text runs reassemble into real sentences.
+ * bbox format is [x, y, w, h] with top-left origin (y grows downward).
+ */
+function flowLines(objects, { lineTolerance = 1.0 } = {}) {
+  const texts = objects
+    .filter(o => o && o.type === 'text' && o.semantic?.text)
+    .map(o => {
+      const b = o.bbox || [0, 0, 0, 0];
+      return { o, x: b[0], y: b[1], w: b[2], h: b[3] || 0, cy: b[1] + (b[3] || 0) / 2 };
+    });
+  if (!texts.length) return [];
+
+  const medianH = texts.map(t => t.h).sort((a, b) => a - b)[Math.floor(texts.length / 2)] || 1;
+  const tol = Math.max(2, medianH * 0.45 * lineTolerance);
+
+  // Cluster into lines by y-center. In PDF space y grows upward, so the
+  // topmost lines have the largest y-center — process descending to keep
+  // top-to-bottom reading order.
+  const lines = [];
+  const sortedByY = [...texts].sort((a, b) => b.cy - a.cy);
+  for (const t of sortedByY) {
+    let placed = null;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      const lineY = line.reduce((s, x) => s + x.cy, 0) / line.length;
+      if (Math.abs(t.cy - lineY) <= tol) { placed = line; break; }
+    }
+    if (placed) placed.push(t);
+    else lines.push([t]);
+  }
+
+  // Within each line, sort left-to-right, join with spaces (collapse excess).
+  const lineTexts = lines
+    .map(line => line
+      .sort((a, b) => a.x - b.x)
+      .map(t => String(t.o.semantic.text).replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' '))
+    .filter(t => t.length);
+
+  // Group lines into paragraphs by vertical gap to respect blank lines.
+  const paragraphs = [];
+  for (const lt of lineTexts) paragraphs.push([lt]);
+  return paragraphs;
+}
+
+/**
  * Export to Markdown — semantically structured, reflowed, IA-friendly.
  */
 export function toMarkdown(ir, contentGraph) {
@@ -135,6 +202,16 @@ export function toMarkdown(ir, contentGraph) {
       .sort(byReadingOrder);
 
     let inTable = false;
+    let pending = [];
+    const flush = () => {
+      if (pending.length) {
+        for (const par of flowLines(pending)) {
+          out.push(mdEscape(par.join(' ')));
+          out.push('');
+        }
+        pending = [];
+      }
+    };
     for (const obj of objects) {
       const role = obj.semantic?.role || 'text';
 
@@ -143,6 +220,7 @@ export function toMarkdown(ir, contentGraph) {
         if (!text) continue;
         switch (role) {
           case 'heading': {
+            flush();
             const level = Math.min(6, Math.max(2, obj.semantic.level || 2));
             out.push(`${'#'.repeat(level)} ${mdEscape(text)}`);
             out.push('');
@@ -151,22 +229,30 @@ export function toMarkdown(ir, contentGraph) {
           case 'list':
             // fall through: handled as plain text since list grouping is in content graph
           default:
-            out.push(mdEscape(text));
-            out.push('');
+            pending.push(obj);
             break;
         }
       } else if (obj.type === 'image') {
+        flush();
         const alt = obj.accessibility?.alt || obj.semantic?.caption || 'Image';
         out.push(`![${mdEscape(alt)}](${obj.raw?.src ? '' : ''})`);
         if (obj.semantic?.caption) {
           out.push(`*${mdEscape(obj.semantic.caption)}*`);
         }
         out.push('');
+      } else if (obj.type === 'link') {
+        flush();
+        const text = obj.semantic?.text || obj.raw?.url || 'link';
+        const href = obj.raw?.url || obj.raw?.href || '#';
+        out.push(`[${mdEscape(text)}](${href})`);
+        out.push('');
       } else if (role === 'separator') {
+        flush();
         out.push('---');
         out.push('');
       }
     }
+    flush();
   }
 
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
@@ -179,13 +265,11 @@ export function toReflowedText(ir) {
   const pages = (ir.document.pages || []).map(pageId => {
     const page = ir.pages[pageId];
     if (!page) return null;
-    const text = (page.content || [])
+    const objs = (page.content || [])
       .map(id => ir.objects[id])
-      .filter(o => o && o.type === 'text' && o.semantic?.text)
-      .map(o => String(o.semantic.text).replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
-      .join('\n\n');
-    return { page: page.num, text };
+      .filter(o => o && (o.type === 'text' || o.type === 'link') && (o.semantic?.text || o.raw?.url));
+    const paragraphs = flowLines(objs).map(par => par.join(' '));
+    return { page: page.num, text: paragraphs.join('\n\n') };
   }).filter(Boolean);
 
   return {
@@ -238,6 +322,16 @@ export function toFullJSON(ir, contentGraph) {
           caption: o.semantic?.caption || '',
           src: o.raw?.src || null,
         })),
+      links: (page.content || [])
+        .map(id => ir.objects[id])
+        .filter(o => o && o.type === 'link')
+        .map(o => ({
+          id: o.id,
+          bbox: o.bbox || null,
+          text: o.semantic?.text || '',
+          url: o.raw?.url || null,
+          dest: o.raw?.dest || null,
+        })),
       vectors: (page.vectors || []).map(id => ir.vectors[id]).filter(Boolean),
       annotations: page.annotations || [],
       markedContent: page.markedContent || [],
@@ -279,11 +373,13 @@ export function toFullJSON(ir, contentGraph) {
 
 /**
  * Default reading-order sort (top-to-bottom, left-to-right).
+ * bbox is [x, y, w, h] in PDF page space where y grows upward,
+ * so "top of page" has the largest y — sort descending by y.
  */
 function byReadingOrder(a, b) {
   const ay = a.bbox?.[1] || 0;
   const by = b.bbox?.[1] || 0;
-  if (Math.abs(ay - by) > 10) return ay - by;
+  if (Math.abs(ay - by) > 10) return by - ay;
   return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
 }
 

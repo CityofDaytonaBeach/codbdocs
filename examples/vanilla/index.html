@@ -144,6 +144,20 @@
       <div id="htmlResult"></div>
     </div>
 
+    <!-- Raw / RAG Download -->
+    <div class="card" id="downloadCard">
+      <h3>Rich Data Download (offline RAG)</h3>
+      <div class="query-box" style="margin-bottom: 12px">
+        <button onclick="downloadExport('markdown')">Markdown</button>
+        <button onclick="downloadExport('text')">Plain Text</button>
+        <button onclick="downloadExport('json')">Full JSON</button>
+        <button onclick="downloadExport('rag')">RAG Context</button>
+        <button onclick="downloadExport('jsonl')">JSONL</button>
+        <button onclick="downloadExport('csv')">CSV</button>
+      </div>
+      <div id="downloadResult"></div>
+    </div>
+
     <!-- Full Text -->
     <div class="card full-text" id="fullTextCard">
       <h3>Full Extracted Text</h3>
@@ -353,6 +367,35 @@
     a.click();
     URL.revokeObjectURL(url);
     document.getElementById('htmlResult').innerHTML = `<p style="color:#28a745;margin-top:8px">Downloaded ${mode} mode HTML</p>`;
+  }
+
+  function getExport(format) {
+    switch (format) {
+      case 'markdown': return { data: currentGraph.toMarkdown(), type: 'text/markdown', ext: 'md' };
+      case 'text': {
+        const t = currentGraph.toText();
+        return { data: t.fullText, type: 'text/plain', ext: 'txt' };
+      }
+      case 'json': return { data: JSON.stringify(currentGraph.exportFull(), null, 2), type: 'application/json', ext: 'json' };
+      case 'rag': return { data: JSON.stringify(currentGraph.getRAGContext(), null, 2), type: 'application/json', ext: 'rag.json' };
+      case 'jsonl': return { data: currentGraph.toJSONL(), type: 'application/jsonl', ext: 'jsonl' };
+      case 'csv': return { data: currentGraph.toCSV(), type: 'text/csv', ext: 'csv' };
+      default: return null;
+    }
+  }
+
+  function downloadExport(format) {
+    if (!currentGraph) return;
+    const ex = getExport(format);
+    if (!ex) return;
+    const blob = new Blob([ex.data], { type: ex.type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `document.${ex.ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    document.getElementById('downloadResult').innerHTML = `<p style="color:#28a745;margin-top:8px">Downloaded ${ex.ext} (${blob.size.toLocaleString()} bytes)</p>`;
   }
 
   function renderFullText(graph) {

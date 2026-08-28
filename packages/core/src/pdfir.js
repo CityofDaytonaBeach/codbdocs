@@ -9,6 +9,8 @@
  *   PDF-IR → HTML / Markdown / JSON / Accessible Document
  */
 
+import { buildRAGContext } from './exporters.js';
+
 // ─── PDF-IR Core ─────────────────────────────────────────────────────────────
 
 /**
@@ -83,6 +85,7 @@ export function addTextObject(ir, pageId, data) {
       glyphs: data.glyphs || [],
       font: data.font || null,
       fontSize: data.fontSize || 12,
+      color: data.color || null,
       transform: data.transform || [1, 0, 0, 1, 0, 0],
       text: data.text || '',
       encoding: data.encoding || null,
@@ -717,32 +720,7 @@ function viewToggleHTML() {
  * AI can summarize, quote, and answer with grounded detail — no AI runs here.
  */
 function buildRAGPayload(ir) {
-  const pages = (ir.document.pages || []).map(pageId => {
-    const page = ir.pages[pageId];
-    if (!page) return null;
-    const text = (page.content || [])
-      .map(id => ir.objects[id])
-      .filter(o => o && o.type === 'text' && o.semantic?.text)
-      .map(o => o.semantic.text)
-      .join(' ');
-    return { page: page.num, text };
-  }).filter(Boolean);
-
-  const entities = {};
-  const title = ir.document.metadata?.title || null;
-  const author = ir.document.metadata?.author || null;
-
-  return {
-    format: 'codbdocs-rag-v1',
-    source: title || 'PDF document',
-    title,
-    author,
-    pageCount: (ir.document.pages || []).length,
-    pages,
-    fullText: pages.map(p => `[Page ${p.page}]\n${p.text}`).join('\n\n'),
-    metadata: ir.document.metadata || {},
-    entities,
-  };
+  return buildRAGContext(ir, null);
 }
 
 function renderPageVisual(page, ir, attrs) {
@@ -762,7 +740,8 @@ function renderPageVisual(page, ir, attrs) {
 
     if (obj.type === 'text') {
       const bbox = obj.bbox || [];
-      html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;">${escapeHTML(obj.semantic?.text || '')}</div>\n`;
+      const style = textRunStyle(obj);
+      html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic?.text || '')}</div>\n`;
     } else if (obj.type === 'image') {
       const bbox = obj.bbox || [];
       const src = obj.raw?.src || '';
@@ -771,6 +750,10 @@ function renderPageVisual(page, ir, attrs) {
       } else {
         html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>\n`;
       }
+    } else if (obj.type === 'link') {
+      const bbox = obj.bbox || [];
+      const href = escapeHTML(obj.raw?.href || '#');
+      html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML(obj.semantic?.text || obj.raw?.url || 'link')}</a>\n`;
     }
   }
 
@@ -808,8 +791,12 @@ function renderPageAccessible(page, ir, attrs, mode) {
     } else if (role === 'list') {
       html += `<ul${dataAttr}>\n`;
       html += '</ul>\n';
+    } else if (obj.type === 'link') {
+      const href = escapeHTML(obj.raw?.href || '#');
+      html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML(obj.semantic?.text || obj.raw?.url || 'link')}</a>\n`;
     } else if (obj.type === 'text' && obj.semantic?.text) {
-      html += `<p${dataAttr}>${escapeHTML(obj.semantic.text)}</p>\n`;
+      const style = textRunStyle(obj);
+      html += `<p${dataAttr}${style ? ' style="' + style + '"' : ''}>${escapeHTML(obj.semantic.text)}</p>\n`;
     }
   }
 
@@ -824,6 +811,36 @@ function renderPageAccessible(page, ir, attrs, mode) {
 
   html += '</div>\n';
   return html;
+}
+
+/**
+ * Build inline CSS (font family + color) for a text run so reconstructed
+ * pages better match the source PDF's typography.
+ */
+function textRunStyle(obj) {
+  let style = '';
+  const font = obj.raw?.font;
+  if (font) {
+    // PDF font names often look like "ABCDEF+Helvetica". Use a readable fallback
+    // that browsers can map reasonably while keeping a monospace/system fallback.
+    style += `font-family:${sanitizeFontName(font)}, system-ui, sans-serif;`;
+  }
+  const color = obj.raw?.color;
+  if (color) {
+    style += `color:${escapeCSSColor(color)};`;
+  }
+  return style;
+}
+
+function sanitizeFontName(name) {
+  return String(name)
+    .replace(/[^A-Za-z0-9]+/g, ' ')
+    .replace(/^\d+\s?/, '')
+    .trim() || 'sans-serif';
+}
+
+function escapeCSSColor(color) {
+  return String(color).replace(/[^0-9A-Za-z#.,()% ]/g, '');
 }
 
 function renderVectorVisual(vec, attrs) {
