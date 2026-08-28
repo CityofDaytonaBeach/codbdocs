@@ -10,6 +10,7 @@
  */
 
 import { buildRAGContext } from './exporters.js';
+import { generateViewerChrome } from './viewer.js';
 
 // ─── PDF-IR Core ─────────────────────────────────────────────────────────────
 
@@ -643,6 +644,7 @@ export function exportHTML(ir, options = {}) {
 
   // Build a RAG/context payload so an AI can summarize/answer with full context.
   const ragPayload = buildRAGPayload(ir);
+  const viewer = generateViewerChrome(ragPayload);
 
   let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || 'en') + '">\n<head>\n';
   html += '<meta charset="UTF-8">\n';
@@ -651,13 +653,22 @@ export function exportHTML(ir, options = {}) {
 
   html += generateVisualStyles(ir);
   html += generateAccessibleStyles();
+  html += viewer.styles;
 
   html += '</head>\n<body data-codbdocs-view="pdf">\n';
 
+  html += '<a class="skip-link" href="#codbdocs-root">Skip to document</a>\n';
+
   html += '<main role="document" id="codbdocs-root">\n';
 
-  // Always offer a toggle between the PDF (raster) view and the selectable text view.
-  html += viewToggleHTML();
+  // Offline viewer chrome: toolbar + outline sidebar.
+  html += '<div id="codbdocs-viewer">\n';
+  html += '<aside class="codbdocs-sidebar">\n';
+  html += viewer.sidebar;
+  html += '</aside>\n';
+  html += '<div id="codbdocs-main">\n';
+  html += viewer.toolbar;
+  html += '<div class="codbdocs-viewer-hint">Keyboard: <b>F</b> search &middot; <b>P</b>/<b>N</b> page &middot; <b>C</b> contrast &middot; <b>O</b> outline</div>\n';
 
   for (const pageId of ir.document.pages) {
     const page = ir.pages[pageId];
@@ -684,12 +695,20 @@ export function exportHTML(ir, options = {}) {
       html += renderPageVisual(page, ir, attrs);
     }
 
-    // Accessible / selectable text layer overlaid on the raster.
-    html += renderPageAccessible(page, ir, attrs, mode);
+    // Accessible / selectable text layer overlaid on the raster. When a raster
+    // exists we position every run at its exact bbox so selection/highlight sits
+    // precisely on the pixels (pixel-perfect "looks like the PDF" output).
+    if (page.background) {
+      html += renderPagePositionedText(page, ir, attrs);
+    } else {
+      html += renderPageAccessible(page, ir, attrs, mode);
+    }
 
     html += '</section>\n';
   }
 
+  html += '</div>\n'; // #codbdocs-main
+  html += '</div>\n'; // #codbdocs-viewer
   html += '</main>\n';
 
   // RAG / raw context payload for AI summarization (machine-readable, hidden).
@@ -698,6 +717,9 @@ export function exportHTML(ir, options = {}) {
       (ir.document.pages.length || 0) + '">' +
       JSON.stringify(ragPayload).replace(/</g, '\\u003c') + '</script>\n';
   }
+
+  // Offline viewer chrome (search / zoom / nav / outline / a11y).
+  html += viewer.script;
 
   html += '</body>\n</html>';
   return html;
@@ -720,34 +742,6 @@ function renderPageImages(page, ir, attrs) {
     html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">\n`;
   }
   return html;
-}
-
-function viewToggleHTML() {
-  return `
-  <div class="codbdocs-toolbar" role="group" aria-label="View options">
-    <button type="button" class="codbdocs-toggle is-active" data-codbdocs-view="pdf" aria-pressed="true">PDF view</button>
-    <button type="button" class="codbdocs-toggle" data-codbdocs-view="text" aria-pressed="false">Selectable text view</button>
-  </div>
-  <script>
-    (function () {
-      var btnPdf = document.querySelector('[data-codbdocs-view="pdf"]');
-      var btnText = document.querySelector('[data-codbdocs-view="text"]');
-      if (!btnPdf || !btnText) return;
-      function setView(view) {
-        document.querySelectorAll('.pdf-page-raster').forEach(function (el) {
-          el.style.display = view === 'pdf' ? '' : 'none';
-        });
-        document.body.dataset.codbdocsView = view;
-        btnPdf.classList.toggle('is-active', view === 'pdf');
-        btnText.classList.toggle('is-active', view === 'text');
-        btnPdf.setAttribute('aria-pressed', view === 'pdf' ? 'true' : 'false');
-        btnText.setAttribute('aria-pressed', view === 'text' ? 'true' : 'false');
-      }
-      btnPdf.addEventListener('click', function () { setView('pdf'); });
-      btnText.addEventListener('click', function () { setView('text'); });
-    })();
-  </script>
-  `;
 }
 
 /**
@@ -789,6 +783,44 @@ function renderPageVisual(page, ir, attrs) {
       const bbox = obj.bbox || [];
       const href = escapeHTML(obj.raw?.href || '#');
       html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML(obj.semantic?.text || obj.raw?.url || 'link')}</a>\n`;
+    }
+  }
+
+  html += '</div>\n';
+  return html;
+}
+
+/**
+ * Render the page's text as an absolutely-positioned selectable layer whose
+ * run coordinates exactly match the HD raster shown behind it. This is what
+ * makes the visual output "put back together dynamically": every text run sits
+ * precisely on top of the pixels it came from, so selection/highlight align
+ * with what you see. Used in place of the flowed accessible layer whenever a
+ * raster (page.background) is present.
+ */
+function renderPagePositionedText(page, ir, attrs) {
+  let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
+
+  for (const objId of page.content) {
+    const obj = ir.objects[objId];
+    if (!obj) continue;
+
+    const dataAttr = includeDataAttributes(objId, attrs);
+    const bbox = obj.bbox || [];
+
+    if (obj.type === 'text' && obj.semantic?.text) {
+      const style = textRunStyle(obj);
+      html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic.text)}</div>\n`;
+    } else if (obj.type === 'image') {
+      const src = obj.raw?.src || '';
+      const alt = escapeHTML(obj.accessibility?.alt || obj.semantic?.caption || 'Image');
+      if (src) {
+        html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
+      }
+    } else if (obj.type === 'link') {
+      const href = escapeHTML(obj.raw?.href || '#');
+      const text = escapeHTML(obj.semantic?.text || obj.raw?.url || 'link');
+      html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>\n`;
     }
   }
 
@@ -912,17 +944,20 @@ function includeDataAttributes(objId, attrs) {
 function generateVisualStyles(ir) {
   return `<style>
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
-    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
+    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
     .pdf-page-raster { position: relative; }
     .pdf-page-raster > img { display: block; position: relative; z-index: 1; }
     .pdf-embedded-image { position: absolute; z-index: 2; }
-    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; }
-    body[data-codbdocs-view="pdf"] .pdf-text-layer { display: none; }
+    /* The positioned text layer sits directly over the raster at the same
+       coordinates, so it renders on top of the pixels and stays selectable.
+       This makes the page look exactly like the source PDF while keeping
+       every run precise and copyable. */
+    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; user-select: text; }
     body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
     .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
     .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
     .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
-    .pdf-text { white-space: pre-wrap; }
+    .pdf-text { position: absolute; white-space: pre; line-height: 1; transform-origin: 0 0; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
     .ai-generated { color: #999; font-style: italic; }
