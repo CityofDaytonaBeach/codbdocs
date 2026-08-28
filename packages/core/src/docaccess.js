@@ -474,6 +474,13 @@ export function exportAccessibleHTML(ir, options = {}) {
     // Page heading
     html += `    <h2 class="page-heading" aria-label="${escapeHTML(pageLabel)}">${escapeHTML(pageLabel)}</h2>\n`;
 
+    // Raster layer — a pixel-accurate "looks like the PDF" background when available
+    if (page.background) {
+      html += `    <div class="pdf-page-raster" aria-hidden="true">\n`;
+      html += `      <img src="${page.background}" alt="" width="${page.width}" height="${page.height}">\n`;
+      html += `    </div>\n`;
+    }
+
     html += renderAccessiblePage(page, ir, {
       pageNum,
       includeDataAttributes,
@@ -487,6 +494,11 @@ export function exportAccessibleHTML(ir, options = {}) {
   }
 
   html += '</main>\n';
+
+  // RAG / full-context payload for AI summarization (machine-readable, no AI runs here).
+  html += '<script type="application/json" id="codbdocs-rag" data-page-count="' +
+    (ir.document.pages.length || 0) + '">' +
+    JSON.stringify(buildAccessibleRAGPayload(ir)).replace(/</g, '\\u003c') + '</script>\n';
 
   // ─── Landmark Footer ──────────────────────────────────────────────────
   if (includeLandmarks) {
@@ -506,6 +518,34 @@ export function exportAccessibleHTML(ir, options = {}) {
 }
 
 // ─── Skip Navigation ──────────────────────────────────────────────────────────
+
+/**
+ * Build a machine-readable RAG/context payload for AI summarization.
+ * No AI runs here — this just gives an AI full grounded context.
+ */
+function buildAccessibleRAGPayload(ir) {
+  const pages = (ir.document.pages || []).map(pageId => {
+    const page = ir.pages[pageId];
+    if (!page) return null;
+    const text = (page.content || [])
+      .map(id => ir.objects[id])
+      .filter(o => o && o.type === 'text' && o.semantic?.text)
+      .map(o => o.semantic.text)
+      .join(' ');
+    return { page: page.num, text };
+  }).filter(Boolean);
+
+  return {
+    format: 'codbdocs-rag-v1',
+    source: ir.document.metadata?.title || 'PDF document',
+    title: ir.document.metadata?.title || null,
+    author: ir.document.metadata?.author || null,
+    pageCount: (ir.document.pages || []).length,
+    pages,
+    fullText: pages.map(p => `[Page ${p.page}]\n${p.text}`).join('\n\n'),
+    metadata: ir.document.metadata || {},
+  };
+}
 
 function generateSkipNav(ir) {
   let html = '<!-- Skip Navigation -->\n';
@@ -990,7 +1030,12 @@ function generateAccessibleStyles() {
     main { padding: 0 20px; }
 
     /* Page sections */
-    .pdf-page { margin: 32px 0; padding: 16px 0; border-bottom: 1px solid #dee2e6; }
+    .pdf-page { margin: 32px 0; padding: 16px 0; border-bottom: 1px solid #dee2e6; position: relative; }
+    .pdf-page-raster { margin: 0 0 16px; text-align: center; }
+    .pdf-page-raster img {
+      display: block; max-width: 100%; height: auto; border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12); border: 1px solid #e9ecef;
+    }
     .page-heading {
       font-size: 1.25rem; color: #005a9c;
       margin: 0 0 16px; padding-bottom: 8px;

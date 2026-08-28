@@ -596,24 +596,30 @@ function isNear(bbox1, bbox2, threshold = 100) {
  * @param {Object} options - { mode: 'visual'|'accessible'|'intelligent', includeDataAttributes: true }
  */
 export function exportHTML(ir, options = {}) {
-  const { mode = 'accessible', includeDataAttributes = true } = options;
+  const {
+    mode = 'visual', // 'visual' | 'accessible' | 'intelligent' | 'selectable'
+    includeDataAttributes = true,
+    includeRAG = true,
+    includeRawText = true,
+  } = options;
+
+  // Build a RAG/context payload so an AI can summarize/answer with full context.
+  const ragPayload = buildRAGPayload(ir);
 
   let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || 'en') + '">\n<head>\n';
   html += '<meta charset="UTF-8">\n';
   html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
   html += '<title>' + escapeHTML(ir.document.metadata?.title || 'Document') + '</title>\n';
 
-  if (mode === 'visual') {
-    html += generateVisualStyles(ir);
-  } else {
-    html += generateAccessibleStyles();
-  }
+  html += generateVisualStyles(ir);
+  html += generateAccessibleStyles();
 
-  html += '</head>\n<body>\n';
+  html += '</head>\n<body data-codbdocs-view="pdf">\n';
 
-  if (mode === 'accessible' || mode === 'intelligent') {
-    html += '<main role="document">\n';
-  }
+  html += '<main role="document" id="codbdocs-root">\n';
+
+  // Always offer a toggle between the PDF (raster) view and the selectable text view.
+  html += viewToggleHTML();
 
   for (const pageId of ir.document.pages) {
     const page = ir.pages[pageId];
@@ -623,27 +629,124 @@ export function exportHTML(ir, options = {}) {
       ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"`
       : '';
 
-    if (mode === 'visual') {
-      html += `<div class="pdf-page"${attrs} style="width:${page.width}px;height:${page.height}px;position:relative;">\n`;
-      html += renderPageVisual(page, ir, attrs);
+    const pageLabel = page.labels?.print || `Page ${page.num}`;
+
+    // Always emit a page wrapper that carries both the raster ("looks like the PDF")
+    // layer and the selectable accessible text layer on top.
+    html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML(pageLabel)}" role="region">\n`;
+
+    // Raster layer — pixel-accurate representation of the source page.
+    if (page.background) {
+      html += `<div class="pdf-page-raster" aria-hidden="true">\n`;
+      html += `<img src="${page.background}" alt="" width="${page.width}" height="${page.height}">\n`;
+      // Embed extracted page images positioned over the raster so high-res images aren't lost.
+      html += renderPageImages(page, ir, attrs);
       html += '</div>\n';
     } else {
-      html += `<section class="pdf-page"${attrs} aria-label="Page ${page.num}">\n`;
-      html += renderPageAccessible(page, ir, attrs, mode);
-      html += '</section>\n';
+      html += renderPageVisual(page, ir, attrs);
     }
+
+    // Accessible / selectable text layer overlaid on the raster.
+    html += renderPageAccessible(page, ir, attrs, mode);
+
+    html += '</section>\n';
   }
 
-  if (mode === 'accessible' || mode === 'intelligent') {
-    html += '</main>\n';
+  html += '</main>\n';
+
+  // RAG / raw context payload for AI summarization (machine-readable, hidden).
+  if (includeRAG || includeRawText) {
+    html += '<script type="application/json" id="codbdocs-rag" data-page-count="' +
+      (ir.document.pages.length || 0) + '">' +
+      JSON.stringify(ragPayload).replace(/</g, '\\u003c') + '</script>\n';
   }
 
   html += '</body>\n</html>';
   return html;
 }
 
-function renderPageVisual(page, ir, attrs) {
+/**
+ * Position embedded images over the page raster using their bounding boxes.
+ * Image objects are real `ir.objects` entries (type = 'image').
+ */
+function renderPageImages(page, ir, attrs) {
   let html = '';
+  for (const objId of page.content) {
+    const obj = ir.objects[objId];
+    if (!obj || obj.type !== 'image') continue;
+    const src = obj.raw?.src;
+    if (!src) continue;
+    const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+    const alt = escapeHTML(obj.accessibility?.alt || obj.semantic?.caption || 'Image');
+    html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
+    html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">\n`;
+  }
+  return html;
+}
+
+function viewToggleHTML() {
+  return `
+  <div class="codbdocs-toolbar" role="group" aria-label="View options">
+    <button type="button" class="codbdocs-toggle is-active" data-codbdocs-view="pdf" aria-pressed="true">PDF view</button>
+    <button type="button" class="codbdocs-toggle" data-codbdocs-view="text" aria-pressed="false">Selectable text view</button>
+  </div>
+  <script>
+    (function () {
+      var btnPdf = document.querySelector('[data-codbdocs-view="pdf"]');
+      var btnText = document.querySelector('[data-codbdocs-view="text"]');
+      if (!btnPdf || !btnText) return;
+      function setView(view) {
+        document.querySelectorAll('.pdf-page-raster').forEach(function (el) {
+          el.style.display = view === 'pdf' ? '' : 'none';
+        });
+        document.body.dataset.codbdocsView = view;
+        btnPdf.classList.toggle('is-active', view === 'pdf');
+        btnText.classList.toggle('is-active', view === 'text');
+        btnPdf.setAttribute('aria-pressed', view === 'pdf' ? 'true' : 'false');
+        btnText.setAttribute('aria-pressed', view === 'text' ? 'true' : 'false');
+      }
+      btnPdf.addEventListener('click', function () { setView('pdf'); });
+      btnText.addEventListener('click', function () { setView('text'); });
+    })();
+  </script>
+  `;
+}
+
+/**
+ * Build a machine-readable RAG payload with the full document context so an
+ * AI can summarize, quote, and answer with grounded detail — no AI runs here.
+ */
+function buildRAGPayload(ir) {
+  const pages = (ir.document.pages || []).map(pageId => {
+    const page = ir.pages[pageId];
+    if (!page) return null;
+    const text = (page.content || [])
+      .map(id => ir.objects[id])
+      .filter(o => o && o.type === 'text' && o.semantic?.text)
+      .map(o => o.semantic.text)
+      .join(' ');
+    return { page: page.num, text };
+  }).filter(Boolean);
+
+  const entities = {};
+  const title = ir.document.metadata?.title || null;
+  const author = ir.document.metadata?.author || null;
+
+  return {
+    format: 'codbdocs-rag-v1',
+    source: title || 'PDF document',
+    title,
+    author,
+    pageCount: (ir.document.pages || []).length,
+    pages,
+    fullText: pages.map(p => `[Page ${p.page}]\n${p.text}`).join('\n\n'),
+    metadata: ir.document.metadata || {},
+    entities,
+  };
+}
+
+function renderPageVisual(page, ir, attrs) {
+  let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + 'px;height:' + (page.height || 0) + 'px;">\n';
 
   // Render vectors first (background)
   for (const vecId of page.vectors || []) {
@@ -652,23 +755,31 @@ function renderPageVisual(page, ir, attrs) {
     html += renderVectorVisual(vec, attrs);
   }
 
-  // Render content
+  // Render content (text + images, positioned)
   for (const objId of page.content) {
     const obj = ir.objects[objId];
     if (!obj) continue;
 
     if (obj.type === 'text') {
-      html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${obj.bbox?.[0] || 0}px;top:${obj.bbox?.[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;">${escapeHTML(obj.semantic?.text || '')}</div>\n`;
+      const bbox = obj.bbox || [];
+      html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;">${escapeHTML(obj.semantic?.text || '')}</div>\n`;
     } else if (obj.type === 'image') {
-      html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${obj.bbox?.[0] || 0}px;top:${obj.bbox?.[1] || 0}px;width:${obj.bbox?.[2] || 0}px;height:${obj.bbox?.[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>\n`;
+      const bbox = obj.bbox || [];
+      const src = obj.raw?.src || '';
+      if (src) {
+        html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML(obj.accessibility?.alt || 'Image')}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
+      } else {
+        html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>\n`;
+      }
     }
   }
 
+  html += '</div>\n';
   return html;
 }
 
 function renderPageAccessible(page, ir, attrs, mode) {
-  let html = '';
+  let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
 
   for (const objId of page.content) {
     const obj = ir.objects[objId];
@@ -677,32 +788,28 @@ function renderPageAccessible(page, ir, attrs, mode) {
     const dataAttr = includeDataAttributes(objId, attrs);
     const role = obj.semantic?.role || 'paragraph';
 
-    if (role === 'heading') {
+    if (obj.type === 'image') {
+      const alt = obj.accessibility?.alt || obj.semantic?.caption || (mode === 'intelligent' ? 'AI-generated description' : 'Image');
+      const src = obj.raw?.src || '';
+      html += `<figure${dataAttr}>\n`;
+      if (src) html += `<img src="${escapeHTML(src)}" alt="${escapeHTML(alt)}" loading="lazy">\n`;
+      if (obj.semantic?.caption) html += `<figcaption>${escapeHTML(obj.semantic.caption)}</figcaption>\n`;
+      if (mode === 'intelligent' && obj.provenance?.method === 'vision') {
+        html += `<small class="ai-generated">AI-generated description</small>\n`;
+      }
+      html += '</figure>\n';
+    } else if (role === 'heading') {
       const level = obj.semantic?.level || 2;
       html += `<h${level}${dataAttr}>${escapeHTML(obj.semantic?.text || '')}</h${level}>\n`;
     } else if (role === 'table') {
       html += `<table${dataAttr}>\n`;
       html += `<caption>${escapeHTML(obj.semantic?.caption || 'Table')}</caption>\n`;
-      // Table rendering would go here
       html += '</table>\n';
     } else if (role === 'list') {
       html += `<ul${dataAttr}>\n`;
-      // List items would go here
       html += '</ul>\n';
-    } else if (obj.type === 'image') {
-      const alt = obj.accessibility?.alt || (mode === 'intelligent' ? 'AI-generated description' : 'Image');
-      const src = obj.raw?.src || '';
-      html += `<figure${dataAttr}>\n`;
-      html += `<img src="${escapeHTML(src)}" alt="${escapeHTML(alt)}">\n`;
-      if (obj.semantic?.caption) {
-        html += `<figcaption>${escapeHTML(obj.semantic.caption)}</figcaption>\n`;
-      }
-      if (mode === 'intelligent' && obj.provenance?.method === 'vision') {
-        html += `<small class="ai-generated">AI-generated description</small>\n`;
-      }
-      html += '</figure>\n';
-    } else {
-      html += `<p${dataAttr}>${escapeHTML(obj.semantic?.text || '')}</p>\n`;
+    } else if (obj.type === 'text' && obj.semantic?.text) {
+      html += `<p${dataAttr}>${escapeHTML(obj.semantic.text)}</p>\n`;
     }
   }
 
@@ -715,6 +822,7 @@ function renderPageAccessible(page, ir, attrs, mode) {
     }
   }
 
+  html += '</div>\n';
   return html;
 }
 
@@ -752,7 +860,16 @@ function includeDataAttributes(objId, attrs) {
 function generateVisualStyles(ir) {
   return `<style>
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
-    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }
+    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
+    .pdf-page-raster { position: relative; }
+    .pdf-page-raster > img { display: block; position: relative; z-index: 1; }
+    .pdf-embedded-image { position: absolute; z-index: 2; }
+    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; }
+    body[data-codbdocs-view="pdf"] .pdf-text-layer { display: none; }
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
+    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
+    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
+    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
     .pdf-text { white-space: pre-wrap; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
@@ -762,8 +879,11 @@ function generateVisualStyles(ir) {
 
 function generateAccessibleStyles() {
   return `<style>
-    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 800px; margin: 0 auto; }
-    .pdf-page { margin: 40px 0; padding: 20px 0; border-bottom: 1px solid #eee; }
+    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 820px; margin: 0 auto; }
+    .pdf-page { margin: 40px 0; padding: 10px 0; position: relative; }
+    .pdf-page-raster { position: relative; }
+    .pdf-page-raster > img { display: block; width: 100%; height: auto; }
+    .pdf-text-layer { position: absolute; inset: 10px 0 0; }
     h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; }
     p { margin: 0.5em 0; }
     table { border-collapse: collapse; width: 100%; margin: 1em 0; }
@@ -774,6 +894,10 @@ function generateAccessibleStyles() {
     figcaption { font-size: 0.9em; color: #666; margin-top: 4px; }
     .ai-generated { color: #999; font-size: 0.8em; font-style: italic; }
     hr { border: none; border-top: 1px solid #eee; margin: 1em 0; }
+    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
+    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
+    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
     @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
     @media (prefers-contrast: high) { body { background: #000; color: #fff; } a { color: #ff0; } }
   </style>\n`;

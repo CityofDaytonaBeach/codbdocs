@@ -1,152 +1,175 @@
-var CodbDocs = (() => {
+(() => {
   var __defProp = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
+  function __accessProp(key) {
+    return this[key];
+  }
+  var __toCommonJS = (from) => {
+    var entry = (__moduleCache ??= new WeakMap).get(from), desc;
+    if (entry)
+      return entry;
+    entry = __defProp({}, "__esModule", { value: true });
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (var key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(entry, key))
+          __defProp(entry, key, {
+            get: __accessProp.bind(from, key),
+            enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+          });
+    }
+    __moduleCache.set(from, entry);
+    return entry;
+  };
+  var __moduleCache;
+  var __returnValue = (v) => v;
+  function __exportSetter(name, newValue) {
+    this[name] = __returnValue.bind(null, newValue);
+  }
   var __export = (target, all) => {
     for (var name in all)
-      __defProp(target, name, { get: all[name], enumerable: true });
+      __defProp(target, name, {
+        get: all[name],
+        enumerable: true,
+        configurable: true,
+        set: __exportSetter.bind(all, name)
+      });
   };
-  var __copyProps = (to, from, except, desc) => {
-    if (from && typeof from === "object" || typeof from === "function") {
-      for (let key of __getOwnPropNames(from))
-        if (!__hasOwnProp.call(to, key) && key !== except)
-          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-    }
-    return to;
-  };
-  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
   // src/index.js
-  var index_exports = {};
-  __export(index_exports, {
-    BlockTypes: () => BlockTypes,
-    ChunkStrategies: () => ChunkStrategies,
-    CodbDocs: () => CodbDocs,
-    CodbFingerprint: () => CodbFingerprint,
-    ColorSpaceTypes: () => ColorSpaceTypes,
-    ConceptEdge: () => ConceptEdge,
-    ConceptGraph: () => ConceptGraph,
-    ConceptNode: () => ConceptNode,
-    ContentBlock: () => ContentBlock,
-    CustomEmbeddingProvider: () => CustomEmbeddingProvider,
-    DocumentContentGraph: () => DocumentContentGraph,
-    DocumentGraph: () => DocumentGraph,
-    EmbeddingProvider: () => EmbeddingProvider,
-    EntityTypes: () => EntityTypes,
-    LocalEmbeddingProvider: () => LocalEmbeddingProvider,
-    OpenAIEmbeddingProvider: () => OpenAIEmbeddingProvider,
-    PDFCreator: () => PDFCreator,
-    PageContentGraph: () => PageContentGraph,
-    QueryIntent: () => QueryIntent,
-    analyzeSpatialLayout: () => analyzeSpatialLayout,
-    analyzeTextQuality: () => analyzeTextQuality,
-    analyzeVisualRegions: () => analyzeVisualRegions,
-    associateCaptionsWithImages: () => associateCaptionsWithImages,
-    bestFuzzyMatch: () => bestFuzzyMatch,
-    buildActionsSummary: () => buildActionsSummary,
-    buildAppearanceStreamsSummary: () => buildAppearanceStreamsSummary,
-    buildCrossPageContext: () => buildCrossPageContext,
-    buildEmbeddedFilesSummary: () => buildEmbeddedFilesSummary,
-    buildGraphicsStateSummary: () => buildGraphicsStateSummary,
-    buildOCGSummary: () => buildOCGSummary,
-    buildRevisionsSummary: () => buildRevisionsSummary,
-    buildSignatureSummary: () => buildSignatureSummary,
-    buildTableObjects: () => buildTableObjects,
-    buildXObjectSummary: () => buildXObjectSummary,
-    calculateRAGReadiness: () => calculateRAGReadiness,
-    charNGrams: () => charNGrams,
-    classifyPage: () => classifyPage,
-    clearCache: () => clearCache,
-    cmykToRgb: () => cmykToRgb,
-    compareVisualInternal: () => compareVisualInternal,
-    createChunks: () => createChunks,
-    createGradientShading: () => createGradientShading,
-    createHighlightAnnotations: () => createHighlightAnnotations,
-    createPDF: () => createPDF,
-    createRAGOutput: () => createRAGOutput,
-    createRAGOutputWithEmbeddings: () => createRAGOutputWithEmbeddings,
-    createSoftMask: () => createSoftMask,
-    createTextPDF: () => createTextPDF,
-    createTilingPattern: () => createTilingPattern,
-    createTransparencyGroup: () => createTransparencyGroup,
-    createWorkspace: () => createWorkspace,
-    decomposeQuery: () => decomposeQuery,
-    default: () => index_default,
-    detectAcronyms: () => detectAcronyms,
-    detectCheckboxes: () => detectCheckboxes,
-    detectCrossPageTables: () => detectCrossPageTables,
-    detectDefinitions: () => detectDefinitions,
-    detectFlattenedForms: () => detectFlattenedForms,
-    detectFootnotes: () => detectFootnotes,
-    detectGlyphIssues: () => detectGlyphIssues,
-    detectIntent: () => detectIntent,
-    detectLanguage: () => detectLanguage,
-    detectMalformedPDF: () => detectMalformedPDF,
-    detectOutlinedText: () => detectOutlinedText,
-    detectRedactions: () => detectRedactions,
-    detectRepeatedElements: () => detectRepeatedElements,
-    detectRotationSkew: () => detectRotationSkew,
-    detectStructure: () => detectStructure,
-    diagnoseDocument: () => diagnoseDocument,
-    executeAsk: () => executeAsk,
-    executeQuery: () => executeQuery,
-    executeReasoning: () => executeReasoning,
-    expandQuery: () => expandQuery,
-    exportAccessibleHTML: () => exportAccessibleHTML,
-    exportAsCSV: () => exportAsCSV,
-    exportAsJSONL: () => exportAsJSONL,
-    extractActions: () => extractActions,
-    extractAllImages: () => extractAllImages,
-    extractAppearanceStreams: () => extractAppearanceStreams,
-    extractArtifacts: () => extractArtifacts,
-    extractDocumentMetadata: () => extractDocumentMetadata,
-    extractEmbeddedFiles: () => extractEmbeddedFiles,
-    extractGlyphs: () => extractGlyphs,
-    extractGraphicsState: () => extractGraphicsState,
-    extractImages: () => extractImages,
-    extractMarkedContent: () => extractMarkedContent,
-    extractMetadata: () => extractMetadata,
-    extractNamedDestinations: () => extractNamedDestinations,
-    extractOCGs: () => extractOCGs,
-    extractOutline: () => extractOutline,
-    extractPageLabels: () => extractPageLabels,
-    extractRelationships: () => extractRelationships,
-    extractRevisions: () => extractRevisions,
-    extractSecurity: () => extractSecurity,
-    extractSignatures: () => extractSignatures,
-    fuzzyScore: () => fuzzyScore,
-    fuzzySearch: () => fuzzySearch,
-    generateAccessibilityReport: () => generateAccessibilityReport,
-    generateRemediations: () => generateRemediations,
-    getCacheStats: () => getCacheStats,
-    highlightResults: () => highlightResults,
-    hybridSearch: () => hybridSearch,
-    labToRgb: () => labToRgb,
-    learnTerminology: () => learnTerminology2,
-    levenshtein: () => levenshtein,
-    loadFromCache: () => loadFromCache,
-    normalizeDocument: () => normalizeDocument,
-    normalizeText: () => normalizeText,
-    operatorCount: () => operatorCount,
-    operatorMax: () => operatorMax,
-    operatorMin: () => operatorMin,
-    operatorSum: () => operatorSum,
-    parseBlendMode: () => parseBlendMode,
-    parseShading: () => parseShading,
-    queryTable: () => queryTable,
-    rankResults: () => rankResults,
-    reconstructTable: () => reconstructTable,
-    remediateAccessibility: () => remediateAccessibility,
-    rerankResults: () => rerankResults,
-    rgbToCmyk: () => rgbToCmyk,
-    saveToCache: () => saveToCache,
-    stem: () => stem,
-    toRgb: () => toRgb,
-    trackXObjectReuse: () => trackXObjectReuse,
-    validateTags: () => validateTags,
+  var exports_src = {};
+  __export(exports_src, {
+    wordNGrams: () => wordNGrams,
     wcagAudit: () => wcagAudit,
-    wordNGrams: () => wordNGrams
+    validateTags: () => validateTags,
+    trackXObjectReuse: () => trackXObjectReuse,
+    toRgb: () => toRgb,
+    stem: () => stem,
+    saveToCache: () => saveToCache,
+    rgbToCmyk: () => rgbToCmyk,
+    rerankResults: () => rerankResults,
+    remediateAccessibility: () => remediateAccessibility,
+    reconstructTable: () => reconstructTable,
+    rankResults: () => rankResults,
+    queryTable: () => queryTable,
+    parseShading: () => parseShading,
+    parseBlendMode: () => parseBlendMode,
+    operatorSum: () => operatorSum,
+    operatorMin: () => operatorMin,
+    operatorMax: () => operatorMax,
+    operatorCount: () => operatorCount,
+    normalizeText: () => normalizeText,
+    normalizeDocument: () => normalizeDocument,
+    loadFromCache: () => loadFromCache,
+    load: () => load,
+    levenshtein: () => levenshtein,
+    learnTerminology: () => learnTerminology2,
+    labToRgb: () => labToRgb,
+    hybridSearch: () => hybridSearch,
+    highlightResults: () => highlightResults,
+    getCacheStats: () => getCacheStats,
+    generateRemediations: () => generateRemediations,
+    generateAccessibilityReport: () => generateAccessibilityReport,
+    fuzzySearch: () => fuzzySearch,
+    fuzzyScore: () => fuzzyScore,
+    extractSignatures: () => extractSignatures,
+    extractSecurity: () => extractSecurity,
+    extractRevisions: () => extractRevisions,
+    extractRelationships: () => extractRelationships,
+    extractPageLabels: () => extractPageLabels,
+    extractOutline: () => extractOutline,
+    extractOCGs: () => extractOCGs,
+    extractNamedDestinations: () => extractNamedDestinations,
+    extractMetadata: () => extractMetadata,
+    extractMarkedContent: () => extractMarkedContent,
+    extractImages: () => extractImages,
+    extractGraphicsState: () => extractGraphicsState,
+    extractGlyphs: () => extractGlyphs,
+    extractEmbeddedFiles: () => extractEmbeddedFiles,
+    extractDocumentMetadata: () => extractDocumentMetadata,
+    extractArtifacts: () => extractArtifacts,
+    extractAppearanceStreams: () => extractAppearanceStreams,
+    extractAllImages: () => extractAllImages,
+    extractActions: () => extractActions,
+    exportAsJSONL: () => exportAsJSONL,
+    exportAsCSV: () => exportAsCSV,
+    exportAccessibleHTML: () => exportAccessibleHTML,
+    expandQuery: () => expandQuery,
+    executeReasoning: () => executeReasoning,
+    executeQuery: () => executeQuery,
+    executeAsk: () => executeAsk,
+    diagnoseDocument: () => diagnoseDocument,
+    detectStructure: () => detectStructure,
+    detectRotationSkew: () => detectRotationSkew,
+    detectRepeatedElements: () => detectRepeatedElements,
+    detectRedactions: () => detectRedactions,
+    detectOutlinedText: () => detectOutlinedText,
+    detectMalformedPDF: () => detectMalformedPDF,
+    detectLanguage: () => detectLanguage,
+    detectIntent: () => detectIntent,
+    detectGlyphIssues: () => detectGlyphIssues,
+    detectFootnotes: () => detectFootnotes,
+    detectFlattenedForms: () => detectFlattenedForms,
+    detectDefinitions: () => detectDefinitions,
+    detectCrossPageTables: () => detectCrossPageTables,
+    detectCheckboxes: () => detectCheckboxes,
+    detectAcronyms: () => detectAcronyms,
+    default: () => src_default,
+    decomposeQuery: () => decomposeQuery,
+    createWorkspace: () => createWorkspace,
+    createTransparencyGroup: () => createTransparencyGroup,
+    createTilingPattern: () => createTilingPattern,
+    createTextPDF: () => createTextPDF,
+    createSoftMask: () => createSoftMask,
+    createRAGOutputWithEmbeddings: () => createRAGOutputWithEmbeddings,
+    createRAGOutput: () => createRAGOutput,
+    createPDF: () => createPDF,
+    createHighlightAnnotations: () => createHighlightAnnotations,
+    createGradientShading: () => createGradientShading,
+    createChunks: () => createChunks,
+    configure: () => configure,
+    compareVisualInternal: () => compareVisualInternal,
+    cmykToRgb: () => cmykToRgb,
+    clearCache: () => clearCache,
+    classifyPage: () => classifyPage,
+    charNGrams: () => charNGrams,
+    canUseWorkers: () => canUseWorkers,
+    calculateRAGReadiness: () => calculateRAGReadiness,
+    buildXObjectSummary: () => buildXObjectSummary,
+    buildTableObjects: () => buildTableObjects,
+    buildSignatureSummary: () => buildSignatureSummary,
+    buildRevisionsSummary: () => buildRevisionsSummary,
+    buildOCGSummary: () => buildOCGSummary,
+    buildGraphicsStateSummary: () => buildGraphicsStateSummary,
+    buildEmbeddedFilesSummary: () => buildEmbeddedFilesSummary,
+    buildCrossPageContext: () => buildCrossPageContext,
+    buildAppearanceStreamsSummary: () => buildAppearanceStreamsSummary,
+    buildActionsSummary: () => buildActionsSummary,
+    bestFuzzyMatch: () => bestFuzzyMatch,
+    associateCaptionsWithImages: () => associateCaptionsWithImages,
+    analyzeVisualRegions: () => analyzeVisualRegions,
+    analyzeTextQuality: () => analyzeTextQuality,
+    analyzeSpatialLayout: () => analyzeSpatialLayout,
+    QueryIntent: () => QueryIntent,
+    PageContentGraph: () => PageContentGraph,
+    PDFCreator: () => PDFCreator,
+    OpenAIEmbeddingProvider: () => OpenAIEmbeddingProvider,
+    LocalEmbeddingProvider: () => LocalEmbeddingProvider,
+    EntityTypes: () => EntityTypes,
+    EmbeddingProvider: () => EmbeddingProvider,
+    DocumentGraph: () => DocumentGraph,
+    DocumentContentGraph: () => DocumentContentGraph,
+    CustomEmbeddingProvider: () => CustomEmbeddingProvider,
+    ContentBlock: () => ContentBlock,
+    ConceptNode: () => ConceptNode,
+    ConceptGraph: () => ConceptGraph,
+    ConceptEdge: () => ConceptEdge,
+    ColorSpaceTypes: () => ColorSpaceTypes,
+    CodbFingerprint: () => CodbFingerprint,
+    CodbDocs: () => CodbDocs,
+    ChunkStrategies: () => ChunkStrategies,
+    BlockTypes: () => BlockTypes
   });
 
   // src/brain.js
@@ -173,11 +196,12 @@ var CodbDocs = (() => {
     return { columns, rows, headings, flow, boxes };
   }
   function detectColumns(boxes, pageWidth) {
-    if (boxes.length === 0) return 0;
+    if (boxes.length === 0)
+      return 0;
     const xPositions = boxes.map((b) => b.x).sort((a, b) => a - b);
     const clusters = [];
     let currentCluster = [xPositions[0]];
-    for (let i = 1; i < xPositions.length; i++) {
+    for (let i = 1;i < xPositions.length; i++) {
       const gap = xPositions[i] - xPositions[i - 1];
       if (gap > pageWidth * 0.15) {
         clusters.push(currentCluster);
@@ -190,11 +214,12 @@ var CodbDocs = (() => {
     return Math.min(clusters.length, 4);
   }
   function groupIntoRows(boxes) {
-    if (boxes.length === 0) return [];
+    if (boxes.length === 0)
+      return [];
     const sorted = [...boxes].sort((a, b) => b.y - a.y);
     const rows = [];
     let currentRow = [sorted[0]];
-    for (let i = 1; i < sorted.length; i++) {
+    for (let i = 1;i < sorted.length; i++) {
       const yDiff = Math.abs(sorted[i].y - currentRow[0].y);
       const avgHeight = currentRow.reduce((s, b) => s + b.height, 0) / currentRow.length;
       if (yDiff < avgHeight * 1.5) {
@@ -210,7 +235,8 @@ var CodbDocs = (() => {
     return rows;
   }
   function detectHeadings(boxes) {
-    if (boxes.length === 0) return [];
+    if (boxes.length === 0)
+      return [];
     const sizes = boxes.map((b) => b.fontSize).sort((a, b) => a - b);
     const medianSize = sizes[Math.floor(sizes.length / 2)];
     return boxes.filter((b) => b.fontSize > medianSize * 1.3 && b.text.trim().length > 2).map((b) => ({
@@ -221,11 +247,14 @@ var CodbDocs = (() => {
     }));
   }
   function detectFlow(rows) {
-    if (rows.length < 2) return "single";
+    if (rows.length < 2)
+      return "single";
     const leftEdges = rows.map((r) => r[0]?.x || 0);
     const variance = leftEdges.reduce((s, x) => s + Math.pow(x - leftEdges[0], 2), 0) / leftEdges.length;
-    if (variance < 100) return "left-aligned";
-    if (variance < 500) return "mixed";
+    if (variance < 100)
+      return "left-aligned";
+    if (variance < 500)
+      return "mixed";
     return "complex";
   }
   function detectStructure(spatialResult, pageSize) {
@@ -245,18 +274,19 @@ var CodbDocs = (() => {
   function detectTables(rows, pageSize) {
     const tables = [];
     let tableStart = -1;
-    for (let i = 0; i < rows.length; i++) {
+    for (let i = 0;i < rows.length; i++) {
       const row = rows[i];
       const cellCount = row.length;
       if (cellCount >= 2) {
         const gaps = [];
-        for (let j = 1; j < row.length; j++) {
+        for (let j = 1;j < row.length; j++) {
           gaps.push(row[j].x - (row[j - 1].x + row[j - 1].width));
         }
         const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
         const gapVariance = gaps.reduce((s, g) => s + Math.pow(g - avgGap, 2), 0) / gaps.length;
         if (gapVariance < avgGap * avgGap * 2) {
-          if (tableStart === -1) tableStart = i;
+          if (tableStart === -1)
+            tableStart = i;
           continue;
         }
       }
@@ -280,7 +310,7 @@ var CodbDocs = (() => {
     const numberPattern = /^(\d+[\.\)]\s|[a-z][\.\)]\s|[ivxIVX]+[\.\)]\s)/;
     let listStart = -1;
     let listType = null;
-    for (let i = 0; i < rows.length; i++) {
+    for (let i = 0;i < rows.length; i++) {
       const text = rows[i].map((b) => b.text).join(" ").trim();
       const isBullet = bulletPattern.test(text);
       const isNumbered = numberPattern.test(text);
@@ -327,12 +357,13 @@ var CodbDocs = (() => {
   function detectParagraphs(rows) {
     const paragraphs = [];
     let paraStart = -1;
-    for (let i = 0; i < rows.length; i++) {
+    for (let i = 0;i < rows.length; i++) {
       const row = rows[i];
       const text = row.map((b) => b.text).join(" ").trim();
       const isParagraph = row.length <= 2 && text.length > 50;
       if (isParagraph) {
-        if (paraStart === -1) paraStart = i;
+        if (paraStart === -1)
+          paraStart = i;
       } else {
         if (paraStart !== -1 && i - paraStart >= 2) {
           paragraphs.push({
@@ -360,15 +391,10 @@ var CodbDocs = (() => {
   }
   function extractDates(text) {
     const patterns = [
-      // MM/DD/YYYY or MM-DD-YYYY
       /\b(0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12]\d|3[01])[\/\-](\d{4})\b/g,
-      // Month DD, YYYY
       /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})\b/g,
-      // DD Month YYYY
       /\b(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/g,
-      // MM/YYYY
       /\b(0?[1-9]|1[0-2])\/(\d{4})\b/g,
-      // Fiscal Year patterns
       /\bFY\s*(\d{4}(?:\s*[-–]\s*\d{2,4})?)\b/gi
     ];
     const dates = [];
@@ -423,7 +449,7 @@ var CodbDocs = (() => {
   function extractZipCodes(text) {
     const pattern = /\b\d{5}(?:-\d{4})?\b/g;
     const zips = [];
-    const seen = /* @__PURE__ */ new Set();
+    const seen = new Set;
     for (const m of text.matchAll(pattern)) {
       const zip = m[0];
       if (!seen.has(zip)) {
@@ -436,7 +462,8 @@ var CodbDocs = (() => {
   function classifyPage(text, spatialResult) {
     const wordCount = text.split(/\s+/).filter(Boolean).length;
     const charCount = text.length;
-    if (charCount < 10) return { type: "blank", confidence: 1, summary: "Blank or image-only page" };
+    if (charCount < 10)
+      return { type: "blank", confidence: 1, summary: "Blank or image-only page" };
     const patterns = {
       cover: /^[\s\S]{0,100}(title|cover|report|annual|city of daytona)/i,
       table_of_contents: /(table of contents|contents|toc|index)/i,
@@ -468,7 +495,8 @@ var CodbDocs = (() => {
     return { type: bestType, confidence: bestConfidence, summary, wordCount, charCount };
   }
   function generateSummary(text, type) {
-    const lines = text.split("\n").filter((l) => l.trim());
+    const lines = text.split(`
+`).filter((l) => l.trim());
     const firstLines = lines.slice(0, 5).join(" ").substring(0, 200);
     return `[${type}] ${firstLines}...`;
   }
@@ -479,16 +507,17 @@ var CodbDocs = (() => {
     const data = imageData.data;
     const bandHeight = Math.floor(height / 20);
     const bands = [];
-    for (let y = 0; y < height; y += bandHeight) {
+    for (let y = 0;y < height; y += bandHeight) {
       let darkPixels = 0;
       let totalPixels = 0;
-      for (let py = y; py < Math.min(y + bandHeight, height); py++) {
-        for (let px = 0; px < width; px++) {
+      for (let py = y;py < Math.min(y + bandHeight, height); py++) {
+        for (let px = 0;px < width; px++) {
           const idx = (py * width + px) * 4;
           const r = data[idx], g = data[idx + 1], b = data[idx + 2];
           const brightness = (r + g + b) / 3;
           totalPixels++;
-          if (brightness < 128) darkPixels++;
+          if (brightness < 128)
+            darkPixels++;
         }
       }
       const density = darkPixels / totalPixels;
@@ -513,7 +542,7 @@ var CodbDocs = (() => {
   }
 
   // src/layers.js
-  var TextLayer = class {
+  class TextLayer {
     constructor() {
       this.pages = [];
       this.fullText = "";
@@ -524,7 +553,8 @@ var CodbDocs = (() => {
       const words = text.split(/\s+/).filter(Boolean);
       const sentences = text.split(/[.!?]+/).map((s) => s.trim()).filter((s) => s.length > 10);
       this.pages.push({ pageNum, text, source, words, sentences });
-      this.fullText += text + "\n";
+      this.fullText += text + `
+`;
       this.wordCount += words.length;
       this.sentences.push(...sentences.map((s) => ({ text: s, page: pageNum })));
     }
@@ -538,11 +568,13 @@ var CodbDocs = (() => {
     }
     getWordAt(pageNum, index) {
       const page = this.pages.find((p) => p.pageNum === pageNum);
-      if (!page) return null;
+      if (!page)
+        return null;
       return page.words[index] || null;
     }
-  };
-  var LayoutLayer = class {
+  }
+
+  class LayoutLayer {
     constructor() {
       this.pages = [];
     }
@@ -565,13 +597,12 @@ var CodbDocs = (() => {
       return page ? page.headings : [];
     }
     getAllHeadings() {
-      return this.pages.flatMap(
-        (p) => p.headings.map((h) => ({ ...h, page: p.pageNum }))
-      );
+      return this.pages.flatMap((p) => p.headings.map((h) => ({ ...h, page: p.pageNum })));
     }
     getTableOfContents() {
       const headings = this.getAllHeadings();
-      if (headings.length === 0) return null;
+      if (headings.length === 0)
+        return null;
       const toc = [];
       let currentH1 = null;
       let currentH2 = null;
@@ -589,8 +620,9 @@ var CodbDocs = (() => {
       }
       return toc;
     }
-  };
-  var StructureLayer = class {
+  }
+
+  class StructureLayer {
     constructor() {
       this.pages = [];
       this.tables = [];
@@ -638,8 +670,9 @@ var CodbDocs = (() => {
       }
       return data;
     }
-  };
-  var MetadataLayer = class {
+  }
+
+  class MetadataLayer {
     constructor() {
       this.pages = [];
       this.entities = {
@@ -685,8 +718,9 @@ var CodbDocs = (() => {
         uniqueAmounts: [...new Set(this.entities.amounts.map((a) => a.value))].sort((a, b) => b - a)
       };
     }
-  };
-  var VisualLayer = class {
+  }
+
+  class VisualLayer {
     constructor() {
       this.pages = [];
     }
@@ -707,14 +741,15 @@ var CodbDocs = (() => {
         hasFooter: p.footer
       }));
     }
-  };
-  var DocumentGraph = class {
+  }
+
+  class DocumentGraph {
     constructor() {
-      this.text = new TextLayer();
-      this.layout = new LayoutLayer();
-      this.structure = new StructureLayer();
-      this.metadata = new MetadataLayer();
-      this.visual = new VisualLayer();
+      this.text = new TextLayer;
+      this.layout = new LayoutLayer;
+      this.structure = new StructureLayer;
+      this.metadata = new MetadataLayer;
+      this.visual = new VisualLayer;
       this.pageCount = 0;
       this.classifications = [];
     }
@@ -740,10 +775,6 @@ var CodbDocs = (() => {
         });
       }
     }
-    /**
-     * Query the document semantically — like querying an embedding model.
-     * Supports natural language patterns.
-     */
     query(q) {
       const lower = q.toLowerCase();
       if (/date|when|what day/.test(lower)) {
@@ -779,9 +810,6 @@ var CodbDocs = (() => {
       const searchResults = this.text.search(q);
       return { type: "text-search", query: q, results: searchResults };
     }
-    /**
-     * Get a summary of the entire document.
-     */
     getSummary() {
       const pageTypes = this.classifications.map((c) => c.type);
       const typeCounts = {};
@@ -799,9 +827,6 @@ var CodbDocs = (() => {
         listCount: this.structure.lists.length
       };
     }
-    /**
-     * Export as JSON for downstream use (RAG, search, etc).
-     */
     toJSON() {
       return {
         pageCount: this.pageCount,
@@ -825,7 +850,7 @@ var CodbDocs = (() => {
         }))
       };
     }
-  };
+  }
 
   // src/content.js
   var BlockTypes = {
@@ -861,7 +886,8 @@ var CodbDocs = (() => {
     ORDINANCE_NUMBER: "ordinance_number",
     AGENDA_ITEM: "agenda_item"
   };
-  var ContentBlock = class {
+
+  class ContentBlock {
     constructor(type, data) {
       this.type = type;
       this.text = data.text || "";
@@ -880,12 +906,13 @@ var CodbDocs = (() => {
         page: this.page,
         confidence: this.confidence,
         metadata: this.metadata,
-        children: this.children.length > 0 ? this.children : void 0,
-        relationships: this.relationships.length > 0 ? this.relationships : void 0
+        children: this.children.length > 0 ? this.children : undefined,
+        relationships: this.relationships.length > 0 ? this.relationships : undefined
       };
     }
-  };
-  var PageContentGraph = class {
+  }
+
+  class PageContentGraph {
     constructor(pageNum) {
       this.page = pageNum;
       this.blocks = [];
@@ -906,9 +933,6 @@ var CodbDocs = (() => {
     addRelationship(rel) {
       this.relationships.push(rel);
     }
-    /**
-     * Find blocks/entities by type, text, or spatial proximity.
-     */
     find(query) {
       if (typeof query === "string") {
         return this._findByText(query);
@@ -947,12 +971,16 @@ var CodbDocs = (() => {
     }
     _findNear(text, type) {
       const targets = this._findByText(text);
-      if (targets.length === 0) return [];
+      if (targets.length === 0)
+        return [];
       const target = targets[0];
-      if (!target.bbox) return targets;
+      if (!target.bbox)
+        return targets;
       return this.entities.filter((e) => {
-        if (type && e.type !== type) return false;
-        if (!e.bbox) return false;
+        if (type && e.type !== type)
+          return false;
+        if (!e.bbox)
+          return false;
         return this._areNear(target.bbox, e.bbox);
       });
     }
@@ -964,8 +992,9 @@ var CodbDocs = (() => {
       const dist = Math.sqrt(Math.pow(cx1 - cx2, 2) + Math.pow(cy1 - cy2, 2));
       return dist < threshold;
     }
-  };
-  var DocumentContentGraph = class {
+  }
+
+  class DocumentContentGraph {
     constructor() {
       this.pages = [];
       this.allBlocks = [];
@@ -981,10 +1010,6 @@ var CodbDocs = (() => {
       this.allTables.push(...pageGraph.tables);
       this.allRelationships.push(...pageGraph.relationships);
     }
-    /**
-     * Search across all pages.
-     * Returns results with page number and bbox.
-     */
     find(query) {
       const results = [];
       for (const page of this.pages) {
@@ -995,9 +1020,6 @@ var CodbDocs = (() => {
       }
       return results;
     }
-    /**
-     * Find the first match across all pages.
-     */
     findOne(query) {
       for (const page of this.pages) {
         const results = page.find(query);
@@ -1007,21 +1029,12 @@ var CodbDocs = (() => {
       }
       return null;
     }
-    /**
-     * Get all entities of a specific type.
-     */
     getEntities(type) {
       return this.allEntities.filter((e) => e.type === type);
     }
-    /**
-     * Get all blocks of a specific type.
-     */
     getBlocks(type) {
       return this.allBlocks.filter((b) => b.type === type);
     }
-    /**
-     * Export as JSON for downstream use.
-     */
     toJSON() {
       return {
         documentType: this.documentType,
@@ -1051,7 +1064,7 @@ var CodbDocs = (() => {
       }
       return counts;
     }
-  };
+  }
   function analyzeContent(pageNum, text, spatialResult, metadataResult) {
     const graph = new PageContentGraph(pageNum);
     if (!text || text.trim().length === 0) {
@@ -1068,11 +1081,13 @@ var CodbDocs = (() => {
     }
     const paragraphs = splitIntoParagraphs(text);
     for (const para of paragraphs) {
-      if (para.length < 10) continue;
+      if (para.length < 10)
+        continue;
       if (/^[\u2022\-\*]\s|^\d+[\.\)]\s/.test(para)) {
         graph.addBlock(new ContentBlock(BlockTypes.LIST, {
           text: para,
-          bbox: findBboxForText(para.split("\n")[0], boxes),
+          bbox: findBboxForText(para.split(`
+`)[0], boxes),
           page: pageNum
         }));
         continue;
@@ -1149,7 +1164,8 @@ var CodbDocs = (() => {
     return graph;
   }
   function detectSpecialContent(graph, text, boxes, pageNum) {
-    const lines = text.split("\n");
+    const lines = text.split(`
+`);
     for (const line of lines) {
       const trimmed = line.trim();
       if (/invoice|inv[\s#:]|bill\s*to|ship\s*to|amount\s*due/i.test(trimmed)) {
@@ -1267,9 +1283,11 @@ var CodbDocs = (() => {
   }
   function detectRelationships(graph) {
     for (const block of graph.blocks) {
-      if (!block.bbox) continue;
+      if (!block.bbox)
+        continue;
       for (const entity of graph.entities) {
-        if (!entity.bbox) continue;
+        if (!entity.bbox)
+          continue;
         if (areBboxesNear(block.bbox, entity.bbox, 80)) {
           block.relationships.push({
             type: "contains",
@@ -1304,26 +1322,45 @@ var CodbDocs = (() => {
       permit: 0,
       contract: 0
     };
-    if (/invoice|bill\s*to|amount\s*due|payment\s*due|invoice\s*#/i.test(allText)) scores.invoice += 3;
-    if (entityTypes.includes(EntityTypes.CURRENCY)) scores.invoice += 1;
-    if (blockTypes.includes("invoice_hint")) scores.invoice += 2;
-    if (/receipt|subtotal|change|cash\s*tendered|credit\s*card|debit/i.test(allText)) scores.receipt += 3;
-    if (blockTypes.includes("receipt_hint")) scores.receipt += 2;
+    if (/invoice|bill\s*to|amount\s*due|payment\s*due|invoice\s*#/i.test(allText))
+      scores.invoice += 3;
+    if (entityTypes.includes(EntityTypes.CURRENCY))
+      scores.invoice += 1;
+    if (blockTypes.includes("invoice_hint"))
+      scores.invoice += 2;
+    if (/receipt|subtotal|change|cash\s*tendered|credit\s*card|debit/i.test(allText))
+      scores.receipt += 3;
+    if (blockTypes.includes("receipt_hint"))
+      scores.receipt += 2;
     const formFieldCount = blockTypes.filter((t) => t === BlockTypes.FORM_FIELD).length;
-    if (formFieldCount >= 3) scores.form += 3;
-    if (/application|fill\s*out|complete\s*this\s*form/i.test(allText)) scores.form += 2;
-    if (/ordinance|resolution|charter|hereby\s*enacted|section\s*\d+/i.test(allText)) scores.legal += 3;
-    if (entityTypes.includes(EntityTypes.ORDINANCE_NUMBER)) scores.legal += 2;
-    if (entityTypes.includes(EntityTypes.RESOLUTION_NUMBER)) scores.legal += 2;
-    if (/memorandum|memo\b|from:|to:|subject:|date:/i.test(allText)) scores.memo += 3;
-    if (/dear\s|sincerely|regards|attention|re:\s/i.test(allText)) scores.letter += 3;
-    if (/report|annual\s*report|analysis|findings|recommendation/i.test(allText)) scores.report += 2;
-    if (/minutes|meeting\s*called\s*to\s*order|public\s*hearing|commissioner|mayor/i.test(allText)) scores.minutes += 3;
-    if (/policy|procedure|guideline|regulation|compliance|standard\s*operating/i.test(allText)) scores.policy += 3;
-    if (/budget|appropriation|expenditure|revenue|fiscal\s*year|fund\s*balance/i.test(allText)) scores.budget += 3;
-    if (entityTypes.includes(EntityTypes.PERMIT_NUMBER)) scores.permit += 3;
-    if (/building\s*permit|permit\s*application|zoning/i.test(allText)) scores.permit += 2;
-    if (/agreement|contract|party|parties|hereby\s*agrees|terms\s*and\s*conditions/i.test(allText)) scores.contract += 3;
+    if (formFieldCount >= 3)
+      scores.form += 3;
+    if (/application|fill\s*out|complete\s*this\s*form/i.test(allText))
+      scores.form += 2;
+    if (/ordinance|resolution|charter|hereby\s*enacted|section\s*\d+/i.test(allText))
+      scores.legal += 3;
+    if (entityTypes.includes(EntityTypes.ORDINANCE_NUMBER))
+      scores.legal += 2;
+    if (entityTypes.includes(EntityTypes.RESOLUTION_NUMBER))
+      scores.legal += 2;
+    if (/memorandum|memo\b|from:|to:|subject:|date:/i.test(allText))
+      scores.memo += 3;
+    if (/dear\s|sincerely|regards|attention|re:\s/i.test(allText))
+      scores.letter += 3;
+    if (/report|annual\s*report|analysis|findings|recommendation/i.test(allText))
+      scores.report += 2;
+    if (/minutes|meeting\s*called\s*to\s*order|public\s*hearing|commissioner|mayor/i.test(allText))
+      scores.minutes += 3;
+    if (/policy|procedure|guideline|regulation|compliance|standard\s*operating/i.test(allText))
+      scores.policy += 3;
+    if (/budget|appropriation|expenditure|revenue|fiscal\s*year|fund\s*balance/i.test(allText))
+      scores.budget += 3;
+    if (entityTypes.includes(EntityTypes.PERMIT_NUMBER))
+      scores.permit += 3;
+    if (/building\s*permit|permit\s*application|zoning/i.test(allText))
+      scores.permit += 2;
+    if (/agreement|contract|party|parties|hereby\s*agrees|terms\s*and\s*conditions/i.test(allText))
+      scores.contract += 3;
     let bestType = "document";
     let bestScore = 0;
     for (const [type, score] of Object.entries(scores)) {
@@ -1339,7 +1376,8 @@ var CodbDocs = (() => {
     };
   }
   function findBboxForText(text, boxes) {
-    if (!boxes || !text) return null;
+    if (!boxes || !text)
+      return null;
     const lower = text.toLowerCase().substring(0, 30);
     const match = boxes.find((b) => b.text.toLowerCase().includes(lower));
     if (match) {
@@ -1503,7 +1541,8 @@ var CodbDocs = (() => {
     const borderColor = options.borderColor || "rgba(255, 165, 0, 0.8)";
     const scale = options.scale || 1;
     for (const result of results) {
-      if (!result.bbox) continue;
+      if (!result.bbox)
+        continue;
       const [x, y, w, h] = result.bbox;
       ctx.fillStyle = color;
       ctx.fillRect(x * scale, y * scale, w * scale, h * scale);
@@ -1538,7 +1577,7 @@ var CodbDocs = (() => {
       const pageNumber = page.pageNumber;
       let currentImage = null;
       let imageIndex = 0;
-      for (let i = 0; i < opList.fnArray.length; i++) {
+      for (let i = 0;i < opList.fnArray.length; i++) {
         const fn = opList.fnArray[i];
         const args = opList.argsArray[i];
         const OPS = {
@@ -1552,8 +1591,10 @@ var CodbDocs = (() => {
           try {
             const imgData = await new Promise((resolve, reject) => {
               page.objs.get(imgName, (data) => {
-                if (data) resolve(data);
-                else reject(new Error(`Image ${imgName} not found`));
+                if (data)
+                  resolve(data);
+                else
+                  reject(new Error(`Image ${imgName} not found`));
               });
             });
             if (imgData && imgData.width && imgData.height) {
@@ -1564,11 +1605,7 @@ var CodbDocs = (() => {
               if (imgData.bitmap) {
                 ctx.drawImage(imgData.bitmap, 0, 0, canvas.width, canvas.height);
               } else if (imgData.data) {
-                const imageData = new ImageData(
-                  new Uint8ClampedArray(imgData.data.buffer || imgData.data),
-                  imgData.width,
-                  imgData.height
-                );
+                const imageData = new ImageData(new Uint8ClampedArray(imgData.data.buffer || imgData.data), imgData.width, imgData.height);
                 ctx.putImageData(imageData, 0, 0);
               }
               const bbox = args.length > 1 ? args[1] : null;
@@ -1626,7 +1663,7 @@ var CodbDocs = (() => {
   }
   async function extractAllImages(pdf, options = {}) {
     const allImages = [];
-    for (let num = 1; num <= pdf.numPages; num++) {
+    for (let num = 1;num <= pdf.numPages; num++) {
       const page = await pdf.getPage(num);
       const pageImages = await extractImages(page, options);
       allImages.push(...pageImages);
@@ -1643,9 +1680,12 @@ var CodbDocs = (() => {
   };
   function fixedChunking(text, options = {}) {
     const {
-      chunkSize = 1e3,
+      chunkSize = 1000,
       chunkOverlap = 200,
-      separators = ["\n\n", "\n", ". ", " "]
+      separators = [`
+
+`, `
+`, ". ", " "]
     } = options;
     const chunks = [];
     let start = 0;
@@ -1667,14 +1707,15 @@ var CodbDocs = (() => {
         index: chunks.length
       });
       start = end - chunkOverlap;
-      if (start >= text.length) break;
+      if (start >= text.length)
+        break;
     }
     return chunks;
   }
   function semanticChunking(text, options = {}) {
     const {
       minChunkSize = 100,
-      maxChunkSize = 2e3
+      maxChunkSize = 2000
     } = options;
     const chunks = [];
     const paragraphs = text.split(/\n\s*\n/);
@@ -1693,7 +1734,9 @@ var CodbDocs = (() => {
         currentChunk = "";
         currentStart = position;
       }
-      currentChunk += (currentChunk ? "\n\n" : "") + para;
+      currentChunk += (currentChunk ? `
+
+` : "") + para;
       position += para.length + 2;
     }
     if (currentChunk.trim()) {
@@ -1710,14 +1753,14 @@ var CodbDocs = (() => {
   function sectionChunking(text, sections = [], options = {}) {
     const {
       minChunkSize = 100,
-      maxChunkSize = 3e3
+      maxChunkSize = 3000
     } = options;
     if (!sections || sections.length === 0) {
       return semanticChunking(text, options);
     }
     const chunks = [];
     let lastEnd = 0;
-    for (let i = 0; i < sections.length; i++) {
+    for (let i = 0;i < sections.length; i++) {
       const section = sections[i];
       const start = section.position || 0;
       const end = i + 1 < sections.length ? sections[i + 1].position || text.length : text.length;
@@ -1753,7 +1796,7 @@ var CodbDocs = (() => {
   function tableChunking(text, tables = [], options = {}) {
     const {
       minChunkSize = 100,
-      maxChunkSize = 2e3
+      maxChunkSize = 2000
     } = options;
     const chunks = [];
     let lastEnd = 0;
@@ -1803,10 +1846,10 @@ var CodbDocs = (() => {
   function createChunks(graph, options = {}) {
     const {
       strategy = ChunkStrategies.SEMANTIC,
-      chunkSize = 1e3,
+      chunkSize = 1000,
       chunkOverlap = 200,
       minChunkSize = 100,
-      maxChunkSize = 3e3,
+      maxChunkSize = 3000,
       includeMetadata = true,
       includeBoundingBoxes = true
     } = options;
@@ -1814,7 +1857,7 @@ var CodbDocs = (() => {
     const summary = graph.getSummary();
     const headings = graph.layout?.getAllHeadings() || [];
     const tables = graph.structure?.getTables() || [];
-    for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
+    for (let pageNum = 1;pageNum <= summary.pageCount; pageNum++) {
       const pageText = graph.text?.getPageText(pageNum) || "";
       const pageClassification = graph.classifications?.[pageNum - 1] || null;
       const pageHeadings = graph.layout?.getHeadings(pageNum) || [];
@@ -1913,8 +1956,8 @@ var CodbDocs = (() => {
       }
     };
     const summary = graph.getSummary();
-    const entityMap = /* @__PURE__ */ new Map();
-    for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
+    const entityMap = new Map;
+    for (let pageNum = 1;pageNum <= summary.pageCount; pageNum++) {
       const entities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
       for (const entity of entities) {
         const key = `${entity.type}:${entity.text?.toLowerCase()}`;
@@ -1938,15 +1981,15 @@ var CodbDocs = (() => {
       }
     }
     context.globalEntities = Array.from(entityMap.values());
-    const pageEntityMap = /* @__PURE__ */ new Map();
-    for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
+    const pageEntityMap = new Map;
+    for (let pageNum = 1;pageNum <= summary.pageCount; pageNum++) {
       const entities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
       pageEntityMap.set(pageNum, entities.map((e) => `${e.type}:${e.text?.toLowerCase()}`));
     }
-    const relationshipMap = /* @__PURE__ */ new Map();
+    const relationshipMap = new Map;
     for (const [pageNum, entities] of pageEntityMap) {
-      for (let i = 0; i < entities.length; i++) {
-        for (let j = i + 1; j < entities.length; j++) {
+      for (let i = 0;i < entities.length; i++) {
+        for (let j = i + 1;j < entities.length; j++) {
           const key = [entities[i], entities[j]].sort().join(" <-> ");
           if (relationshipMap.has(key)) {
             relationshipMap.get(key).pages.push(pageNum);
@@ -1964,7 +2007,7 @@ var CodbDocs = (() => {
     const classifications = graph.classifications || [];
     let currentTopic = null;
     let topicStart = 1;
-    for (let i = 0; i < classifications.length; i++) {
+    for (let i = 0;i < classifications.length; i++) {
       const classification = classifications[i];
       const pageType = classification?.type || "unknown";
       if (pageType !== currentTopic) {
@@ -1994,7 +2037,7 @@ var CodbDocs = (() => {
       index: i,
       nextPageHeading: i + 1 < allHeadings.length ? allHeadings[i + 1] : null
     }));
-    for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
+    for (let pageNum = 1;pageNum <= summary.pageCount; pageNum++) {
       const tables = graph.structure?.getTables(pageNum) || [];
       const forms = graph.structure?.getForms(pageNum) || [];
       const lists = graph.structure?.getLists(pageNum) || [];
@@ -2027,7 +2070,7 @@ var CodbDocs = (() => {
   function createRAGOutput(graph, options = {}) {
     const {
       chunkStrategy = ChunkStrategies.SEMANTIC,
-      chunkSize = 1e3,
+      chunkSize = 1000,
       chunkOverlap = 200,
       includeImages = false,
       includeVectors = false,
@@ -2047,7 +2090,6 @@ var CodbDocs = (() => {
     });
     const context = includeCrossPageContext ? buildCrossPageContext(graph) : null;
     const ragOutput = {
-      // Document metadata
       document: {
         type: documentType?.type || "unknown",
         confidence: documentType?.confidence || 0,
@@ -2056,7 +2098,6 @@ var CodbDocs = (() => {
         headings: summary.headings,
         metadata: summary.metadata
       },
-      // Content chunks for vector DB
       chunks: chunks.map((chunk) => ({
         id: chunk.id,
         text: chunk.text,
@@ -2066,24 +2107,19 @@ var CodbDocs = (() => {
         chunkIndex: chunk.index,
         chunkType: chunk.type
       })),
-      // Global entities
       entities: context?.globalEntities || [],
-      // Entity relationships
       relationships: context?.entityRelationships || [],
-      // Document structure
       structure: {
         headings: summary.headings,
         tables: summary.tableCount,
         forms: summary.formCount,
         lists: summary.listCount
       },
-      // Topic flow
       topicFlow: context?.topicFlow || [],
-      // Cross-page references
       crossPageReferences: context?.crossPageReferences || [],
-      // Full text for context
-      fullText: graph.text?.pages?.map((p) => p.text).join("\n\n") || "",
-      // Page-by-page text
+      fullText: graph.text?.pages?.map((p) => p.text).join(`
+
+`) || "",
       pages: graph.text?.pages?.map((p) => ({
         pageNumber: p.pageNum,
         text: p.text,
@@ -2096,7 +2132,7 @@ var CodbDocs = (() => {
     }
     if (includeVectors) {
       ragOutput.vectors = [];
-      for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
+      for (let pageNum = 1;pageNum <= summary.pageCount; pageNum++) {
         const pageVectors = graph.getVectors?.(pageNum) || [];
         ragOutput.vectors.push(...pageVectors.map((v) => ({
           ...v,
@@ -2112,13 +2148,13 @@ var CodbDocs = (() => {
         chunks: chunks.map((chunk) => ({
           id: chunk.id,
           text: chunk.text
-          // Embedding will be added by the provider
         }))
       };
     }
     return ragOutput;
   }
-  var EmbeddingProvider = class {
+
+  class EmbeddingProvider {
     constructor(name, model, dimensions) {
       this.name = name;
       this.model = model;
@@ -2131,8 +2167,9 @@ var CodbDocs = (() => {
       const results = await this.embed([text]);
       return results[0];
     }
-  };
-  var OpenAIEmbeddingProvider = class extends EmbeddingProvider {
+  }
+
+  class OpenAIEmbeddingProvider extends EmbeddingProvider {
     constructor(apiKey, options = {}) {
       super("openai", options.model || "text-embedding-3-small", options.dimensions || 1536);
       this.apiKey = apiKey;
@@ -2142,7 +2179,7 @@ var CodbDocs = (() => {
       const response = await fetch(`${this.baseUrl}/embeddings`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -2156,8 +2193,9 @@ var CodbDocs = (() => {
       const data = await response.json();
       return data.data.map((d) => d.embedding);
     }
-  };
-  var LocalEmbeddingProvider = class extends EmbeddingProvider {
+  }
+
+  class LocalEmbeddingProvider extends EmbeddingProvider {
     constructor(options = {}) {
       super("local", options.model || "transformers.js", options.dimensions || 384);
       this.model = null;
@@ -2172,7 +2210,7 @@ var CodbDocs = (() => {
       }
       return texts.map((text) => {
         const embedding = new Array(this.dimensions).fill(0);
-        for (let i = 0; i < text.length; i++) {
+        for (let i = 0;i < text.length; i++) {
           const charCode = text.charCodeAt(i);
           embedding[i % this.dimensions] += charCode;
           embedding[(i * 7 + 13) % this.dimensions] ^= charCode;
@@ -2181,8 +2219,9 @@ var CodbDocs = (() => {
         return embedding.map((x) => x / (norm || 1));
       });
     }
-  };
-  var CustomEmbeddingProvider = class extends EmbeddingProvider {
+  }
+
+  class CustomEmbeddingProvider extends EmbeddingProvider {
     constructor(name, embedFn, options = {}) {
       super(name, options.model || "custom", options.dimensions || 1536);
       this.embedFn = embedFn;
@@ -2190,7 +2229,7 @@ var CodbDocs = (() => {
     async embed(texts) {
       return this.embedFn(texts);
     }
-  };
+  }
   async function createRAGOutputWithEmbeddings(graph, embeddingProvider, options = {}) {
     const ragOutput = createRAGOutput(graph, {
       ...options,
@@ -2210,7 +2249,8 @@ var CodbDocs = (() => {
       text: chunk.text,
       metadata: chunk.metadata,
       embedding: chunk.embedding || null
-    })).join("\n");
+    })).join(`
+`);
   }
   function exportAsCSV(ragOutput) {
     const headers = ["id", "text", "pageNumber", "chunkType", "embedding"];
@@ -2221,7 +2261,8 @@ var CodbDocs = (() => {
       chunk.chunkType,
       chunk.embedding ? `"${chunk.embedding.join(",")}"` : ""
     ]);
-    return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    return [headers.join(","), ...rows.map((r) => r.join(","))].join(`
+`);
   }
 
   // src/workers.js
@@ -2319,7 +2360,6 @@ var CodbDocs = (() => {
     ir.vectors[id] = {
       id,
       type: data.type || "path",
-      // path, line, rect, circle, curve, arrow
       page: pageId,
       points: data.points || [],
       from: data.from || null,
@@ -2339,7 +2379,6 @@ var CodbDocs = (() => {
       },
       semantic: {
         role: data.semanticRole || null
-        // table_border, checkbox, form_field, separator, decoration
       },
       provenance: {
         method: "native",
@@ -2348,6 +2387,21 @@ var CodbDocs = (() => {
     };
     ir.pages[pageId]?.vectors.push(id);
     return ir.vectors[id];
+  }
+  function addObject(ir, pageId, data) {
+    const id = generateId(data.type || "obj");
+    ir.objects[id] = {
+      id,
+      type: data.type,
+      page: pageId,
+      raw: data.raw || {},
+      semantic: data.semantic || {},
+      accessibility: data.accessibility || {},
+      provenance: data.provenance || { method: "native", confidence: 1 },
+      bbox: data.bbox || null
+    };
+    ir.pages[pageId]?.content.push(id);
+    return ir.objects[id];
   }
   async function extractVectors(page) {
     const opList = await page.getOperatorList();
@@ -2363,17 +2417,15 @@ var CodbDocs = (() => {
     let pathPoints = [];
     let pathStart = null;
     const FN = pdfjsLib?.OPS || {};
-    for (let i = 0; i < opList.fnArray.length; i++) {
+    for (let i = 0;i < opList.fnArray.length; i++) {
       const fn = opList.fnArray[i];
       const args = opList.argsArray[i];
       switch (fn) {
-        // Transform
         case (FN.transform || 8):
           if (args && args.length >= 6) {
             currentTransform = args.slice(0, 6);
           }
           break;
-        // Path operations
         case (FN.moveTo || 13):
           if (args) {
             pathStart = { x: args[0], y: args[1] };
@@ -2401,7 +2453,6 @@ var CodbDocs = (() => {
             }));
           }
           break;
-        // Stroke
         case (FN.stroke || 20):
           if (pathPoints.length > 0) {
             vectors.push(createVector("path", page, {
@@ -2417,7 +2468,6 @@ var CodbDocs = (() => {
           }
           pathPoints = [];
           break;
-        // Fill
         case (FN.fill || 21):
         case (FN.eoFill || 22):
           if (pathPoints.length > 0) {
@@ -2431,7 +2481,6 @@ var CodbDocs = (() => {
           }
           pathPoints = [];
           break;
-        // Fill and stroke
         case (FN.fillStroke || 23):
         case (FN.eoFillStroke || 24):
           if (pathPoints.length > 0) {
@@ -2445,23 +2494,24 @@ var CodbDocs = (() => {
           }
           pathPoints = [];
           break;
-        // Close path
         case (FN.closePath || 16):
           pathPoints.push({ op: "closePath" });
           break;
-        // Graphics state
         case (FN.save || 25):
           break;
         case (FN.restore || 26):
           break;
         case (FN.setStrokeRGBColor || 43):
-          if (args) currentStroke = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
+          if (args)
+            currentStroke = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
           break;
         case (FN.setFillRGBColor || 44):
-          if (args) currentFill = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
+          if (args)
+            currentFill = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
           break;
         case (FN.setLineWidth || 40):
-          if (args) currentLineWidth = args[0];
+          if (args)
+            currentLineWidth = args[0];
           break;
         case (FN.setLineCap || 41):
           if (args) {
@@ -2476,9 +2526,9 @@ var CodbDocs = (() => {
           }
           break;
         case (FN.setDash || 45):
-          if (args) currentDash = args[0];
+          if (args)
+            currentDash = args[0];
           break;
-        // Clipping
         case (FN.clip || 28):
         case (FN.eoClip || 29):
           currentClip = [...pathPoints];
@@ -2501,7 +2551,8 @@ var CodbDocs = (() => {
       if (w > 8 && w < 20 && h > 8 && h < 20 && Math.abs(w - h) < 3) {
         return "checkbox";
       }
-      if (h < 2 && w > 20) return "separator";
+      if (h < 2 && w > 20)
+        return "separator";
       if (data.stroke && data.fill === null && area > 100) {
         return "table_border";
       }
@@ -2511,11 +2562,14 @@ var CodbDocs = (() => {
       if (data.points.length === 2 && data.points[0].op === "moveTo" && data.points[1].op === "lineTo") {
         const dx = data.points[1].x - data.points[0].x;
         const dy = data.points[1].y - data.points[0].y;
-        if (Math.abs(dx) > 20 && Math.abs(dy) < 2) return "horizontal_line";
-        if (Math.abs(dy) > 20 && Math.abs(dx) < 2) return "vertical_line";
+        if (Math.abs(dx) > 20 && Math.abs(dy) < 2)
+          return "horizontal_line";
+        if (Math.abs(dy) > 20 && Math.abs(dx) < 2)
+          return "vertical_line";
         return "line";
       }
-      if (data.points.length > 10) return "complex_path";
+      if (data.points.length > 10)
+        return "complex_path";
     }
     return null;
   }
@@ -2524,7 +2578,8 @@ var CodbDocs = (() => {
     let score = 100;
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
+      if (!page)
+        continue;
       const pageNum = parseInt(pageId.split("_")[1]);
       for (const objId of page.content) {
         const obj = ir.objects[objId];
@@ -2561,9 +2616,7 @@ var CodbDocs = (() => {
         const vec = ir.vectors[vecId];
         if (vec?.semantic?.role === "table_border") {
           const nearbyTexts = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.bbox && isNear(vec.bbox, obj.bbox));
-          const hasHeader = nearbyTexts.some(
-            (t) => t.raw?.fontSize > 12 || t.semantic?.role === "heading"
-          );
+          const hasHeader = nearbyTexts.some((t) => t.raw?.fontSize > 12 || t.semantic?.role === "heading");
           if (!hasHeader) {
             issues.push({
               type: "table_no_header",
@@ -2579,7 +2632,7 @@ var CodbDocs = (() => {
       }
       if (page.content.length > 5) {
         const sorted = [...page.content].map((id) => ir.objects[id]).filter((obj) => obj?.bbox).sort((a, b) => a.bbox[1] - b.bbox[1]);
-        for (let i = 1; i < sorted.length; i++) {
+        for (let i = 1;i < sorted.length; i++) {
           const prev = sorted[i - 1];
           const curr = sorted[i];
           if (prev.bbox[1] > curr.bbox[1] + 50) {
@@ -2597,8 +2650,7 @@ var CodbDocs = (() => {
       }
       for (const objId of page.content) {
         const obj = ir.objects[objId];
-        if (obj?.type === "text" && obj.raw?.color) {
-        }
+        if (obj?.type === "text" && obj.raw?.color) {}
       }
       if (!ir.document.metadata?.language) {
         issues.push({
@@ -2635,11 +2687,13 @@ var CodbDocs = (() => {
     const tree = { type: "Document", children: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
+      if (!page)
+        continue;
       const pageNode = { type: "Page", properties: { pageNumber: page.num }, children: [] };
       for (const objId of page.content) {
         const obj = ir.objects[objId];
-        if (!obj) continue;
+        if (!obj)
+          continue;
         const node = {
           type: obj.accessibility?.role || mapRole(obj.semantic?.role),
           properties: {},
@@ -2670,7 +2724,8 @@ var CodbDocs = (() => {
     return map[role] || "Paragraph";
   }
   function isNear(bbox1, bbox2, threshold = 100) {
-    if (!bbox1 || !bbox2) return false;
+    if (!bbox1 || !bbox2)
+      return false;
     const cx1 = bbox1[0] + bbox1[2] / 2;
     const cy1 = bbox1[1] + bbox1[3] / 2;
     const cx2 = bbox2[0] + bbox2[2] / 2;
@@ -2678,70 +2733,194 @@ var CodbDocs = (() => {
     return Math.sqrt(Math.pow(cx1 - cx2, 2) + Math.pow(cy1 - cy2, 2)) < threshold;
   }
   function exportHTML(ir, options = {}) {
-    const { mode = "accessible", includeDataAttributes: includeDataAttributes2 = true } = options;
-    let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || "en") + '">\n<head>\n';
-    html += '<meta charset="UTF-8">\n';
-    html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
-    html += "<title>" + escapeHTML(ir.document.metadata?.title || "Document") + "</title>\n";
-    if (mode === "visual") {
-      html += generateVisualStyles(ir);
-    } else {
-      html += generateAccessibleStyles();
-    }
-    html += "</head>\n<body>\n";
-    if (mode === "accessible" || mode === "intelligent") {
-      html += '<main role="document">\n';
-    }
+    const {
+      mode = "visual",
+      includeDataAttributes = true,
+      includeRAG = true,
+      includeRawText = true
+    } = options;
+    const ragPayload = buildRAGPayload(ir);
+    let html = `<!DOCTYPE html>
+<html lang="` + (ir.document.metadata?.language || "en") + `">
+<head>
+`;
+    html += `<meta charset="UTF-8">
+`;
+    html += `<meta name="viewport" content="width=device-width, initial-scale=1.0">
+`;
+    html += "<title>" + escapeHTML(ir.document.metadata?.title || "Document") + `</title>
+`;
+    html += generateVisualStyles(ir);
+    html += generateAccessibleStyles();
+    html += `</head>
+<body data-codbdocs-view="pdf">
+`;
+    html += `<main role="document" id="codbdocs-root">
+`;
+    html += viewToggleHTML();
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
-      const attrs = includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "";
-      if (mode === "visual") {
-        html += `<div class="pdf-page"${attrs} style="width:${page.width}px;height:${page.height}px;position:relative;">
+      if (!page)
+        continue;
+      const attrs = includeDataAttributes ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "";
+      const pageLabel = page.labels?.print || `Page ${page.num}`;
+      html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML(pageLabel)}" role="region">
 `;
-        html += renderPageVisual(page, ir, attrs);
-        html += "</div>\n";
+      if (page.background) {
+        html += `<div class="pdf-page-raster" aria-hidden="true">
+`;
+        html += `<img src="${page.background}" alt="" width="${page.width}" height="${page.height}">
+`;
+        html += renderPageImages(page, ir, attrs);
+        html += `</div>
+`;
       } else {
-        html += `<section class="pdf-page"${attrs} aria-label="Page ${page.num}">
-`;
-        html += renderPageAccessible(page, ir, attrs, mode);
-        html += "</section>\n";
+        html += renderPageVisual(page, ir, attrs);
       }
+      html += renderPageAccessible(page, ir, attrs, mode);
+      html += `</section>
+`;
     }
-    if (mode === "accessible" || mode === "intelligent") {
-      html += "</main>\n";
+    html += `</main>
+`;
+    if (includeRAG || includeRawText) {
+      html += '<script type="application/json" id="codbdocs-rag" data-page-count="' + (ir.document.pages.length || 0) + '">' + JSON.stringify(ragPayload).replace(/</g, "\\u003c") + `</script>
+`;
     }
-    html += "</body>\n</html>";
+    html += `</body>
+</html>`;
     return html;
   }
-  function renderPageVisual(page, ir, attrs) {
+  function renderPageImages(page, ir, attrs) {
     let html = "";
+    for (const objId of page.content) {
+      const obj = ir.objects[objId];
+      if (!obj || obj.type !== "image")
+        continue;
+      const src = obj.raw?.src;
+      if (!src)
+        continue;
+      const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+      const alt = escapeHTML(obj.accessibility?.alt || obj.semantic?.caption || "Image");
+      html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
+      html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
+`;
+    }
+    return html;
+  }
+  function viewToggleHTML() {
+    return `
+  <div class="codbdocs-toolbar" role="group" aria-label="View options">
+    <button type="button" class="codbdocs-toggle is-active" data-codbdocs-view="pdf" aria-pressed="true">PDF view</button>
+    <button type="button" class="codbdocs-toggle" data-codbdocs-view="text" aria-pressed="false">Selectable text view</button>
+  </div>
+  <script>
+    (function () {
+      var btnPdf = document.querySelector('[data-codbdocs-view="pdf"]');
+      var btnText = document.querySelector('[data-codbdocs-view="text"]');
+      if (!btnPdf || !btnText) return;
+      function setView(view) {
+        document.querySelectorAll('.pdf-page-raster').forEach(function (el) {
+          el.style.display = view === 'pdf' ? '' : 'none';
+        });
+        document.body.dataset.codbdocsView = view;
+        btnPdf.classList.toggle('is-active', view === 'pdf');
+        btnText.classList.toggle('is-active', view === 'text');
+        btnPdf.setAttribute('aria-pressed', view === 'pdf' ? 'true' : 'false');
+        btnText.setAttribute('aria-pressed', view === 'text' ? 'true' : 'false');
+      }
+      btnPdf.addEventListener('click', function () { setView('pdf'); });
+      btnText.addEventListener('click', function () { setView('text'); });
+    })();
+  </script>
+  `;
+  }
+  function buildRAGPayload(ir) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page)
+        return null;
+      const text = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
+      return { page: page.num, text };
+    }).filter(Boolean);
+    const entities = {};
+    const title = ir.document.metadata?.title || null;
+    const author = ir.document.metadata?.author || null;
+    return {
+      format: "codbdocs-rag-v1",
+      source: title || "PDF document",
+      title,
+      author,
+      pageCount: (ir.document.pages || []).length,
+      pages,
+      fullText: pages.map((p) => `[Page ${p.page}]
+${p.text}`).join(`
+
+`),
+      metadata: ir.document.metadata || {},
+      entities
+    };
+  }
+  function renderPageVisual(page, ir, attrs) {
+    let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + "px;height:" + (page.height || 0) + `px;">
+`;
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
-      if (!vec) continue;
+      if (!vec)
+        continue;
       html += renderVectorVisual(vec, attrs);
     }
     for (const objId of page.content) {
       const obj = ir.objects[objId];
-      if (!obj) continue;
+      if (!obj)
+        continue;
       if (obj.type === "text") {
-        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${obj.bbox?.[0] || 0}px;top:${obj.bbox?.[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;">${escapeHTML(obj.semantic?.text || "")}</div>
+        const bbox = obj.bbox || [];
+        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;">${escapeHTML(obj.semantic?.text || "")}</div>
 `;
       } else if (obj.type === "image") {
-        html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${obj.bbox?.[0] || 0}px;top:${obj.bbox?.[1] || 0}px;width:${obj.bbox?.[2] || 0}px;height:${obj.bbox?.[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
+        const bbox = obj.bbox || [];
+        const src = obj.raw?.src || "";
+        if (src) {
+          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML(obj.accessibility?.alt || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
+        } else {
+          html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
+`;
+        }
       }
     }
+    html += `</div>
+`;
     return html;
   }
   function renderPageAccessible(page, ir, attrs, mode) {
-    let html = "";
+    let html = `<div class="pdf-text-layer" aria-label="Selectable text">
+`;
     for (const objId of page.content) {
       const obj = ir.objects[objId];
-      if (!obj) continue;
+      if (!obj)
+        continue;
       const dataAttr = includeDataAttributes(objId, attrs);
       const role = obj.semantic?.role || "paragraph";
-      if (role === "heading") {
+      if (obj.type === "image") {
+        const alt = obj.accessibility?.alt || obj.semantic?.caption || (mode === "intelligent" ? "AI-generated description" : "Image");
+        const src = obj.raw?.src || "";
+        html += `<figure${dataAttr}>
+`;
+        if (src)
+          html += `<img src="${escapeHTML(src)}" alt="${escapeHTML(alt)}" loading="lazy">
+`;
+        if (obj.semantic?.caption)
+          html += `<figcaption>${escapeHTML(obj.semantic.caption)}</figcaption>
+`;
+        if (mode === "intelligent" && obj.provenance?.method === "vision") {
+          html += `<small class="ai-generated">AI-generated description</small>
+`;
+        }
+        html += `</figure>
+`;
+      } else if (role === "heading") {
         const level = obj.semantic?.level || 2;
         html += `<h${level}${dataAttr}>${escapeHTML(obj.semantic?.text || "")}</h${level}>
 `;
@@ -2750,44 +2929,34 @@ var CodbDocs = (() => {
 `;
         html += `<caption>${escapeHTML(obj.semantic?.caption || "Table")}</caption>
 `;
-        html += "</table>\n";
+        html += `</table>
+`;
       } else if (role === "list") {
         html += `<ul${dataAttr}>
 `;
-        html += "</ul>\n";
-      } else if (obj.type === "image") {
-        const alt = obj.accessibility?.alt || (mode === "intelligent" ? "AI-generated description" : "Image");
-        const src = obj.raw?.src || "";
-        html += `<figure${dataAttr}>
+        html += `</ul>
 `;
-        html += `<img src="${escapeHTML(src)}" alt="${escapeHTML(alt)}">
-`;
-        if (obj.semantic?.caption) {
-          html += `<figcaption>${escapeHTML(obj.semantic.caption)}</figcaption>
-`;
-        }
-        if (mode === "intelligent" && obj.provenance?.method === "vision") {
-          html += `<small class="ai-generated">AI-generated description</small>
-`;
-        }
-        html += "</figure>\n";
-      } else {
-        html += `<p${dataAttr}>${escapeHTML(obj.semantic?.text || "")}</p>
+      } else if (obj.type === "text" && obj.semantic?.text) {
+        html += `<p${dataAttr}>${escapeHTML(obj.semantic.text)}</p>
 `;
       }
     }
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
-      if (!vec) continue;
+      if (!vec)
+        continue;
       if (vec.semantic?.role === "separator") {
         html += `<hr${attrs} data-pdf-vector="${vecId}">
 `;
       }
     }
+    html += `</div>
+`;
     return html;
   }
   function renderVectorVisual(vec, attrs) {
-    if (!vec.bbox) return "";
+    if (!vec.bbox)
+      return "";
     if (vec.type === "rect") {
       const style = `position:absolute;left:${vec.bbox[0]}px;top:${vec.bbox[1]}px;width:${vec.bbox[2]}px;height:${vec.bbox[3]}px;`;
       const stroke = vec.graphicsState?.stroke ? `border:1px solid ${vec.graphicsState.stroke};` : "";
@@ -2798,10 +2967,14 @@ var CodbDocs = (() => {
     if (vec.type === "path" && vec.points?.length > 0) {
       let d = "";
       for (const pt of vec.points) {
-        if (pt.op === "moveTo") d += `M${pt.x},${pt.y}`;
-        else if (pt.op === "lineTo") d += `L${pt.x},${pt.y}`;
-        else if (pt.op === "curveTo") d += `C${pt.x1},${pt.y1} ${pt.x2},${pt.y2} ${pt.x3},${pt.y3}`;
-        else if (pt.op === "closePath") d += "Z";
+        if (pt.op === "moveTo")
+          d += `M${pt.x},${pt.y}`;
+        else if (pt.op === "lineTo")
+          d += `L${pt.x},${pt.y}`;
+        else if (pt.op === "curveTo")
+          d += `C${pt.x1},${pt.y1} ${pt.x2},${pt.y2} ${pt.x3},${pt.y3}`;
+        else if (pt.op === "closePath")
+          d += "Z";
       }
       const stroke = vec.graphicsState?.stroke || "#000";
       const fill = vec.graphicsState?.fill || "none";
@@ -2816,7 +2989,16 @@ var CodbDocs = (() => {
   function generateVisualStyles(ir) {
     return `<style>
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
-    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }
+    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
+    .pdf-page-raster { position: relative; }
+    .pdf-page-raster > img { display: block; position: relative; z-index: 1; }
+    .pdf-embedded-image { position: absolute; z-index: 2; }
+    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; }
+    body[data-codbdocs-view="pdf"] .pdf-text-layer { display: none; }
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
+    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
+    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
+    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
     .pdf-text { white-space: pre-wrap; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
@@ -2826,8 +3008,11 @@ var CodbDocs = (() => {
   }
   function generateAccessibleStyles() {
     return `<style>
-    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 800px; margin: 0 auto; }
-    .pdf-page { margin: 40px 0; padding: 20px 0; border-bottom: 1px solid #eee; }
+    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 820px; margin: 0 auto; }
+    .pdf-page { margin: 40px 0; padding: 10px 0; position: relative; }
+    .pdf-page-raster { position: relative; }
+    .pdf-page-raster > img { display: block; width: 100%; height: auto; }
+    .pdf-text-layer { position: absolute; inset: 10px 0 0; }
     h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; }
     p { margin: 0.5em 0; }
     table { border-collapse: collapse; width: 100%; margin: 1em 0; }
@@ -2838,6 +3023,10 @@ var CodbDocs = (() => {
     figcaption { font-size: 0.9em; color: #666; margin-top: 4px; }
     .ai-generated { color: #999; font-size: 0.8em; font-style: italic; }
     hr { border: none; border-top: 1px solid #eee; margin: 1em 0; }
+    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
+    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
+    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
     @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
     @media (prefers-contrast: high) { body { background: #000; color: #fff; } a { color: #ff0; } }
   </style>
@@ -2846,29 +3035,35 @@ var CodbDocs = (() => {
   async function extractStructureTree(page) {
     try {
       const structTree = await page.getStructTree();
-      if (!structTree) return null;
+      if (!structTree)
+        return null;
       return convertStructTreeNode(structTree);
     } catch (e) {
       return null;
     }
   }
   function convertStructTreeNode(node) {
-    if (!node) return null;
+    if (!node)
+      return null;
     const result = {
       type: node.type || "Unknown",
       role: node.role || node.type,
       children: []
     };
-    if (node.alt) result.alt = node.alt;
-    if (node.lang) result.lang = node.lang;
-    if (node.altText) result.altText = node.altText;
+    if (node.alt)
+      result.alt = node.alt;
+    if (node.lang)
+      result.lang = node.lang;
+    if (node.altText)
+      result.altText = node.altText;
     if (node.children) {
       for (const child of node.children) {
         if (typeof child === "string") {
           result.children.push({ type: "Text", content: child });
         } else {
           const converted = convertStructTreeNode(child);
-          if (converted) result.children.push(converted);
+          if (converted)
+            result.children.push(converted);
         }
       }
     }
@@ -2877,28 +3072,25 @@ var CodbDocs = (() => {
   async function extractAnnotations(page) {
     try {
       const annotations = await page.getAnnotations();
-      if (!annotations || annotations.length === 0) return [];
+      if (!annotations || annotations.length === 0)
+        return [];
       return annotations.map((ann) => ({
         id: ann.id,
         type: mapAnnotationType(ann.subtype),
         subtype: ann.subtype,
         rect: ann.rect,
-        // [x1, y1, x2, y2]
         color: ann.color,
         contents: ann.contents || "",
         title: ann.title || "",
         modificationDate: ann.modDate,
         creationDate: ann.creationDate,
         flags: ann.flags,
-        // Form-specific
         fieldType: ann.fieldType,
         fieldValue: ann.fieldValue,
         buttonWidgetType: ann.buttonWidgetType,
         options: ann.options,
-        // Link-specific
         url: ann.url,
         dest: ann.dest,
-        // Markup-specific
         strokeWidth: ann.strokeWidth,
         strokeColor: ann.strokeColor,
         fillColor: ann.fillColor,
@@ -2910,39 +3102,40 @@ var CodbDocs = (() => {
   }
   function mapAnnotationType(subtype) {
     const typeMap = {
-      "Text": "note",
-      "Link": "link",
-      "FreeText": "free_text",
-      "Line": "line",
-      "Square": "square",
-      "Circle": "circle",
-      "Polygon": "polygon",
-      "PolyLine": "polyline",
-      "Highlight": "highlight",
-      "Underline": "underline",
-      "Squiggly": "squiggly",
-      "StrikeOut": "strikeout",
-      "Stamp": "stamp",
-      "Caret": "caret",
-      "Ink": "ink",
-      "Popup": "popup",
-      "FileAttachment": "file_attachment",
-      "Sound": "sound",
-      "Movie": "movie",
-      "Widget": "form_field",
-      "Screen": "screen",
-      "PrinterMark": "printer_mark",
-      "TrapNet": "trap_net",
-      "Watermark": "watermark",
+      Text: "note",
+      Link: "link",
+      FreeText: "free_text",
+      Line: "line",
+      Square: "square",
+      Circle: "circle",
+      Polygon: "polygon",
+      PolyLine: "polyline",
+      Highlight: "highlight",
+      Underline: "underline",
+      Squiggly: "squiggly",
+      StrikeOut: "strikeout",
+      Stamp: "stamp",
+      Caret: "caret",
+      Ink: "ink",
+      Popup: "popup",
+      FileAttachment: "file_attachment",
+      Sound: "sound",
+      Movie: "movie",
+      Widget: "form_field",
+      Screen: "screen",
+      PrinterMark: "printer_mark",
+      TrapNet: "trap_net",
+      Watermark: "watermark",
       "3D": "3d",
-      "Redact": "redact"
+      Redact: "redact"
     };
     return typeMap[subtype] || subtype || "unknown";
   }
   function detectReadingOrder(ir, pageNum) {
     const pageId = `page_${pageNum}`;
     const page = ir.pages[pageId];
-    if (!page) return [];
+    if (!page)
+      return [];
     const objects = [];
     for (const objId of page.content) {
       const obj = ir.objects[objId];
@@ -2952,7 +3145,6 @@ var CodbDocs = (() => {
           type: obj.type,
           bbox: obj.bbox,
           text: obj.semantic?.text || "",
-          // Calculate center point for sorting
           centerX: obj.bbox[0] + obj.bbox[2] / 2,
           centerY: obj.bbox[1] + obj.bbox[3] / 2
         });
@@ -2971,10 +3163,12 @@ var CodbDocs = (() => {
         });
       }
     }
-    if (objects.length === 0) return [];
+    if (objects.length === 0)
+      return [];
     const sorted = objects.sort((a, b) => {
       const yDiff = a.centerY - b.centerY;
-      if (Math.abs(yDiff) > 10) return yDiff;
+      if (Math.abs(yDiff) > 10)
+        return yDiff;
       return a.centerX - b.centerX;
     });
     return sorted.map((obj, index) => ({
@@ -2991,7 +3185,8 @@ var CodbDocs = (() => {
     return `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`;
   }
   function escapeHTML(str) {
-    if (!str) return "";
+    if (!str)
+      return "";
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
@@ -3005,8 +3200,7 @@ var CodbDocs = (() => {
       if (metadataObj) {
         try {
           xmp = metadataObj.getAll();
-        } catch (e) {
-        }
+        } catch (e) {}
       }
       return {
         title: info.Title || xmp?.title || null,
@@ -3028,7 +3222,8 @@ var CodbDocs = (() => {
   async function extractOutline(pdf) {
     try {
       const outline = await pdf.getOutline();
-      if (!outline || outline.length === 0) return [];
+      if (!outline || outline.length === 0)
+        return [];
       return convertOutlineItems(outline, pdf);
     } catch (e) {
       return [];
@@ -3052,8 +3247,7 @@ var CodbDocs = (() => {
           if (typeof dest === "string") {
             try {
               dest = await pdf.getDestination(dest);
-            } catch (e) {
-            }
+            } catch (e) {}
           }
           if (Array.isArray(dest)) {
             const pageIndex = await pdf.getPageIndex(dest[0]);
@@ -3064,8 +3258,7 @@ var CodbDocs = (() => {
             };
           }
         }
-      } catch (e) {
-      }
+      } catch (e) {}
       if (item.url) {
         outlineItem.url = item.url;
       }
@@ -3090,8 +3283,7 @@ var CodbDocs = (() => {
               args: dest.slice(2)
             };
           }
-        } catch (e) {
-        }
+        } catch (e) {}
       }
       return result;
     } catch (e) {
@@ -3102,7 +3294,7 @@ var CodbDocs = (() => {
     try {
       const count = pdf.numPages;
       const labels = [];
-      for (let i = 0; i < count; i++) {
+      for (let i = 0;i < count; i++) {
         labels.push({
           page: i + 1,
           label: `${i + 1}`,
@@ -3120,8 +3312,7 @@ var CodbDocs = (() => {
       let permissions = null;
       try {
         permissions = await pdf.getPermissions();
-      } catch (e) {
-      }
+      } catch (e) {}
       return {
         encrypted: isEncrypted,
         permissions: permissions ? {
@@ -3150,7 +3341,7 @@ var CodbDocs = (() => {
       const markedContent = [];
       let mcStack = [];
       const OPS = typeof pdfjsLib !== "undefined" ? pdfjsLib.OPS || {} : {};
-      for (let i = 0; i < opList.fnArray.length; i++) {
+      for (let i = 0;i < opList.fnArray.length; i++) {
         const fn = opList.fnArray[i];
         const args = opList.argsArray[i];
         if (fn === OPS.beginMarkedContent || fn === 18) {
@@ -3210,11 +3401,16 @@ var CodbDocs = (() => {
     return artifacts;
   }
   function categorizeArtifact(tag) {
-    if (tag === "Pagination" || tag === "PageNumber") return "pagination";
-    if (tag === "Header") return "header";
-    if (tag === "Footer") return "footer";
-    if (tag === "Figure") return "decorative_figure";
-    if (tag === "Background") return "background";
+    if (tag === "Pagination" || tag === "PageNumber")
+      return "pagination";
+    if (tag === "Header")
+      return "header";
+    if (tag === "Footer")
+      return "footer";
+    if (tag === "Figure")
+      return "decorative_figure";
+    if (tag === "Background")
+      return "background";
     return "unknown";
   }
   async function extractGlyphs(page) {
@@ -3228,7 +3424,7 @@ var CodbDocs = (() => {
           const translateX = transform[4] || 0;
           const translateY = transform[5] || 0;
           const charWidth = item.width / Math.max(item.str.length, 1);
-          for (let i = 0; i < item.str.length; i++) {
+          for (let i = 0;i < item.str.length; i++) {
             glyphs.push({
               unicode: item.str[i],
               charCode: item.str.charCodeAt(i),
@@ -3260,7 +3456,8 @@ var CodbDocs = (() => {
   }
   function generateRemediations(auditResult, ir) {
     const fixes = [];
-    if (!auditResult || !auditResult.issues) return fixes;
+    if (!auditResult || !auditResult.issues)
+      return fixes;
     for (const issue of auditResult.issues) {
       switch (issue.type) {
         case "missing_alt_text":
@@ -3355,12 +3552,14 @@ var CodbDocs = (() => {
   function inferReadingOrder(ir, pageNum) {
     const pageId = `page_${pageNum}`;
     const page = ir.pages[pageId];
-    if (!page) return [];
+    if (!page)
+      return [];
     const objects = page.content.map((id) => ir.objects[id]).filter((obj) => obj && obj.bbox);
     return objects.sort((a, b) => {
       const ay = a.bbox[1] || 0;
       const by = b.bbox[1] || 0;
-      if (Math.abs(ay - by) > 10) return ay - by;
+      if (Math.abs(ay - by) > 10)
+        return ay - by;
       return (a.bbox[0] || 0) - (b.bbox[0] || 0);
     }).map((obj) => obj.id);
   }
@@ -3421,7 +3620,8 @@ var CodbDocs = (() => {
     return stack.pop() || createGraphicsState();
   }
   function applyTransform(state, transform) {
-    if (!transform || transform.length < 6) return state;
+    if (!transform || transform.length < 6)
+      return state;
     const [a, b, c, d, e, f] = state.transform;
     const [a2, b2, c2, d2, e2, f2] = transform;
     state.transform = [
@@ -3445,7 +3645,8 @@ var CodbDocs = (() => {
     const gg = g / 255;
     const bb = b / 255;
     const k = 1 - Math.max(rr, gg, bb);
-    if (k === 1) return [0, 0, 0, 100];
+    if (k === 1)
+      return [0, 0, 0, 100];
     const c = (1 - rr - k) / (1 - k) * 100;
     const m = (1 - gg - k) / (1 - k) * 100;
     const y = (1 - bb - k) / (1 - k) * 100;
@@ -3464,13 +3665,14 @@ var CodbDocs = (() => {
     const g = x * -0.9689 + y * 1.8758 + z * 0.0415;
     const bv = x * 0.0557 + y * -0.204 + z * 1.057;
     return [
-      Math.round(Math.min(255, Math.max(0, r > 31308e-7 ? 1.055 * Math.pow(r, 1 / 2.4) - 0.055 : r * 12.92) * 255)),
-      Math.round(Math.min(255, Math.max(0, g > 31308e-7 ? 1.055 * Math.pow(g, 1 / 2.4) - 0.055 : g * 12.92) * 255)),
-      Math.round(Math.min(255, Math.max(0, bv > 31308e-7 ? 1.055 * Math.pow(bv, 1 / 2.4) - 0.055 : bv * 12.92) * 255))
+      Math.round(Math.min(255, Math.max(0, r > 0.0031308 ? 1.055 * Math.pow(r, 1 / 2.4) - 0.055 : r * 12.92) * 255)),
+      Math.round(Math.min(255, Math.max(0, g > 0.0031308 ? 1.055 * Math.pow(g, 1 / 2.4) - 0.055 : g * 12.92) * 255)),
+      Math.round(Math.min(255, Math.max(0, bv > 0.0031308 ? 1.055 * Math.pow(bv, 1 / 2.4) - 0.055 : bv * 12.92) * 255))
     ];
   }
   function toRgb(color, colorSpace) {
-    if (!color) return [0, 0, 0];
+    if (!color)
+      return [0, 0, 0];
     switch (colorSpace) {
       case ColorSpaceTypes.DEVICE_RGB:
         return color;
@@ -3486,22 +3688,22 @@ var CodbDocs = (() => {
   }
   function parseBlendMode(name) {
     const modes = {
-      "Normal": "Normal",
-      "Multiply": "Multiply",
-      "Screen": "Screen",
-      "Overlay": "Overlay",
-      "Darken": "Darken",
-      "Lighten": "Lighten",
-      "ColorDodge": "ColorDodge",
-      "ColorBurn": "ColorBurn",
-      "HardLight": "HardLight",
-      "SoftLight": "SoftLight",
-      "Difference": "Difference",
-      "Exclusion": "Exclusion",
-      "Hue": "Hue",
-      "Saturation": "Saturation",
-      "Color": "Color",
-      "Luminosity": "Luminosity"
+      Normal: "Normal",
+      Multiply: "Multiply",
+      Screen: "Screen",
+      Overlay: "Overlay",
+      Darken: "Darken",
+      Lighten: "Lighten",
+      ColorDodge: "ColorDodge",
+      ColorBurn: "ColorBurn",
+      HardLight: "HardLight",
+      SoftLight: "SoftLight",
+      Difference: "Difference",
+      Exclusion: "Exclusion",
+      Hue: "Hue",
+      Saturation: "Saturation",
+      Color: "Color",
+      Luminosity: "Luminosity"
     };
     return modes[name] || "Normal";
   }
@@ -3509,7 +3711,6 @@ var CodbDocs = (() => {
     return {
       type: "SoftMask",
       subtype: type,
-      // Luminosity or Alpha
       bbox,
       transform,
       group: null,
@@ -3535,9 +3736,7 @@ var CodbDocs = (() => {
       xStep,
       yStep,
       paintType: paintType || 1,
-      // 1=colored, 2=uncolored
       tilingType: tilingType || 1,
-      // 1=constant, 2=constant spacing, 3=auto flow
       matrix: [1, 0, 0, 1, 0, 0],
       resources: {}
     };
@@ -3546,26 +3745,19 @@ var CodbDocs = (() => {
     return {
       type: "GradientShading",
       subtype: type,
-      // Axial or Radial
       coords,
       domain: domain || [0, 1],
       colors,
-      // Array of { offset, color }
       functions,
       extend: [false, false]
     };
   }
   function parseShading(args) {
-    if (!args || args.length < 4) return null;
+    if (!args || args.length < 4)
+      return null;
     const type = args[0];
     if (type === 1 || type === 2) {
-      return createGradientShading(
-        type === 1 ? "Axial" : "Radial",
-        args.slice(1, type === 1 ? 5 : 7),
-        [0, 1],
-        [],
-        null
-      );
+      return createGradientShading(type === 1 ? "Axial" : "Radial", args.slice(1, type === 1 ? 5 : 7), [0, 1], [], null);
     }
     return null;
   }
@@ -3574,7 +3766,7 @@ var CodbDocs = (() => {
     let currentState = createGraphicsState();
     const stateStack = [];
     const OPS = typeof pdfjsLib !== "undefined" ? pdfjsLib.OPS || {} : {};
-    for (let i = 0; i < opList.fnArray.length; i++) {
+    for (let i = 0;i < opList.fnArray.length; i++) {
       const fn = opList.fnArray[i];
       const args = opList.argsArray[i];
       if (fn === OPS.save || fn === 19) {
@@ -3619,8 +3811,7 @@ var CodbDocs = (() => {
         currentState.fillOpacity = args?.[0] ?? 1;
       } else if (fn === OPS.setStrokeAlpha || fn === 45) {
         currentState.strokeOpacity = args?.[0] ?? 1;
-      } else if (fn === OPS.setGState || fn === 57) {
-      } else if (fn === OPS.setBlendMode || fn === 58) {
+      } else if (fn === OPS.setGState || fn === 57) {} else if (fn === OPS.setBlendMode || fn === 58) {
         currentState.blendMode = parseBlendMode(args?.[0]);
       } else if (fn === OPS.setRenderingIntent || fn === 59) {
         currentState.renderingIntent = args?.[0] || "RelativeColorimetric";
@@ -3647,13 +3838,9 @@ var CodbDocs = (() => {
       color: s.state.fill.color,
       rgb: toRgb(s.state.fill.color, s.state.fill.colorSpace)
     }));
-    const hasTransparency = states.some(
-      (s) => s.state.opacity < 1 || s.state.fillOpacity < 1 || s.state.strokeOpacity < 1 || s.state.blendMode !== "Normal"
-    );
+    const hasTransparency = states.some((s) => s.state.opacity < 1 || s.state.fillOpacity < 1 || s.state.strokeOpacity < 1 || s.state.blendMode !== "Normal");
     const hasClipping = states.some((s) => s.state.clip !== null);
-    const hasPatterns = states.some(
-      (s) => s.state.fill.colorSpace === ColorSpaceTypes.PATTERN || s.state.stroke.colorSpace === ColorSpaceTypes.PATTERN
-    );
+    const hasPatterns = states.some((s) => s.state.fill.colorSpace === ColorSpaceTypes.PATTERN || s.state.stroke.colorSpace === ColorSpaceTypes.PATTERN);
     return {
       uniqueTransforms: uniqueTransforms.length,
       strokeColors: [...new Set(strokeColors.map((c) => JSON.stringify(c)))].map((c) => JSON.parse(c)),
@@ -3666,23 +3853,16 @@ var CodbDocs = (() => {
   }
 
   // src/pdfcreator.js
-  var PDFCreator = class {
+  class PDFCreator {
     constructor() {
       this.objects = [];
       this.pages = [];
       this.resources = {};
       this.currentObject = 1;
     }
-    /**
-     * Create a PDF from IR.
-     * @param {Object} ir - PDF-IR document model
-     * @param {Object} options - Creation options
-     * @returns {Promise<Uint8Array>} PDF bytes
-     */
     async create(ir, options = {}) {
       const {
         level = 2,
-        // 1=content, 2=semantic, 3=visual
         includeMetadata = true,
         includeStructure = true,
         includeAccessibility = true,
@@ -3700,7 +3880,6 @@ var CodbDocs = (() => {
       pdf.body[catalogId] = {
         type: "catalog",
         pages: null
-        // Will be set after pages
       };
       const pagesId = this.nextObjectId();
       pdf.body[pagesId] = {
@@ -3723,7 +3902,6 @@ var CodbDocs = (() => {
           type: "page",
           parent: pagesId,
           mediaBox: pageData.mediaBox || [0, 0, 612, 792],
-          // Letter size default
           cropBox: pageData.cropBox || null,
           rotate: pageData.rotation || 0,
           resources: {},
@@ -3769,9 +3947,6 @@ var CodbDocs = (() => {
       };
       return this.serializePDF(pdf);
     }
-    /**
-     * Build page resources dictionary.
-     */
     buildPageResources(pageData, ir) {
       const resources = {
         font: {},
@@ -3780,7 +3955,7 @@ var CodbDocs = (() => {
         colorSpace: {},
         extGState: {}
       };
-      const fonts = /* @__PURE__ */ new Set();
+      const fonts = new Set;
       const pageObjects = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean);
       for (const obj of pageObjects) {
         if (obj.raw?.font) {
@@ -3798,9 +3973,6 @@ var CodbDocs = (() => {
       }
       return resources;
     }
-    /**
-     * Build content stream for a page.
-     */
     buildContentStream(pageData, ir, level) {
       const commands = [];
       const objects = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean);
@@ -3835,30 +4007,24 @@ var CodbDocs = (() => {
           }
         }
       }
-      return commands.join("\n");
+      return commands.join(`
+`);
     }
-    /**
-     * Sort objects by reading order.
-     */
     sortByReadingOrder(objects, pageData) {
       return [...objects].sort((a, b) => {
         const ay = a.bbox?.[1] || 0;
         const by = b.bbox?.[1] || 0;
-        if (Math.abs(ay - by) > 10) return ay - by;
+        if (Math.abs(ay - by) > 10)
+          return ay - by;
         return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
       });
     }
-    /**
-     * Find font reference for a font name.
-     */
     findFontRef(fontName, pageData, ir) {
       return "F0";
     }
-    /**
-     * Add vector drawing commands.
-     */
     addVectorCommands(commands, vec) {
-      if (!vec.points || vec.points.length === 0) return;
+      if (!vec.points || vec.points.length === 0)
+        return;
       commands.push("q");
       if (vec.graphicsState?.stroke?.color) {
         const c = vec.graphicsState.stroke.color;
@@ -3873,7 +4039,7 @@ var CodbDocs = (() => {
       }
       const firstPoint = vec.points[0];
       commands.push(`${firstPoint.x} ${firstPoint.y} m`);
-      for (let i = 1; i < vec.points.length; i++) {
+      for (let i = 1;i < vec.points.length; i++) {
         const pt = vec.points[i];
         if (pt.op === "moveTo") {
           commands.push(`${pt.x} ${pt.y} m`);
@@ -3890,45 +4056,42 @@ var CodbDocs = (() => {
       }
       commands.push("Q");
     }
-    /**
-     * Escape string for PDF content stream.
-     */
     escapePDFString(str) {
       return str.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
     }
-    /**
-     * Generate next object ID.
-     */
     nextObjectId() {
       return this.currentObject++;
     }
-    /**
-     * Serialize PDF to bytes.
-     */
     serializePDF(pdf) {
-      const encoder = new TextEncoder();
+      const encoder = new TextEncoder;
       const parts = [];
-      parts.push(encoder.encode(pdf.header + "\n"));
+      parts.push(encoder.encode(pdf.header + `
+`));
       for (const [id, obj] of Object.entries(pdf.body)) {
         const objStr = this.serializeObject(parseInt(id), obj);
         parts.push(encoder.encode(objStr));
       }
       const xrefOffset = parts.reduce((sum, p) => sum + p.length, 0);
-      parts.push(encoder.encode("xref\n"));
+      parts.push(encoder.encode(`xref
+`));
       parts.push(encoder.encode(`0 ${this.currentObject}
 `));
-      parts.push(encoder.encode("0000000000 65535 f \n"));
-      for (let i = 1; i < this.currentObject; i++) {
+      parts.push(encoder.encode(`0000000000 65535 f 
+`));
+      for (let i = 1;i < this.currentObject; i++) {
         parts.push(encoder.encode(`${String(xrefOffset).padStart(10, "0")} 00000 n 
 `));
       }
-      parts.push(encoder.encode("trailer\n"));
+      parts.push(encoder.encode(`trailer
+`));
       parts.push(encoder.encode(`<< /Size ${this.currentObject} /Root ${pdf.trailer.root} >>
 `));
-      parts.push(encoder.encode("startxref\n"));
+      parts.push(encoder.encode(`startxref
+`));
       parts.push(encoder.encode(`${xrefOffset}
 `));
-      parts.push(encoder.encode("%%EOF\n"));
+      parts.push(encoder.encode(`%%EOF
+`));
       const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
       const result = new Uint8Array(totalLength);
       let offset = 0;
@@ -3938,9 +4101,6 @@ var CodbDocs = (() => {
       }
       return result;
     }
-    /**
-     * Serialize a single PDF object.
-     */
     serializeObject(id, obj) {
       let str = `${id} 0 obj
 `;
@@ -3956,59 +4116,78 @@ var CodbDocs = (() => {
         case "page":
           str += `<< /Type /Page /Parent ${obj.parent} 0 R`;
           str += ` /MediaBox [${(obj.mediaBox || [0, 0, 612, 792]).join(" ")}]`;
-          if (obj.rotate) str += ` /Rotate ${obj.rotate}`;
+          if (obj.rotate)
+            str += ` /Rotate ${obj.rotate}`;
           if (obj.contents?.length) {
             str += ` /Contents [${obj.contents.map((c) => `${c} 0 R`).join(" ")}]`;
           }
           if (obj.annotations?.length) {
             str += ` /Annots [${obj.annotations.map((a) => `${a} 0 R`).join(" ")}]`;
           }
-          str += " >>\n";
+          str += ` >>
+`;
           break;
         case "stream":
           str += `<< /Length ${obj.length} >>
 `;
-          str += "stream\n";
-          str += obj.data + "\n";
-          str += "endstream\n";
+          str += `stream
+`;
+          str += obj.data + `
+`;
+          str += `endstream
+`;
           break;
         case "annotation":
           const ann = obj.data;
           str += `<< /Type /Annot /Subtype /${ann.subtype || "Text"}`;
-          if (ann.rect) str += ` /Rect [${ann.rect.join(" ")}]`;
-          if (ann.contents) str += ` /Contents (${this.escapePDFString(ann.contents)})`;
-          str += " >>\n";
+          if (ann.rect)
+            str += ` /Rect [${ann.rect.join(" ")}]`;
+          if (ann.contents)
+            str += ` /Contents (${this.escapePDFString(ann.contents)})`;
+          str += ` >>
+`;
           break;
         case "metadata":
           str += `<< /Type /Metadata /Subtype /XML >>
 `;
-          str += "stream\n";
-          str += '<?xml version="1.0" encoding="UTF-8"?>\n';
-          str += '<x:xmpmeta xmlns:x="adobe:ns:meta/">\n';
-          str += '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n';
+          str += `stream
+`;
+          str += `<?xml version="1.0" encoding="UTF-8"?>
+`;
+          str += `<x:xmpmeta xmlns:x="adobe:ns:meta/">
+`;
+          str += `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+`;
           if (obj.data.title) {
             str += `<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
 `;
             str += `<dc:title>${this.escapePDFString(obj.data.title)}</dc:title>
 `;
-            str += "</rdf:Description>\n";
+            str += `</rdf:Description>
+`;
           }
-          str += "</rdf:RDF>\n";
-          str += "</x:xmpmeta>\n";
-          str += "endstream\n";
+          str += `</rdf:RDF>
+`;
+          str += `</x:xmpmeta>
+`;
+          str += `endstream
+`;
           break;
         default:
-          str += "<< >>\n";
+          str += `<< >>
+`;
       }
-      str += "endobj\n\n";
+      str += `endobj
+
+`;
       return str;
     }
-  };
+  }
   async function createPDF(ir, options = {}) {
-    const creator = new PDFCreator();
+    const creator = new PDFCreator;
     return creator.create(ir, options);
   }
-  async function createTextPDF(pages2, options = {}) {
+  async function createTextPDF(pages, options = {}) {
     const ir = {
       document: { metadata: options.metadata || {} },
       pages: {},
@@ -4016,7 +4195,7 @@ var CodbDocs = (() => {
       structure: {},
       annotations: {}
     };
-    for (let i = 0; i < pages2.length; i++) {
+    for (let i = 0;i < pages.length; i++) {
       const pageId = `page_${i + 1}`;
       ir.pages[pageId] = {
         id: pageId,
@@ -4030,9 +4209,10 @@ var CodbDocs = (() => {
         images: [],
         annotations: []
       };
-      const text = typeof pages2[i] === "string" ? pages2[i] : pages2[i].text || "";
-      const lines = text.split("\n");
-      for (let j = 0; j < lines.length; j++) {
+      const text = typeof pages[i] === "string" ? pages[i] : pages[i].text || "";
+      const lines = text.split(`
+`);
+      for (let j = 0;j < lines.length; j++) {
         const objId = `text_${i}_${j}`;
         ir.objects[objId] = {
           id: objId,
@@ -4089,7 +4269,6 @@ var CodbDocs = (() => {
             unseenChanges: null,
             hashAlgorithm: this.inferHashAlgorithm(ann.SubFilter),
             signatureValid: null,
-            // Would need crypto library to verify
             signerName: null,
             signingTime: ann.M || null,
             documentIntegrity: null
@@ -4127,19 +4306,25 @@ var CodbDocs = (() => {
     const ocgs = [];
     try {
       const docObj = await doc._pdf?.catalog?.objRef?.fetch();
-      if (!docObj) return ocgs;
+      if (!docObj)
+        return ocgs;
       const ocProps = await docObj.get("OCProperties");
-      if (!ocProps) return ocgs;
+      if (!ocProps)
+        return ocgs;
       const ocDict = await ocProps.fetch();
-      if (!ocDict) return ocgs;
+      if (!ocDict)
+        return ocgs;
       const ocgArray = await ocDict.get("OCGs");
-      if (!ocgArray) return ocgs;
+      if (!ocgArray)
+        return ocgs;
       const ocgsObj = await ocgArray.fetch();
-      if (!ocgsObj) return ocgs;
+      if (!ocgsObj)
+        return ocgs;
       for (const ref of ocgsObj) {
         try {
           const ocgDict = await ref.fetch();
-          if (!ocgDict) continue;
+          if (!ocgDict)
+            continue;
           const name = await ocgDict.get("Name");
           const intent = await ocgDict.get("Intent");
           const usage = await ocgDict.get("Usage");
@@ -4153,14 +4338,12 @@ var CodbDocs = (() => {
               export: await extractOCGUsage(usage, "Export")
             } : null,
             visible: true
-            // Default visible
           });
-        } catch (e) {
-        }
+        } catch (e) {}
       }
-      const config2 = await ocDict.get("D");
-      if (config2) {
-        const configDict = await config2.fetch();
+      const config = await ocDict.get("D");
+      if (config) {
+        const configDict = await config.fetch();
         if (configDict) {
           const order = await configDict.get("Order");
         }
@@ -4173,9 +4356,11 @@ var CodbDocs = (() => {
   async function extractOCGUsage(usageDict, key) {
     try {
       const usage = await usageDict.get(key);
-      if (!usage) return null;
+      if (!usage)
+        return null;
       const dict = await usage.fetch();
-      if (!dict) return null;
+      if (!dict)
+        return null;
       const outputIntents = await dict.get("OutputIntents");
       const category = await dict.get("Category");
       return {
@@ -4200,23 +4385,31 @@ var CodbDocs = (() => {
     const files = [];
     try {
       const docObj = await doc._pdf?.catalog?.objRef?.fetch();
-      if (!docObj) return files;
+      if (!docObj)
+        return files;
       const names = await docObj.get("Names");
-      if (!names) return files;
+      if (!names)
+        return files;
       const namesDict = await names.fetch();
-      if (!namesDict) return files;
+      if (!namesDict)
+        return files;
       const embeddedFiles = await namesDict.get("EmbeddedFiles");
-      if (!embeddedFiles) return files;
+      if (!embeddedFiles)
+        return files;
       const efDict = await embeddedFiles.fetch();
-      if (!efDict) return files;
+      if (!efDict)
+        return files;
       const namesArray = await efDict.get("Names");
-      if (!namesArray) return files;
+      if (!namesArray)
+        return files;
       const nameTree = await namesArray.fetch();
-      if (!nameTree) return files;
-      for (let i = 0; i < nameTree.length; i++) {
+      if (!nameTree)
+        return files;
+      for (let i = 0;i < nameTree.length; i++) {
         try {
           const nameObj = await nameTree[i].fetch();
-          if (!nameObj) continue;
+          if (!nameObj)
+            continue;
           const fileSpec = await nameObj.get("F");
           const efRef = await nameObj.get("EF");
           if (fileSpec && efRef) {
@@ -4236,12 +4429,10 @@ var CodbDocs = (() => {
               size: size?.value || 0,
               creationDate: creationDate?.value || null,
               modDate: modDate?.value || null,
-              // Raw data not extracted by default (could be large)
               hasData: true
             });
           }
-        } catch (e) {
-        }
+        } catch (e) {}
       }
     } catch (e) {
       console.error("[codbdocs] Embedded file extraction error:", e);
@@ -4270,7 +4461,8 @@ var CodbDocs = (() => {
     };
   }
   function formatBytes(bytes) {
-    if (bytes === 0) return "0 B";
+    if (bytes === 0)
+      return "0 B";
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -4280,7 +4472,8 @@ var CodbDocs = (() => {
     const actions = [];
     try {
       const docObj = await doc._pdf?.catalog?.objRef?.fetch();
-      if (!docObj) return actions;
+      if (!docObj)
+        return actions;
       const openAction = await docObj.get("OpenAction");
       if (openAction) {
         actions.push({
@@ -4292,8 +4485,8 @@ var CodbDocs = (() => {
       const pageLabels = await docObj.get("PageLabels");
       const pagesRef = await docObj.get("Pages");
       if (pagesRef) {
-        const pages2 = await pagesRef.fetch();
-        await extractPageActions(pages2, actions, 0);
+        const pages = await pagesRef.fetch();
+        await extractPageActions(pages, actions, 0);
       }
     } catch (e) {
       console.error("[codbdocs] Actions extraction error:", e);
@@ -4301,16 +4494,20 @@ var CodbDocs = (() => {
     return actions;
   }
   async function extractPageActions(pagesDict, actions, depth) {
-    if (depth > 10) return;
+    if (depth > 10)
+      return;
     try {
       const kids = await pagesDict.get("Kids");
-      if (!kids) return;
+      if (!kids)
+        return;
       const kidsArray = await kids.fetch();
-      if (!kidsArray) return;
+      if (!kidsArray)
+        return;
       for (const kidRef of kidsArray) {
         try {
           const kid = await kidRef.fetch();
-          if (!kid) continue;
+          if (!kid)
+            continue;
           const type = await kid.get("Type");
           const typeName = type?.value;
           if (typeName === "Pages") {
@@ -4337,7 +4534,8 @@ var CodbDocs = (() => {
               if (annotsArray) {
                 for (const annotRef of annotsArray) {
                   const annot = await annotRef.fetch();
-                  if (!annot) continue;
+                  if (!annot)
+                    continue;
                   const a = await annot.get("A");
                   if (a) {
                     actions.push({
@@ -4352,18 +4550,19 @@ var CodbDocs = (() => {
               }
             }
           }
-        } catch (e) {
-        }
+        } catch (e) {}
       }
     } catch (e) {
       console.error("[codbdocs] Page actions extraction error:", e);
     }
   }
   async function parseAction(actionRef) {
-    if (!actionRef) return null;
+    if (!actionRef)
+      return null;
     try {
       const actionDict = await actionRef.fetch?.() || actionRef;
-      if (!actionDict) return null;
+      if (!actionDict)
+        return null;
       const s = await actionDict.get("S");
       const actionType = s?.value || "Unknown";
       const result = {
@@ -4465,7 +4664,8 @@ var CodbDocs = (() => {
   async function extractAppearanceDict(appearRef) {
     try {
       const dict = await appearRef.fetch?.() || appearRef;
-      if (!dict) return null;
+      if (!dict)
+        return null;
       if (dict.getBytes) {
         return {
           type: "single",
@@ -4578,7 +4778,8 @@ var CodbDocs = (() => {
     const revisions = [];
     try {
       const pdf = doc._pdf;
-      if (!pdf) return revisions;
+      if (!pdf)
+        return revisions;
       const meta = await pdf.getMetadata();
       const info = meta?.info || {};
       revisions.push({
@@ -4637,9 +4838,7 @@ var CodbDocs = (() => {
     }
     const suspiciousText = contentItems.filter((item) => {
       const text = item.str || "";
-      return /[^\x00-\x7F]{3,}/.test(text) || // Multiple non-ASCII
-      /\s{5,}/.test(text) || // Excessive whitespace
-      /[|\\\/]{3,}/.test(text);
+      return /[^\x00-\x7F]{3,}/.test(text) || /\s{5,}/.test(text) || /[|\\\/]{3,}/.test(text);
     });
     if (suspiciousText.length > 0) {
       issues.push({
@@ -4754,14 +4953,17 @@ var CodbDocs = (() => {
     return { suspicious: false };
   }
   function isGibberish(word) {
-    if (word.length < 3) return false;
+    if (word.length < 3)
+      return false;
     const consonantClusters = word.match(/[bcdfghjklmnpqrstvwxyz]{4,}/gi);
-    if (consonantClusters && consonantClusters.length > 0) return true;
+    if (consonantClusters && consonantClusters.length > 0)
+      return true;
     const vowelClusters = word.match(/[aeiou]{4,}/gi);
-    if (vowelClusters && vowelClusters.length > 0) return true;
+    if (vowelClusters && vowelClusters.length > 0)
+      return true;
     const pattern = word.toLowerCase();
     let alternating = true;
-    for (let i = 2; i < pattern.length; i++) {
+    for (let i = 2;i < pattern.length; i++) {
       const prev1IsVowel = "aeiou".includes(pattern[i - 1]);
       const prev2IsVowel = "aeiou".includes(pattern[i - 2]);
       const currIsVowel = "aeiou".includes(pattern[i]);
@@ -4770,11 +4972,12 @@ var CodbDocs = (() => {
         break;
       }
     }
-    if (alternating && word.length > 6) return true;
+    if (alternating && word.length > 6)
+      return true;
     return false;
   }
   function findDuplicates(fragments) {
-    const seen = /* @__PURE__ */ new Map();
+    const seen = new Map;
     const duplicates = [];
     for (const frag of fragments) {
       const normalized = frag.toLowerCase().trim();
@@ -4797,9 +5000,7 @@ var CodbDocs = (() => {
     }));
     const visualTextRegions = visualRegions?.textRegions || [];
     for (const vRegion of visualTextRegions) {
-      const matchingInternal = internalTextRegions.find(
-        (iRegion) => Math.abs(iRegion.x - vRegion.x) < 10 && Math.abs(iRegion.y - vRegion.y) < 10
-      );
+      const matchingInternal = internalTextRegions.find((iRegion) => Math.abs(iRegion.x - vRegion.x) < 10 && Math.abs(iRegion.y - vRegion.y) < 10);
       if (!matchingInternal) {
         discrepancies.push({
           type: "visual_text_not_in_internal",
@@ -4810,9 +5011,7 @@ var CodbDocs = (() => {
       }
     }
     for (const iRegion of internalTextRegions) {
-      const matchingVisual = visualTextRegions.find(
-        (vRegion) => Math.abs(iRegion.x - vRegion.x) < 10 && Math.abs(iRegion.y - vRegion.y) < 10
-      );
+      const matchingVisual = visualTextRegions.find((vRegion) => Math.abs(iRegion.x - vRegion.x) < 10 && Math.abs(iRegion.y - vRegion.y) < 10);
       if (!matchingVisual && iRegion.text.length > 3) {
         discrepancies.push({
           type: "internal_text_not_visible",
@@ -4871,7 +5070,8 @@ var CodbDocs = (() => {
     for (const [pageId, content] of Object.entries(allContentItems)) {
       const pageHeight = pageResults2[pageId]?.pageSize?.height || 792;
       for (const item of content) {
-        if (!item.str || item.str.trim().length === 0) continue;
+        if (!item.str || item.str.trim().length === 0)
+          continue;
         const y = item.transform?.[5] || 0;
         const normalizedY = y / pageHeight;
         if (normalizedY > 0.9) {
@@ -4893,7 +5093,8 @@ var CodbDocs = (() => {
     const textCounts = {};
     for (const el of elements) {
       const normalized = el.text.toLowerCase().trim();
-      if (normalized.length < 3) continue;
+      if (normalized.length < 3)
+        continue;
       textCounts[normalized] = (textCounts[normalized] || 0) + 1;
     }
     return Object.entries(textCounts).filter(([text, count]) => count >= 3).map(([text, count]) => ({
@@ -4906,7 +5107,8 @@ var CodbDocs = (() => {
     const textCounts = {};
     for (const el of elements) {
       const normalized = el.text.toLowerCase().trim();
-      if (normalized.length < 2) continue;
+      if (normalized.length < 2)
+        continue;
       textCounts[normalized] = (textCounts[normalized] || 0) + 1;
     }
     return Object.entries(textCounts).filter(([text, count]) => count >= 5).map(([text, count]) => ({
@@ -4930,7 +5132,8 @@ var CodbDocs = (() => {
     return pageNumbers;
   }
   function normalizeText(text) {
-    if (!text) return text;
+    if (!text)
+      return text;
     let normalized = text;
     normalized = normalized.replace(/(\w)-\s*\n\s*(\w)/g, "$1$2");
     normalized = normalized.replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/ﬃ/g, "ffi").replace(/ﬄ/g, "ffl");
@@ -4974,9 +5177,7 @@ var CodbDocs = (() => {
     }
     const headings = extractHeadingsFromStructure(structureTree);
     for (const heading of headings) {
-      const matchingText = contentItems.find(
-        (item) => item.str && item.str.includes(heading.text)
-      );
+      const matchingText = contentItems.find((item) => item.str && item.str.includes(heading.text));
       if (matchingText) {
         const fontSize = Math.abs(matchingText.transform?.[0]) || 12;
         if (fontSize < 14) {
@@ -5016,7 +5217,8 @@ var CodbDocs = (() => {
     };
   }
   function extractHeadingsFromStructure(tree, headings = []) {
-    if (!tree) return headings;
+    if (!tree)
+      return headings;
     if (tree.type === "heading" || tree.type === "H1" || tree.type === "H2") {
       headings.push({
         type: tree.type,
@@ -5032,7 +5234,8 @@ var CodbDocs = (() => {
     return headings;
   }
   function extractImagesFromStructure(tree, images = []) {
-    if (!tree) return images;
+    if (!tree)
+      return images;
     if (tree.type === "figure" || tree.type === "image") {
       images.push({
         id: tree.id,
@@ -5048,7 +5251,8 @@ var CodbDocs = (() => {
     return images;
   }
   function findBrokenTags(tree, broken = []) {
-    if (!tree) return broken;
+    if (!tree)
+      return broken;
     if (tree.children) {
       for (const child of tree.children) {
         if (!child.type && !child.id) {
@@ -5147,7 +5351,7 @@ var CodbDocs = (() => {
     const vLines = [];
     for (const vec of vectors) {
       if (vec.type === "path" && vec.points) {
-        for (let i = 1; i < vec.points.length; i++) {
+        for (let i = 1;i < vec.points.length; i++) {
           const p1 = vec.points[i - 1];
           const p2 = vec.points[i];
           if (Math.abs(p1.y - p2.y) < 2 && Math.abs(p1.x - p2.x) > 20) {
@@ -5179,8 +5383,8 @@ var CodbDocs = (() => {
     }
     table.rows = rows;
     table.columns = columns;
-    for (let r = 0; r < rows.length - 1; r++) {
-      for (let c = 0; c < columns.length - 1; c++) {
+    for (let r = 0;r < rows.length - 1; r++) {
+      for (let c = 0;c < columns.length - 1; c++) {
         const cellBbox = {
           x1: columns[c],
           y1: rows[r],
@@ -5201,14 +5405,10 @@ var CodbDocs = (() => {
         });
       }
     }
-    for (let r = 0; r < rows.length - 1; r++) {
-      for (let c = 0; c < columns.length - 1; c++) {
-        const hasRightLine = vLines.some(
-          (v) => Math.abs(v.x - columns[c + 1]) < 2 && v.y1 <= rows[r] && v.y2 >= rows[r + 1]
-        );
-        const hasBottomLine = hLines.some(
-          (h) => Math.abs(h.y - rows[r + 1]) < 2 && h.x1 <= columns[c] && h.x2 >= columns[c + 1]
-        );
+    for (let r = 0;r < rows.length - 1; r++) {
+      for (let c = 0;c < columns.length - 1; c++) {
+        const hasRightLine = vLines.some((v) => Math.abs(v.x - columns[c + 1]) < 2 && v.y1 <= rows[r] && v.y2 >= rows[r + 1]);
+        const hasBottomLine = hLines.some((h) => Math.abs(h.y - rows[r + 1]) < 2 && h.x1 <= columns[c] && h.x2 >= columns[c + 1]);
         if (!hasRightLine || !hasBottomLine) {
           table.mergedCells.push({
             row: r,
@@ -5263,12 +5463,7 @@ var CodbDocs = (() => {
     }
     issues.watermarks = pageResults2[0]?.repeatedElements?.watermarks?.length || 0;
     const avgScore = totalScore / pageResults2.length;
-    const ragReadiness = calculateRAGReadiness(
-      pageResults2,
-      null,
-      null,
-      pageResults2[0]?.repeatedElements || {}
-    );
+    const ragReadiness = calculateRAGReadiness(pageResults2, null, null, pageResults2[0]?.repeatedElements || {});
     return {
       score: Math.round(avgScore * 100),
       pageCount: pageResults2.length,
@@ -5317,7 +5512,7 @@ var CodbDocs = (() => {
     }
     if (deduplicate) {
       for (const [pageId, pageData] of Object.entries(ir.pages)) {
-        const seen = /* @__PURE__ */ new Set();
+        const seen = new Set;
         const uniqueContent = [];
         for (const textId of pageData.content || []) {
           const textObj = ir.objects?.[textId];
@@ -5388,27 +5583,30 @@ var CodbDocs = (() => {
     if (contentItems.length > 5) {
       const textDirection = detectTextDirection(contentItems);
       if (textDirection === "vertical") {
-        result.recommendation = "Text appears vertical - page may be rotated 90\xB0";
+        result.recommendation = "Text appears vertical - page may be rotated 90°";
       } else if (textDirection === "upside-down") {
-        result.recommendation = "Text appears upside-down - page may be rotated 180\xB0";
+        result.recommendation = "Text appears upside-down - page may be rotated 180°";
       }
     }
     return result;
   }
   function detectSkewFromText(items) {
-    if (items.length < 5) return { angle: 0, confidence: 0 };
+    if (items.length < 5)
+      return { angle: 0, confidence: 0 };
     const baselines = [];
     for (const item of items) {
-      if (!item.str || item.str.trim().length < 2) continue;
+      if (!item.str || item.str.trim().length < 2)
+        continue;
       const y = item.transform?.[5] || 0;
       const x = item.transform?.[4] || 0;
       baselines.push({ x, y });
     }
-    if (baselines.length < 3) return { angle: 0, confidence: 0 };
+    if (baselines.length < 3)
+      return { angle: 0, confidence: 0 };
     baselines.sort((a, b) => a.x - b.x);
     let totalAngle = 0;
     let count = 0;
-    for (let i = 1; i < baselines.length; i++) {
+    for (let i = 1;i < baselines.length; i++) {
       const dx = baselines[i].x - baselines[i - 1].x;
       const dy = baselines[i].y - baselines[i - 1].y;
       if (Math.abs(dx) > 10) {
@@ -5424,7 +5622,8 @@ var CodbDocs = (() => {
     return { angle: avgAngle, confidence };
   }
   function detectTextDirection(items) {
-    if (items.length < 3) return "horizontal";
+    if (items.length < 3)
+      return "horizontal";
     const sortedByY = [...items].sort((a, b) => (b.transform?.[5] || 0) - (a.transform?.[5] || 0));
     const yVariance = calculateVariance(sortedByY.map((i) => i.transform?.[5] || 0));
     const xVariance = calculateVariance(sortedByY.map((i) => i.transform?.[4] || 0));
@@ -5432,7 +5631,7 @@ var CodbDocs = (() => {
       return "vertical";
     }
     let upsideDownCount = 0;
-    for (let i = 1; i < items.length; i++) {
+    for (let i = 1;i < items.length; i++) {
       const prev = items[i - 1];
       const curr = items[i];
       if ((curr.transform?.[4] || 0) > (prev.transform?.[4] || 0) && (curr.transform?.[5] || 0) < (prev.transform?.[5] || 0)) {
@@ -5445,7 +5644,8 @@ var CodbDocs = (() => {
     return "horizontal";
   }
   function calculateVariance(arr) {
-    if (arr.length === 0) return 0;
+    if (arr.length === 0)
+      return 0;
     const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
     return arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length;
   }
@@ -5522,7 +5722,8 @@ var CodbDocs = (() => {
     const fontGroups = {};
     for (const item of items) {
       const font = item.fontName || "unknown";
-      if (!fontGroups[font]) fontGroups[font] = [];
+      if (!fontGroups[font])
+        fontGroups[font] = [];
       fontGroups[font].push(item);
     }
     for (const [font, fontItems] of Object.entries(fontGroups)) {
@@ -5568,10 +5769,14 @@ var CodbDocs = (() => {
   function calculateBBox(points) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const pt of points) {
-      if (pt.x < minX) minX = pt.x;
-      if (pt.y < minY) minY = pt.y;
-      if (pt.x > maxX) maxX = pt.x;
-      if (pt.y > maxY) maxY = pt.y;
+      if (pt.x < minX)
+        minX = pt.x;
+      if (pt.y < minY)
+        minY = pt.y;
+      if (pt.x > maxX)
+        maxX = pt.x;
+      if (pt.y > maxY)
+        maxY = pt.y;
     }
     return [minX, minY, maxX, maxY];
   }
@@ -5697,7 +5902,8 @@ var CodbDocs = (() => {
     };
   }
   function isCircularPath(points) {
-    if (!points || points.length < 8) return false;
+    if (!points || points.length < 8)
+      return false;
     const bbox = calculateBBox(points);
     const width = bbox[2] - bbox[0];
     const height = bbox[3] - bbox[1];
@@ -5706,9 +5912,7 @@ var CodbDocs = (() => {
   function detectCheckmarkInArea(areaBbox, vectors) {
     for (const vec of vectors) {
       if (vec.type === "path" && vec.points) {
-        const pointCount = vec.points.filter(
-          (pt) => pt.x >= areaBbox[0] && pt.x <= areaBbox[2] && pt.y >= areaBbox[1] && pt.y <= areaBbox[3]
-        ).length;
+        const pointCount = vec.points.filter((pt) => pt.x >= areaBbox[0] && pt.x <= areaBbox[2] && pt.y >= areaBbox[1] && pt.y <= areaBbox[3]).length;
         if (pointCount > vec.points.length * 0.3) {
           return true;
         }
@@ -5723,7 +5927,8 @@ var CodbDocs = (() => {
       if (pageData.reconstructedTable && pageData.reconstructedTable.cells.length > 0) {
         const table = pageData.reconstructedTable;
         const key = `${table.columns.length}_${table.rows.length}`;
-        if (!tablePages[key]) tablePages[key] = [];
+        if (!tablePages[key])
+          tablePages[key] = [];
         tablePages[key].push({
           pageId,
           table,
@@ -5731,13 +5936,14 @@ var CodbDocs = (() => {
         });
       }
     }
-    for (const [key, pages2] of Object.entries(tablePages)) {
-      if (pages2.length < 2) continue;
-      pages2.sort((a, b) => a.pageNum - b.pageNum);
-      let currentSequence = [pages2[0]];
-      for (let i = 1; i < pages2.length; i++) {
-        if (pages2[i].pageNum === currentSequence[currentSequence.length - 1].pageNum + 1) {
-          currentSequence.push(pages2[i]);
+    for (const [key, pages] of Object.entries(tablePages)) {
+      if (pages.length < 2)
+        continue;
+      pages.sort((a, b) => a.pageNum - b.pageNum);
+      let currentSequence = [pages[0]];
+      for (let i = 1;i < pages.length; i++) {
+        if (pages[i].pageNum === currentSequence[currentSequence.length - 1].pageNum + 1) {
+          currentSequence.push(pages[i]);
         } else {
           if (currentSequence.length >= 2) {
             crossPageTables.push({
@@ -5748,7 +5954,7 @@ var CodbDocs = (() => {
               type: "cross_page_table"
             });
           }
-          currentSequence = [pages2[i]];
+          currentSequence = [pages[i]];
         }
       }
       if (currentSequence.length >= 2) {
@@ -5852,22 +6058,22 @@ var CodbDocs = (() => {
       fr: { words: ["le", "la", "de", "et", "est", "en", "les", "des", "un", "une"], weight: 1 },
       de: { words: ["der", "die", "und", "ist", "von", "den", "das", "ein", "eine", "auf"], weight: 1 },
       pt: { words: ["o", "a", "de", "e", "em", "os", "as", "um", "uma", "que"], weight: 1 },
-      it: { words: ["il", "la", "di", "che", "\xE8", "in", "le", "del", "un", "una"], weight: 1 },
+      it: { words: ["il", "la", "di", "che", "è", "in", "le", "del", "un", "una"], weight: 1 },
       nl: { words: ["de", "het", "een", "van", "en", "is", "dat", "op", "te", "voor"], weight: 1 },
-      ru: { words: ["\u0438", "\u0432", "\u043D\u0435", "\u043D\u0430", "\u0447\u0442\u043E", "\u043E\u043D", "\u043A\u0430\u043A", "\u044D\u0442\u043E", "\u043F\u043E", "\u043D\u043E"], weight: 0.8 },
-      zh: { words: ["\u7684", "\u662F", "\u5728", "\u4E86", "\u4E0D", "\u6709", "\u548C", "\u5C31", "\u4EBA", "\u90FD"], weight: 0.8 },
-      ja: { words: ["\u306E", "\u306B", "\u306F", "\u3092", "\u305F", "\u304C", "\u3067", "\u3066", "\u3068", "\u3057"], weight: 0.8 }
+      ru: { words: ["и", "в", "не", "на", "что", "он", "как", "это", "по", "но"], weight: 0.8 },
+      zh: { words: ["的", "是", "在", "了", "不", "有", "和", "就", "人", "都"], weight: 0.8 },
+      ja: { words: ["の", "に", "は", "を", "た", "が", "で", "て", "と", "し"], weight: 0.8 }
     };
     const words = allText.toLowerCase().split(/\s+/);
     const scores = {};
-    for (const [lang, config2] of Object.entries(languages)) {
+    for (const [lang, config] of Object.entries(languages)) {
       let count = 0;
       for (const word of words) {
-        if (config2.words.includes(word)) {
+        if (config.words.includes(word)) {
           count++;
         }
       }
-      scores[lang] = count / words.length * config2.weight;
+      scores[lang] = count / words.length * config.weight;
     }
     let bestLang = "unknown";
     let bestScore = 0;
@@ -6007,13 +6213,16 @@ var CodbDocs = (() => {
     ["ed", ""]
   ];
   function stem(word) {
-    if (!word || word.length < 4) return word;
+    if (!word || word.length < 4)
+      return word;
     const lower = word.toLowerCase();
-    if (lower.length <= 3) return lower;
+    if (lower.length <= 3)
+      return lower;
     for (const [suffix, replacement] of SUFFIX_RULES) {
       if (lower.endsWith(suffix) && lower.length - suffix.length >= 3) {
         const root = lower.slice(0, -suffix.length) + replacement;
-        if (root.length >= 3) return root;
+        if (root.length >= 3)
+          return root;
       }
     }
     return lower;
@@ -6021,7 +6230,7 @@ var CodbDocs = (() => {
   function charNGrams(str, n = 3) {
     const grams = [];
     const lower = str.toLowerCase().replace(/\s+/g, " ");
-    for (let i = 0; i <= lower.length - n; i++) {
+    for (let i = 0;i <= lower.length - n; i++) {
       grams.push(lower.substring(i, i + n));
     }
     return grams;
@@ -6029,25 +6238,25 @@ var CodbDocs = (() => {
   function wordNGrams(text, n = 2) {
     const words = text.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
     const grams = [];
-    for (let i = 0; i <= words.length - n; i++) {
+    for (let i = 0;i <= words.length - n; i++) {
       grams.push(words.slice(i, i + n).join(" "));
     }
     return grams;
   }
   function levenshtein(a, b) {
-    if (a.length === 0) return b.length;
-    if (b.length === 0) return a.length;
+    if (a.length === 0)
+      return b.length;
+    if (b.length === 0)
+      return a.length;
     const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
-    for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
-    for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
-    for (let i = 1; i <= a.length; i++) {
-      for (let j = 1; j <= b.length; j++) {
+    for (let i = 0;i <= a.length; i++)
+      matrix[i][0] = i;
+    for (let j = 0;j <= b.length; j++)
+      matrix[0][j] = j;
+    for (let i = 1;i <= a.length; i++) {
+      for (let j = 1;j <= b.length; j++) {
         const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j - 1] + cost
-        );
+        matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
       }
     }
     return matrix[a.length][b.length];
@@ -6055,10 +6264,13 @@ var CodbDocs = (() => {
   function fuzzyScore(a, b) {
     const al = a.toLowerCase().trim();
     const bl = b.toLowerCase().trim();
-    if (al === bl) return 1;
-    if (al.includes(bl) || bl.includes(al)) return 0.85;
+    if (al === bl)
+      return 1;
+    if (al.includes(bl) || bl.includes(al))
+      return 0.85;
     const maxLen = Math.max(al.length, bl.length);
-    if (maxLen === 0) return 0;
+    if (maxLen === 0)
+      return 0;
     const dist = levenshtein(al, bl);
     return Math.max(0, 1 - dist / maxLen);
   }
@@ -6083,9 +6295,10 @@ var CodbDocs = (() => {
       documentTerms = null
     } = options;
     const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
-    const expanded = /* @__PURE__ */ new Map();
+    const expanded = new Map;
     function addTerm(term, weight, source) {
-      if (!term || term.length < 2) return;
+      if (!term || term.length < 2)
+        return;
       const existing = expanded.get(term);
       if (existing) {
         existing.weight = Math.max(existing.weight, weight);
@@ -6115,7 +6328,8 @@ var CodbDocs = (() => {
           if (queryLower.includes(syn)) {
             addTerm(concept, 0.6, `concept:${syn}`);
             for (const otherSyn of synonyms) {
-              if (otherSyn !== syn) addTerm(otherSyn, 0.4, `concept:${syn}`);
+              if (otherSyn !== syn)
+                addTerm(otherSyn, 0.4, `concept:${syn}`);
             }
           }
         }
@@ -6124,7 +6338,8 @@ var CodbDocs = (() => {
     if (includeStems) {
       for (const term of terms) {
         const s = stem(term);
-        if (s !== term) addTerm(s, 0.5, "stem");
+        if (s !== term)
+          addTerm(s, 0.5, "stem");
       }
     }
     if (includeNGrams) {
@@ -6156,7 +6371,7 @@ var CodbDocs = (() => {
   }
   function findSynonyms(term) {
     const lower = term.toLowerCase();
-    const synonyms = /* @__PURE__ */ new Set();
+    const synonyms = new Set;
     if (CONCEPT_SYNONYMS[lower]) {
       for (const syn of CONCEPT_SYNONYMS[lower]) {
         synonyms.add(syn);
@@ -6166,7 +6381,8 @@ var CodbDocs = (() => {
       if (syns.includes(lower)) {
         synonyms.add(concept);
         for (const syn of syns) {
-          if (syn !== lower) synonyms.add(syn);
+          if (syn !== lower)
+            synonyms.add(syn);
         }
       }
     }
@@ -6218,11 +6434,11 @@ var CodbDocs = (() => {
     }
     return definitions;
   }
-  function learnTerminology2(pages2) {
-    const aliases = /* @__PURE__ */ new Map();
-    const acronymMap = /* @__PURE__ */ new Map();
-    const definitionMap = /* @__PURE__ */ new Map();
-    for (const page of pages2) {
+  function learnTerminology2(pages) {
+    const aliases = new Map;
+    const acronymMap = new Map;
+    const definitionMap = new Map;
+    for (const page of pages) {
       const text = page.text || "";
       const acronyms = detectAcronyms(text);
       for (const acr of acronyms) {
@@ -6234,12 +6450,12 @@ var CodbDocs = (() => {
         definitionMap.set(def.term.toLowerCase(), def.context);
       }
     }
-    const phraseFreq = /* @__PURE__ */ new Map();
-    for (const page of pages2) {
+    const phraseFreq = new Map;
+    for (const page of pages) {
       const text = (page.text || "").toLowerCase();
       const words = text.split(/\s+/).filter((w) => w.length > 2);
-      for (let len = 2; len <= 4; len++) {
-        for (let i = 0; i <= words.length - len; i++) {
+      for (let len = 2;len <= 4; len++) {
+        for (let i = 0;i <= words.length - len; i++) {
           const phrase = words.slice(i, i + len).join(" ");
           if (!/^\d+$/.test(phrase)) {
             phraseFreq.set(phrase, (phraseFreq.get(phrase) || 0) + 1);
@@ -6248,8 +6464,8 @@ var CodbDocs = (() => {
       }
     }
     const frequentPhrases = Array.from(phraseFreq.entries()).filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, 200);
-    for (let i = 0; i < frequentPhrases.length; i++) {
-      for (let j = i + 1; j < frequentPhrases.length; j++) {
+    for (let i = 0;i < frequentPhrases.length; i++) {
+      for (let j = i + 1;j < frequentPhrases.length; j++) {
         const [phrase1] = frequentPhrases[i];
         const [phrase2] = frequentPhrases[j];
         if (phrase1.includes(phrase2) || phrase2.includes(phrase1)) {
@@ -6262,28 +6478,26 @@ var CodbDocs = (() => {
       }
     }
     return {
-      aliases: Object.fromEntries(
-        Array.from(aliases.entries()).map(([k, v]) => [k, Array.from(v)])
-      ),
+      aliases: Object.fromEntries(Array.from(aliases.entries()).map(([k, v]) => [k, Array.from(v)])),
       acronyms: Object.fromEntries(acronymMap),
       definitions: Object.fromEntries(definitionMap)
     };
   }
   function addAlias(aliases, canonical, alias) {
     if (!aliases.has(canonical)) {
-      aliases.set(canonical, /* @__PURE__ */ new Set());
+      aliases.set(canonical, new Set);
     }
     aliases.get(canonical).add(alias);
     if (!aliases.has(alias)) {
-      aliases.set(alias, /* @__PURE__ */ new Set());
+      aliases.set(alias, new Set);
     }
     aliases.get(alias).add(canonical);
   }
-  function fuzzySearch(query, pages2, options = {}) {
+  function fuzzySearch(query, pages, options = {}) {
     const { threshold = 0.6, maxResults = 10 } = options;
     const results = [];
     const queryLower = query.toLowerCase().trim();
-    for (const page of pages2) {
+    for (const page of pages) {
       const text = page.text || "";
       const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 5);
       for (const sentence of sentences) {
@@ -6304,7 +6518,7 @@ var CodbDocs = (() => {
   }
 
   // src/concepts.js
-  var ConceptNode = class {
+  class ConceptNode {
     constructor(id, type, text, options = {}) {
       this.id = id;
       this.type = type;
@@ -6315,8 +6529,9 @@ var CodbDocs = (() => {
       this.metadata = options.metadata || {};
       this.occurrences = options.occurrences || [];
     }
-  };
-  var ConceptEdge = class {
+  }
+
+  class ConceptEdge {
     constructor(sourceId, targetId, relation, options = {}) {
       this.sourceId = sourceId;
       this.targetId = targetId;
@@ -6326,29 +6541,30 @@ var CodbDocs = (() => {
       this.evidence = options.evidence || [];
       this.predicate = options.predicate || null;
     }
-  };
-  var ConceptGraph = class {
+  }
+
+  class ConceptGraph {
     constructor() {
-      this.nodes = /* @__PURE__ */ new Map();
-      this.edges = /* @__PURE__ */ new Map();
-      this.adjacency = /* @__PURE__ */ new Map();
-      this.pageIndex = /* @__PURE__ */ new Map();
-      this.typeIndex = /* @__PURE__ */ new Map();
-      this.textIndex = /* @__PURE__ */ new Map();
+      this.nodes = new Map;
+      this.edges = new Map;
+      this.adjacency = new Map;
+      this.pageIndex = new Map;
+      this.typeIndex = new Map;
+      this.textIndex = new Map;
     }
     addNode(node) {
       this.nodes.set(node.id, node);
       if (!this.typeIndex.has(node.type)) {
-        this.typeIndex.set(node.type, /* @__PURE__ */ new Set());
+        this.typeIndex.set(node.type, new Set);
       }
       this.typeIndex.get(node.type).add(node.id);
       if (!this.pageIndex.has(node.page)) {
-        this.pageIndex.set(node.page, /* @__PURE__ */ new Set());
+        this.pageIndex.set(node.page, new Set);
       }
       this.pageIndex.get(node.page).add(node.id);
       const normText = node.text.toLowerCase().trim();
       if (!this.textIndex.has(normText)) {
-        this.textIndex.set(normText, /* @__PURE__ */ new Set());
+        this.textIndex.set(normText, new Set);
       }
       this.textIndex.get(normText).add(node.id);
       return node;
@@ -6358,16 +6574,16 @@ var CodbDocs = (() => {
       if (this.edges.has(edgeKey)) {
         const existing = this.edges.get(edgeKey);
         existing.weight += edge.weight;
-        existing.pages = [.../* @__PURE__ */ new Set([...existing.pages, ...edge.pages])];
+        existing.pages = [...new Set([...existing.pages, ...edge.pages])];
         existing.evidence = [...existing.evidence, ...edge.evidence];
         return existing;
       }
       this.edges.set(edgeKey, edge);
       if (!this.adjacency.has(edge.sourceId)) {
-        this.adjacency.set(edge.sourceId, /* @__PURE__ */ new Set());
+        this.adjacency.set(edge.sourceId, new Set);
       }
       if (!this.adjacency.has(edge.targetId)) {
-        this.adjacency.set(edge.targetId, /* @__PURE__ */ new Set());
+        this.adjacency.set(edge.targetId, new Set);
       }
       this.adjacency.get(edge.sourceId).add(edgeKey);
       this.adjacency.get(edge.targetId).add(edgeKey);
@@ -6377,15 +6593,17 @@ var CodbDocs = (() => {
       return this.nodes.get(id) || null;
     }
     getNeighbors(nodeId, maxDepth = 1) {
-      const visited = /* @__PURE__ */ new Set();
+      const visited = new Set;
       const result = [];
       const traverse = (currentId, depth) => {
-        if (depth > maxDepth || visited.has(currentId)) return;
+        if (depth > maxDepth || visited.has(currentId))
+          return;
         visited.add(currentId);
-        const edgeKeys = this.adjacency.get(currentId) || /* @__PURE__ */ new Set();
+        const edgeKeys = this.adjacency.get(currentId) || new Set;
         for (const edgeKey of edgeKeys) {
           const edge = this.edges.get(edgeKey);
-          if (!edge) continue;
+          if (!edge)
+            continue;
           const neighborId = edge.sourceId === currentId ? edge.targetId : edge.sourceId;
           if (!visited.has(neighborId)) {
             const neighbor = this.nodes.get(neighborId);
@@ -6404,36 +6622,36 @@ var CodbDocs = (() => {
       return result;
     }
     findByType(type) {
-      const nodeIds = this.typeIndex.get(type) || /* @__PURE__ */ new Set();
+      const nodeIds = this.typeIndex.get(type) || new Set;
       return [...nodeIds].map((id) => this.nodes.get(id)).filter(Boolean);
     }
     findByText(text) {
       const normText = text.toLowerCase().trim();
-      const nodeIds = this.textIndex.get(normText) || /* @__PURE__ */ new Set();
+      const nodeIds = this.textIndex.get(normText) || new Set;
       return [...nodeIds].map((id) => this.nodes.get(id)).filter(Boolean);
     }
     findByPage(page) {
-      const nodeIds = this.pageIndex.get(page) || /* @__PURE__ */ new Set();
+      const nodeIds = this.pageIndex.get(page) || new Set;
       return [...nodeIds].map((id) => this.nodes.get(id)).filter(Boolean);
     }
-    /**
-     * Find the shortest path between two concepts.
-     */
     findPath(sourceId, targetId, maxDepth = 5) {
-      const visited = /* @__PURE__ */ new Map();
+      const visited = new Map;
       const queue = [{ id: sourceId, path: [] }];
       while (queue.length > 0) {
         const { id, path } = queue.shift();
-        if (visited.has(id)) continue;
+        if (visited.has(id))
+          continue;
         visited.set(id, path);
         if (id === targetId) {
           return path.map((edgeKey) => this.edges.get(edgeKey)).filter(Boolean);
         }
-        if (path.length >= maxDepth) continue;
-        const edgeKeys = this.adjacency.get(id) || /* @__PURE__ */ new Set();
+        if (path.length >= maxDepth)
+          continue;
+        const edgeKeys = this.adjacency.get(id) || new Set;
         for (const edgeKey of edgeKeys) {
           const edge = this.edges.get(edgeKey);
-          if (!edge) continue;
+          if (!edge)
+            continue;
           const neighborId = edge.sourceId === id ? edge.targetId : edge.sourceId;
           if (!visited.has(neighborId)) {
             queue.push({ id: neighborId, path: [...path, edgeKey] });
@@ -6442,16 +6660,10 @@ var CodbDocs = (() => {
       }
       return null;
     }
-    /**
-     * Get all relationships involving a concept.
-     */
     getRelationships(nodeId) {
-      const edgeKeys = this.adjacency.get(nodeId) || /* @__PURE__ */ new Set();
+      const edgeKeys = this.adjacency.get(nodeId) || new Set;
       return [...edgeKeys].map((key) => this.edges.get(key)).filter(Boolean);
     }
-    /**
-     * Get the most connected concepts (hub nodes).
-     */
     getHubs(limit = 10) {
       const degrees = [];
       for (const [nodeId, edgeKeys] of this.adjacency) {
@@ -6462,31 +6674,34 @@ var CodbDocs = (() => {
       }
       return degrees.sort((a, b) => b.degree - a.degree).slice(0, limit).filter((d) => d.node);
     }
-    /**
-     * Get community clusters (connected components by type).
-     */
     getCommunities() {
-      const visited = /* @__PURE__ */ new Set();
+      const visited = new Set;
       const communities = [];
       for (const [nodeId] of this.nodes) {
-        if (visited.has(nodeId)) continue;
+        if (visited.has(nodeId))
+          continue;
         const community = [];
         const queue = [nodeId];
         while (queue.length > 0) {
           const currentId = queue.shift();
-          if (visited.has(currentId)) continue;
+          if (visited.has(currentId))
+            continue;
           visited.add(currentId);
           const node = this.nodes.get(currentId);
-          if (node) community.push(node);
-          const edgeKeys = this.adjacency.get(currentId) || /* @__PURE__ */ new Set();
+          if (node)
+            community.push(node);
+          const edgeKeys = this.adjacency.get(currentId) || new Set;
           for (const edgeKey of edgeKeys) {
             const edge = this.edges.get(edgeKey);
-            if (!edge) continue;
+            if (!edge)
+              continue;
             const neighborId = edge.sourceId === currentId ? edge.targetId : edge.sourceId;
-            if (!visited.has(neighborId)) queue.push(neighborId);
+            if (!visited.has(neighborId))
+              queue.push(neighborId);
           }
         }
-        if (community.length > 0) communities.push(community);
+        if (community.length > 0)
+          communities.push(community);
       }
       return communities;
     }
@@ -6497,16 +6712,14 @@ var CodbDocs = (() => {
         stats: {
           nodeCount: this.nodes.size,
           edgeCount: this.edges.size,
-          typeCounts: Object.fromEntries(
-            [...this.typeIndex.entries()].map(([type, ids]) => [type, ids.size])
-          )
+          typeCounts: Object.fromEntries([...this.typeIndex.entries()].map(([type, ids]) => [type, ids.size]))
         }
       };
     }
-  };
+  }
   function extractRelationships(contentGraph, conceptGraph) {
     const relationships = [];
-    const pageEntityMap = /* @__PURE__ */ new Map();
+    const pageEntityMap = new Map;
     for (const entity of contentGraph.allEntities) {
       if (!pageEntityMap.has(entity.page)) {
         pageEntityMap.set(entity.page, []);
@@ -6514,35 +6727,26 @@ var CodbDocs = (() => {
       pageEntityMap.get(entity.page).push(entity);
     }
     for (const [page, entities] of pageEntityMap) {
-      for (let i = 0; i < entities.length; i++) {
-        for (let j = i + 1; j < entities.length; j++) {
+      for (let i = 0;i < entities.length; i++) {
+        for (let j = i + 1;j < entities.length; j++) {
           const e1 = entities[i];
           const e2 = entities[j];
-          if (e1.type === e2.type) continue;
+          if (e1.type === e2.type)
+            continue;
           const predicate = inferPredicate(e1, e2);
           if (predicate) {
             const sourceId = `${e1.type}:${e1.value}`;
             const targetId = `${e2.type}:${e2.value}`;
-            const node1 = conceptGraph.addNode(new ConceptNode(
-              sourceId,
-              e1.type,
-              e1.value,
-              {
-                page,
-                bbox: e1.bbox,
-                weight: e1.confidence || 0.5
-              }
-            ));
-            const node2 = conceptGraph.addNode(new ConceptNode(
-              targetId,
-              e2.type,
-              e2.value,
-              {
-                page,
-                bbox: e2.bbox,
-                weight: e2.confidence || 0.5
-              }
-            ));
+            const node1 = conceptGraph.addNode(new ConceptNode(sourceId, e1.type, e1.value, {
+              page,
+              bbox: e1.bbox,
+              weight: e1.confidence || 0.5
+            }));
+            const node2 = conceptGraph.addNode(new ConceptNode(targetId, e2.type, e2.value, {
+              page,
+              bbox: e2.bbox,
+              weight: e2.confidence || 0.5
+            }));
             conceptGraph.addEdge(new ConceptEdge(sourceId, targetId, predicate, {
               weight: 1,
               pages: [page],
@@ -6560,21 +6764,18 @@ var CodbDocs = (() => {
       }
     }
     for (const block of contentGraph.allBlocks) {
-      if (!block.bbox) continue;
+      if (!block.bbox)
+        continue;
       for (const entity of contentGraph.allEntities) {
-        if (!entity.bbox) continue;
+        if (!entity.bbox)
+          continue;
         if (areBboxesNear2(block.bbox, entity.bbox, 80)) {
           const blockId = `block:${block.type}:${block.page}`;
           const entityId = `${entity.type}:${entity.value}`;
-          conceptGraph.addNode(new ConceptNode(
-            blockId,
-            block.type,
-            (block.text || "").substring(0, 100),
-            {
-              page: block.page,
-              bbox: block.bbox
-            }
-          ));
+          conceptGraph.addNode(new ConceptNode(blockId, block.type, (block.text || "").substring(0, 100), {
+            page: block.page,
+            bbox: block.bbox
+          }));
           conceptGraph.addEdge(new ConceptEdge(blockId, entityId, "contains", {
             weight: 0.8,
             pages: [block.page],
@@ -6585,17 +6786,17 @@ var CodbDocs = (() => {
       }
     }
     for (const block of contentGraph.allBlocks) {
-      if (block.type !== "table" || !block.bbox) continue;
-      const tableEntities = contentGraph.allEntities.filter(
-        (e) => e.bbox && areBboxesNear2(block.bbox, e.bbox, 150)
-      );
+      if (block.type !== "table" || !block.bbox)
+        continue;
+      const tableEntities = contentGraph.allEntities.filter((e) => e.bbox && areBboxesNear2(block.bbox, e.bbox, 150));
       const rows = groupEntitiesByRow(tableEntities);
       for (const row of rows) {
-        for (let i = 0; i < row.length; i++) {
-          for (let j = i + 1; j < row.length; j++) {
+        for (let i = 0;i < row.length; i++) {
+          for (let j = i + 1;j < row.length; j++) {
             const e1 = row[i];
             const e2 = row[j];
-            if (e1.type === e2.type) continue;
+            if (e1.type === e2.type)
+              continue;
             const predicate = inferPredicate(e1, e2) || "same_row";
             const sourceId = `${e1.type}:${e1.value}`;
             const targetId = `${e2.type}:${e2.value}`;
@@ -6627,14 +6828,16 @@ var CodbDocs = (() => {
       }
     }
     for (const block of contentGraph.allBlocks) {
-      if (!block.text || !block.bbox) continue;
+      if (!block.text || !block.bbox)
+        continue;
       const text = block.text;
       const colonMatch = text.match(/^([A-Z][A-Za-z\s]{2,40}):\s*(.+)$/m);
       if (colonMatch) {
         const label = colonMatch[1].trim();
         const value = colonMatch[2].trim();
         for (const entity of contentGraph.allEntities) {
-          if (!entity.bbox) continue;
+          if (!entity.bbox)
+            continue;
           if (value.toLowerCase().includes((entity.value || "").toLowerCase()) || (entity.value || "").toLowerCase().includes(value.toLowerCase().substring(0, 20))) {
             if (areBboxesNear2(block.bbox, entity.bbox, 100)) {
               const labelId = `label:${label}:${block.page}`;
@@ -6661,16 +6864,17 @@ var CodbDocs = (() => {
         }
       }
     }
-    const headingsByPage = /* @__PURE__ */ new Map();
+    const headingsByPage = new Map;
     for (const block of contentGraph.allBlocks) {
       if (block.type === "heading" && block.bbox) {
-        if (!headingsByPage.has(block.page)) headingsByPage.set(block.page, []);
+        if (!headingsByPage.has(block.page))
+          headingsByPage.set(block.page, []);
         headingsByPage.get(block.page).push(block);
       }
     }
     for (const [page, pageHeadings] of headingsByPage) {
       pageHeadings.sort((a, b) => (a.bbox?.[1] || 0) - (b.bbox?.[1] || 0));
-      for (let i = 0; i < pageHeadings.length; i++) {
+      for (let i = 0;i < pageHeadings.length; i++) {
         const heading = pageHeadings[i];
         const headingId = `heading:${heading.text?.substring(0, 50)}:${page}`;
         conceptGraph.addNode(new ConceptNode(headingId, "heading", heading.text || "", {
@@ -6698,11 +6902,12 @@ var CodbDocs = (() => {
         }
       }
     }
-    const __pages = (contentGraph && contentGraph.pages || []).map((p) => ({
+    const definitionPages = (contentGraph?.pages || []).map((p) => ({
       pageNum: p.page,
-      text: (p.blocks || []).map((b) => b.text || "").join("\n")
+      text: (p.blocks || []).map((b) => b.text || "").join(`
+`)
     }));
-    for (const page of __pages) {
+    for (const page of definitionPages) {
       const text = page.text || "";
       const acronyms = detectAcronyms(text);
       for (const acr of acronyms) {
@@ -6725,7 +6930,7 @@ var CodbDocs = (() => {
         });
       }
     }
-    const globalEntities = /* @__PURE__ */ new Map();
+    const globalEntities = new Map;
     for (const entity of contentGraph.allEntities) {
       const key = `${entity.type}:${(entity.value || "").toLowerCase()}`;
       if (globalEntities.has(key)) {
@@ -6741,16 +6946,11 @@ var CodbDocs = (() => {
     for (const [key, data] of globalEntities) {
       if (data.pages.length > 1) {
         const nodeId = `${data.type}:${data.value}`;
-        conceptGraph.addNode(new ConceptNode(
-          nodeId,
-          data.type,
-          data.value,
-          {
-            page: data.pages[0],
-            weight: data.pages.length,
-            occurrences: data.pages.map((p) => ({ page: p }))
-          }
-        ));
+        conceptGraph.addNode(new ConceptNode(nodeId, data.type, data.value, {
+          page: data.pages[0],
+          weight: data.pages.length,
+          occurrences: data.pages.map((p) => ({ page: p }))
+        }));
       }
     }
     return relationships;
@@ -6758,26 +6958,41 @@ var CodbDocs = (() => {
   function inferPredicate(e1, e2) {
     const t1 = e1.type;
     const t2 = e2.type;
-    if (t1 === "person" && t2 === "organization") return "affiliated_with";
-    if (t1 === "organization" && t2 === "person") return "employs";
-    if (t1 === "person" && t2 === "date") return "associated_with_date";
-    if (t1 === "date" && t2 === "person") return "date_of";
-    if (t1 === "currency" && t2 === "person") return "payment_to";
-    if (t1 === "currency" && t2 === "organization") return "payment_from";
-    if (t1 === "person" && t2 === "currency") return "receives";
-    if (t1 === "organization" && t2 === "currency") return "charges";
-    if (t1 === "address" && t2 === "person") return "residence_of";
-    if (t1 === "address" && t2 === "organization") return "headquarters_of";
-    if (t1 === "person" && t2 === "address") return "lives_at";
-    if (t1 === "organization" && t2 === "address") return "located_at";
-    if (t1 === "ordinance_number" && t2 === "date") return "enacted_on";
-    if (t1 === "resolution_number" && t2 === "date") return "passed_on";
+    if (t1 === "person" && t2 === "organization")
+      return "affiliated_with";
+    if (t1 === "organization" && t2 === "person")
+      return "employs";
+    if (t1 === "person" && t2 === "date")
+      return "associated_with_date";
+    if (t1 === "date" && t2 === "person")
+      return "date_of";
+    if (t1 === "currency" && t2 === "person")
+      return "payment_to";
+    if (t1 === "currency" && t2 === "organization")
+      return "payment_from";
+    if (t1 === "person" && t2 === "currency")
+      return "receives";
+    if (t1 === "organization" && t2 === "currency")
+      return "charges";
+    if (t1 === "address" && t2 === "person")
+      return "residence_of";
+    if (t1 === "address" && t2 === "organization")
+      return "headquarters_of";
+    if (t1 === "person" && t2 === "address")
+      return "lives_at";
+    if (t1 === "organization" && t2 === "address")
+      return "located_at";
+    if (t1 === "ordinance_number" && t2 === "date")
+      return "enacted_on";
+    if (t1 === "resolution_number" && t2 === "date")
+      return "passed_on";
     return "associated_with";
   }
-  var CodbFingerprint = class _CodbFingerprint {
+
+  class CodbFingerprint {
     constructor() {
       this.toc = [];
-      this.entityRegistry = /* @__PURE__ */ new Map();
+      this.entityRegistry = new Map;
       this.layoutSignature = {
         columnCounts: [],
         pageTypes: {},
@@ -6793,11 +7008,8 @@ var CodbDocs = (() => {
       this.relationshipSignature = {};
       this.metadata = {};
     }
-    /**
-     * Build fingerprint from a DocumentGraph.
-     */
     static fromGraph(graph, ir) {
-      const fp = new _CodbFingerprint();
+      const fp = new CodbFingerprint;
       fp.toc = (graph.layout?.getAllHeadings() || []).map((h) => ({
         text: h.text,
         level: h.level,
@@ -6852,10 +7064,6 @@ var CodbDocs = (() => {
       };
       return fp;
     }
-    /**
-     * Calculate similarity between two fingerprints.
-     * Returns 0.0 to 1.0.
-     */
     static similarity(fp1, fp2) {
       let score = 0;
       let weights = 0;
@@ -6891,7 +7099,7 @@ var CodbDocs = (() => {
         metadata: this.metadata
       };
     }
-  };
+  }
   function bm25Score(query, document2, avgDocLength, k1 = 1.5, b = 0.75) {
     const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
     const docTerms = document2.toLowerCase().split(/\s+/);
@@ -6903,7 +7111,8 @@ var CodbDocs = (() => {
     let score = 0;
     for (const term of queryTerms) {
       const termFreq = tf[term] || 0;
-      if (termFreq === 0) continue;
+      if (termFreq === 0)
+        continue;
       const numerator = termFreq * (k1 + 1);
       const denominator = termFreq + k1 * (1 - b + b * docLength / avgDocLength);
       score += numerator / denominator;
@@ -6968,18 +7177,19 @@ var CodbDocs = (() => {
     const contentGraph = graph._contentGraph;
     const fingerprint = graph._fingerprint;
     const conceptGr = graph._conceptGraph;
-    const pages2 = graph.text?.pages || [];
-    const avgDocLength = pages2.reduce((s, p) => s + (p.text?.length || 0), 0) / (pages2.length || 1);
+    const pages = graph.text?.pages || [];
+    const avgDocLength = pages.reduce((s, p) => s + (p.text?.length || 0), 0) / (pages.length || 1);
     const expandedTerms = useExpansion ? expandQuery(query, { includeSynonyms: true, includeStems: true }) : [{ term: query.toLowerCase(), weight: 1, sources: ["original"] }];
     const queryLower = query.toLowerCase();
     const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 1);
-    const docVocab = /* @__PURE__ */ new Set();
-    for (const page of pages2) {
+    const docVocab = new Set;
+    for (const page of pages) {
       for (const word of (page.text || "").toLowerCase().split(/\s+/)) {
-        if (word.length > 2) docVocab.add(word);
+        if (word.length > 2)
+          docVocab.add(word);
       }
     }
-    for (const page of pages2) {
+    for (const page of pages) {
       const pageNum = page.pageNum;
       const pageText = page.text || "";
       const pageTextLower = pageText.toLowerCase();
@@ -7001,7 +7211,8 @@ var CodbDocs = (() => {
       }
       signals.concept = 0;
       for (const expanded of expandedTerms) {
-        if (expanded.weight < 0.5) continue;
+        if (expanded.weight < 0.5)
+          continue;
         if (pageTextLower.includes(expanded.term)) {
           signals.concept += expanded.weight;
         }
@@ -7026,7 +7237,8 @@ var CodbDocs = (() => {
         const termPositions = [];
         for (const term of queryTerms) {
           const idx = pageTextLower.indexOf(term);
-          if (idx >= 0) termPositions.push(idx);
+          if (idx >= 0)
+            termPositions.push(idx);
         }
         if (termPositions.length >= 2) {
           const spread = Math.max(...termPositions) - Math.min(...termPositions);
@@ -7043,7 +7255,8 @@ var CodbDocs = (() => {
       if (pageInfo?.classification?.type) {
         const classType = pageInfo.classification.type.toLowerCase();
         for (const term of queryTerms) {
-          if (classType.includes(term)) signals.context += 1;
+          if (classType.includes(term))
+            signals.context += 1;
         }
       }
       const intent = detectIntent(query);
@@ -7090,7 +7303,8 @@ var CodbDocs = (() => {
       spatial: 0.05,
       context: 0.05
     };
-    if (!intent) return defaults;
+    if (!intent)
+      return defaults;
     switch (intent.type) {
       case QueryIntent.ENTITY_SEARCH:
         return { ...defaults, entity: 0.3, exact: 0.2, bm25: 0.1, structure: 0.05 };
@@ -7302,7 +7516,8 @@ var CodbDocs = (() => {
       }
     }
     for (const expanded of expandedTerms) {
-      if (expanded.weight < 0.5) continue;
+      if (expanded.weight < 0.5)
+        continue;
       const lower = expanded.term.toLowerCase();
       if (pageText.toLowerCase().includes(lower)) {
         evidence.push({
@@ -7346,9 +7561,7 @@ var CodbDocs = (() => {
         }
       }
       if (intent.type === QueryIntent.ENTITY_SEARCH && result.entities?.length > 0) {
-        const matchingEntities = result.entities.filter(
-          (e) => e.value?.toLowerCase().includes(queryLower)
-        );
+        const matchingEntities = result.entities.filter((e) => e.value?.toLowerCase().includes(queryLower));
         if (matchingEntities.length > 0) {
           reasons.push({ signal: "exact_entity_match", value: matchingEntities[0].value, contribution: 0.25 });
           explanation.push(`Exact ${intent.entityType || "entity"} match: ${matchingEntities[0].value}`);
@@ -7384,9 +7597,7 @@ var CodbDocs = (() => {
     }
     if (textContains) {
       const lower = textContains.toLowerCase();
-      items = items.filter(
-        (i) => (i.value || "").toLowerCase().includes(lower) || (i.text || "").toLowerCase().includes(lower)
-      );
+      items = items.filter((i) => (i.value || "").toLowerCase().includes(lower) || (i.text || "").toLowerCase().includes(lower));
     }
     return {
       operator: "COUNT",
@@ -7423,7 +7634,8 @@ var CodbDocs = (() => {
   function operatorMax(graph, criteria) {
     const { entityType = "currency", page, filter } = criteria;
     let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
-    if (page) items = items.filter((i) => i.page === page);
+    if (page)
+      items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
         const value = (i.value || "").toLowerCase();
@@ -7450,7 +7662,8 @@ var CodbDocs = (() => {
   function operatorMin(graph, criteria) {
     const { entityType = "currency", page, filter } = criteria;
     let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
-    if (page) items = items.filter((i) => i.page === page);
+    if (page)
+      items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
         const value = (i.value || "").toLowerCase();
@@ -7477,7 +7690,8 @@ var CodbDocs = (() => {
   function operatorAvg(graph, criteria) {
     const { entityType = "currency", page, filter } = criteria;
     let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
-    if (page) items = items.filter((i) => i.page === page);
+    if (page)
+      items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
         const value = (i.value || "").toLowerCase();
@@ -7506,7 +7720,8 @@ var CodbDocs = (() => {
   function operatorBefore(graph, criteria) {
     const { entityType = "date", referenceDate, page } = criteria;
     let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
-    if (page) items = items.filter((i) => i.page <= page);
+    if (page)
+      items = items.filter((i) => i.page <= page);
     if (referenceDate) {
       const refTime = new Date(referenceDate).getTime();
       items = items.filter((i) => {
@@ -7524,7 +7739,8 @@ var CodbDocs = (() => {
   function operatorAfter(graph, criteria) {
     const { entityType = "date", referenceDate, page } = criteria;
     let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
-    if (page) items = items.filter((i) => i.page >= page);
+    if (page)
+      items = items.filter((i) => i.page >= page);
     if (referenceDate) {
       const refTime = new Date(referenceDate).getTime();
       items = items.filter((i) => {
@@ -7542,14 +7758,15 @@ var CodbDocs = (() => {
   function operatorBetween(graph, criteria) {
     const { entityType = "currency", low, high, page } = criteria;
     let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
-    if (page) items = items.filter((i) => i.page === page);
+    if (page)
+      items = items.filter((i) => i.page === page);
     items = items.filter((i) => {
       const numVal = parseFloat((i.value || "").replace(/[$,]/g, ""));
-      if (!isNaN(numVal) && low !== void 0 && high !== void 0) {
+      if (!isNaN(numVal) && low !== undefined && high !== undefined) {
         return numVal >= low && numVal <= high;
       }
       const dateVal = new Date(i.value).getTime();
-      if (!isNaN(dateVal) && low !== void 0 && high !== void 0) {
+      if (!isNaN(dateVal) && low !== undefined && high !== undefined) {
         const lowTime = new Date(low).getTime();
         const highTime = new Date(high).getTime();
         return dateVal >= lowTime && dateVal <= highTime;
@@ -7569,7 +7786,7 @@ var CodbDocs = (() => {
     if (entityType) {
       items = items.filter((i) => i.type === entityType);
     }
-    const groups = /* @__PURE__ */ new Map();
+    const groups = new Map;
     for (const item of items) {
       let key;
       switch (groupBy) {
@@ -7585,7 +7802,8 @@ var CodbDocs = (() => {
         default:
           key = "all";
       }
-      if (!groups.has(key)) groups.set(key, []);
+      if (!groups.has(key))
+        groups.set(key, []);
       groups.get(key).push(item);
     }
     const result = {};
@@ -7608,19 +7826,32 @@ var CodbDocs = (() => {
     const intent = detectIntent(query);
     if (intent.type === QueryIntent.COUNT) {
       const criteria = {};
-      if (/ordinance/i.test(lower)) criteria.entityType = "ordinance_number";
-      else if (/resolution/i.test(lower)) criteria.entityType = "resolution_number";
-      else if (/permit/i.test(lower)) criteria.entityType = "permit_number";
-      else if (/person|people|name/i.test(lower)) criteria.entityType = "person";
-      else if (/organization|department|company/i.test(lower)) criteria.entityType = "organization";
-      else if (/date/i.test(lower)) criteria.entityType = "date";
-      else if (/email/i.test(lower)) criteria.entityType = "email";
-      else if (/phone/i.test(lower)) criteria.entityType = "phone";
-      else if (/address/i.test(lower)) criteria.entityType = "address";
-      else if (/currency|amount|dollar|\$/i.test(lower)) criteria.entityType = "currency";
-      else if (/table/i.test(lower)) criteria.blockType = "table";
-      else if (/form/i.test(lower)) criteria.blockType = "form_field";
-      else if (/heading|section/i.test(lower)) criteria.blockType = "heading";
+      if (/ordinance/i.test(lower))
+        criteria.entityType = "ordinance_number";
+      else if (/resolution/i.test(lower))
+        criteria.entityType = "resolution_number";
+      else if (/permit/i.test(lower))
+        criteria.entityType = "permit_number";
+      else if (/person|people|name/i.test(lower))
+        criteria.entityType = "person";
+      else if (/organization|department|company/i.test(lower))
+        criteria.entityType = "organization";
+      else if (/date/i.test(lower))
+        criteria.entityType = "date";
+      else if (/email/i.test(lower))
+        criteria.entityType = "email";
+      else if (/phone/i.test(lower))
+        criteria.entityType = "phone";
+      else if (/address/i.test(lower))
+        criteria.entityType = "address";
+      else if (/currency|amount|dollar|\$/i.test(lower))
+        criteria.entityType = "currency";
+      else if (/table/i.test(lower))
+        criteria.blockType = "table";
+      else if (/form/i.test(lower))
+        criteria.blockType = "form_field";
+      else if (/heading|section/i.test(lower))
+        criteria.blockType = "heading";
       const result = operatorCount(graph, criteria);
       return {
         answer: `Found ${result.result} ${criteria.entityType || criteria.blockType || "items"}.`,
@@ -7636,7 +7867,8 @@ var CodbDocs = (() => {
     if (intent.type === QueryIntent.AGGREGATION && /total|sum/i.test(lower)) {
       const criteria = { entityType: "currency" };
       const filterWords = lower.replace(/(what is the|total|sum|of|for|in|all)\s*/g, "").trim();
-      if (filterWords.length > 2) criteria.filter = filterWords;
+      if (filterWords.length > 2)
+        criteria.filter = filterWords;
       const result = operatorSum(graph, criteria);
       return {
         answer: result.itemCount > 0 ? `The total is ${result.formattedResult} (from ${result.itemCount} value(s)).` : "No monetary values found matching this query.",
@@ -7648,7 +7880,8 @@ var CodbDocs = (() => {
     if (intent.type === QueryIntent.AGGREGATION && /average|avg|mean/i.test(lower)) {
       const criteria = { entityType: "currency" };
       const filterWords = lower.replace(/(what is the|average|avg|mean|of|for|in|all)\s*/g, "").trim();
-      if (filterWords.length > 2) criteria.filter = filterWords;
+      if (filterWords.length > 2)
+        criteria.filter = filterWords;
       const result = operatorAvg(graph, criteria);
       return {
         answer: result.itemCount > 0 ? `The average is ${result.formattedResult} (from ${result.itemCount} value(s)).` : "No monetary values found matching this query.",
@@ -7680,7 +7913,8 @@ var CodbDocs = (() => {
       const operator = isBefore ? operatorBefore : operatorAfter;
       const dateMatch = lower.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/);
       const criteria = { entityType: "date" };
-      if (dateMatch) criteria.referenceDate = dateMatch[0];
+      if (dateMatch)
+        criteria.referenceDate = dateMatch[0];
       const result = operator(graph, criteria);
       return {
         answer: `Found ${result.result} date(s) ${isBefore ? "before" : "after"} the reference.`,
@@ -7706,11 +7940,15 @@ var CodbDocs = (() => {
     }
     if (/group|breakdown|distribution|by (page|type|category)/i.test(lower)) {
       let groupBy = "page";
-      if (/by type|by category|per type/i.test(lower)) groupBy = "type";
+      if (/by type|by category|per type/i.test(lower))
+        groupBy = "type";
       let entityType;
-      if (/currency|amount|dollar/i.test(lower)) entityType = "currency";
-      else if (/person|name/i.test(lower)) entityType = "person";
-      else if (/date/i.test(lower)) entityType = "date";
+      if (/currency|amount|dollar/i.test(lower))
+        entityType = "currency";
+      else if (/person|name/i.test(lower))
+        entityType = "person";
+      else if (/date/i.test(lower))
+        entityType = "date";
       const result = operatorGroupBy(graph, { entityType, groupBy });
       return {
         answer: `Grouped ${result.totalItems} items into ${result.groupCount} groups by ${groupBy}.`,
@@ -7723,14 +7961,15 @@ var CodbDocs = (() => {
   }
   function jaccardSimilarity(set1, set2) {
     const intersection = new Set([...set1].filter((x) => set2.has(x)));
-    const union = /* @__PURE__ */ new Set([...set1, ...set2]);
+    const union = new Set([...set1, ...set2]);
     return union.size > 0 ? intersection.size / union.size : 0;
   }
   function cosineSimilarity(vec1, vec2) {
     const keys1 = Object.keys(vec1);
     const keys2 = Object.keys(vec2);
-    const allKeys = /* @__PURE__ */ new Set([...keys1, ...keys2]);
-    if (allKeys.size === 0) return 0;
+    const allKeys = new Set([...keys1, ...keys2]);
+    if (allKeys.size === 0)
+      return 0;
     let dotProduct = 0;
     let norm1 = 0;
     let norm2 = 0;
@@ -7747,8 +7986,9 @@ var CodbDocs = (() => {
   function layoutSimilarity(l1, l2) {
     const types1 = Object.keys(l1.pageTypes);
     const types2 = Object.keys(l2.pageTypes);
-    const allTypes = /* @__PURE__ */ new Set([...types1, ...types2]);
-    if (allTypes.size === 0) return 1;
+    const allTypes = new Set([...types1, ...types2]);
+    if (allTypes.size === 0)
+      return 1;
     let similarity = 0;
     for (const type of allTypes) {
       const v1 = l1.pageTypes[type] || 0;
@@ -7805,11 +8045,12 @@ var CodbDocs = (() => {
     return dist < threshold;
   }
   function groupEntitiesByRow(entities) {
-    if (entities.length === 0) return [];
+    if (entities.length === 0)
+      return [];
     const sorted = [...entities].sort((a, b) => (a.bbox?.[1] || 0) - (b.bbox?.[1] || 0));
     const rows = [];
     let currentRow = [sorted[0]];
-    for (let i = 1; i < sorted.length; i++) {
+    for (let i = 1;i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const curr = sorted[i];
       if (Math.abs((curr.bbox?.[1] || 0) - (prev.bbox?.[1] || 0)) < 15) {
@@ -7826,17 +8067,17 @@ var CodbDocs = (() => {
     const tables = [];
     const tableBlocks = contentGraph.allBlocks.filter((b) => b.type === "table");
     for (const block of tableBlocks) {
-      if (!block.bbox) continue;
-      const cellTexts = contentGraph.allBlocks.filter(
-        (b) => b.bbox && b.type !== "table" && b.bbox[0] >= block.bbox[0] - 10 && b.bbox[1] >= block.bbox[1] - 10 && b.bbox[0] + (b.bbox[2] || 0) <= block.bbox[0] + block.bbox[2] + 10 && b.bbox[1] + (b.bbox[3] || 0) <= block.bbox[1] + block.bbox[3] + 10
-      ).sort((a, b) => {
+      if (!block.bbox)
+        continue;
+      const cellTexts = contentGraph.allBlocks.filter((b) => b.bbox && b.type !== "table" && b.bbox[0] >= block.bbox[0] - 10 && b.bbox[1] >= block.bbox[1] - 10 && b.bbox[0] + (b.bbox[2] || 0) <= block.bbox[0] + block.bbox[2] + 10 && b.bbox[1] + (b.bbox[3] || 0) <= block.bbox[1] + block.bbox[3] + 10).sort((a, b) => {
         const yDiff = (a.bbox[1] || 0) - (b.bbox[1] || 0);
-        if (Math.abs(yDiff) > 10) return yDiff;
+        if (Math.abs(yDiff) > 10)
+          return yDiff;
         return (a.bbox[0] || 0) - (b.bbox[0] || 0);
       });
       const cellRows = [];
       let currentRow = cellTexts.length > 0 ? [cellTexts[0]] : [];
-      for (let i = 1; i < cellTexts.length; i++) {
+      for (let i = 1;i < cellTexts.length; i++) {
         const prev = cellTexts[i - 1];
         const curr = cellTexts[i];
         if (Math.abs((curr.bbox?.[1] || 0) - (prev.bbox?.[1] || 0)) < 10) {
@@ -7846,15 +8087,13 @@ var CodbDocs = (() => {
           currentRow = [curr];
         }
       }
-      if (currentRow.length > 0) cellRows.push(currentRow);
-      if (cellRows.length === 0) continue;
+      if (currentRow.length > 0)
+        cellRows.push(currentRow);
+      if (cellRows.length === 0)
+        continue;
       const headers = cellRows[0].map((cell) => (cell.text || "").trim());
-      const rows = cellRows.slice(1).map(
-        (row) => row.map((cell) => (cell.text || "").trim())
-      );
-      const tableEntities = (contentGraph.allEntities || []).filter(
-        (e) => e.bbox && areBboxesNear2(block.bbox, e.bbox, 150)
-      );
+      const rows = cellRows.slice(1).map((row) => row.map((cell) => (cell.text || "").trim()));
+      const tableEntities = (contentGraph.allEntities || []).filter((e) => e.bbox && areBboxesNear2(block.bbox, e.bbox, 150));
       const table = {
         id: `table_${block.page}_${block.bbox[0]}_${block.bbox[1]}`,
         page: block.page,
@@ -7869,8 +8108,8 @@ var CodbDocs = (() => {
       };
       const entityRows = groupEntitiesByRow(tableEntities.filter((e) => e.bbox));
       for (const row of entityRows) {
-        for (let i = 0; i < row.length; i++) {
-          for (let j = i + 1; j < row.length; j++) {
+        for (let i = 0;i < row.length; i++) {
+          for (let j = i + 1;j < row.length; j++) {
             table.relationships.push({
               source: { type: row[i].type, value: row[i].value },
               target: { type: row[j].type, value: row[j].value },
@@ -7884,29 +8123,30 @@ var CodbDocs = (() => {
     return tables;
   }
   function queryTable(table, conditions) {
-    if (!table || !table.rows || table.rows.length === 0) return [];
+    if (!table || !table.rows || table.rows.length === 0)
+      return [];
     const { column, gt, lt, eq, contains, where } = conditions || {};
     let results = table.rows.map((row, idx) => {
       const obj = {};
-      for (let c = 0; c < table.headers.length; c++) {
+      for (let c = 0;c < table.headers.length; c++) {
         obj[table.headers[c]] = row[c] || "";
       }
       obj._rowIndex = idx;
       return obj;
     });
-    if (column && gt !== void 0) {
+    if (column && gt !== undefined) {
       results = results.filter((row) => {
         const val = parseFloat((row[column] || "").replace(/[$,]/g, ""));
         return !isNaN(val) && val > gt;
       });
     }
-    if (column && lt !== void 0) {
+    if (column && lt !== undefined) {
       results = results.filter((row) => {
         const val = parseFloat((row[column] || "").replace(/[$,]/g, ""));
         return !isNaN(val) && val < lt;
       });
     }
-    if (column && eq !== void 0) {
+    if (column && eq !== undefined) {
       results = results.filter((row) => row[column] === eq);
     }
     if (column && contains) {
@@ -7914,13 +8154,13 @@ var CodbDocs = (() => {
     }
     if (where) {
       for (const [col, condition] of Object.entries(where)) {
-        if (condition.gt !== void 0) {
+        if (condition.gt !== undefined) {
           results = results.filter((row) => {
             const val = parseFloat((row[col] || "").replace(/[$,]/g, ""));
             return !isNaN(val) && val > condition.gt;
           });
         }
-        if (condition.lt !== void 0) {
+        if (condition.lt !== undefined) {
           results = results.filter((row) => {
             const val = parseFloat((row[col] || "").replace(/[$,]/g, ""));
             return !isNaN(val) && val < condition.lt;
@@ -7933,7 +8173,8 @@ var CodbDocs = (() => {
 
   // src/docaccess.js
   function escapeHTML2(str) {
-    if (!str) return "";
+    if (!str)
+      return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function wcagAudit(ir) {
@@ -7943,11 +8184,13 @@ var CodbDocs = (() => {
     criteria["1.1.1"] = { name: "Non-text Content", status: "pass", issues: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
+      if (!page)
+        continue;
       const pageNum = parseInt(pageId.split("_")[1]);
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
-        if (!obj) continue;
+        if (!obj)
+          continue;
         if (obj.type === "image") {
           if (!obj.accessibility?.alt && obj.accessibility?.alt !== "") {
             criteria["1.1.1"].status = "fail";
@@ -7969,7 +8212,8 @@ var CodbDocs = (() => {
     criteria["1.3.1"] = { name: "Info and Relationships", status: "pass", issues: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
+      if (!page)
+        continue;
       const pageNum = parseInt(pageId.split("_")[1]);
       const headings = (page.content || []).map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading");
       let prevLevel = 0;
@@ -8030,7 +8274,8 @@ var CodbDocs = (() => {
     criteria["1.4.3"] = { name: "Contrast (Minimum)", status: "pass", issues: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
+      if (!page)
+        continue;
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
         if (obj?.type === "text" && obj.raw?.color && obj.raw?.bgColor) {
@@ -8086,7 +8331,8 @@ var CodbDocs = (() => {
     criteria["2.4.6"] = { name: "Headings and Labels", status: "pass", issues: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
+      if (!page)
+        continue;
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
         if (obj?.semantic?.role === "heading" && (!obj.semantic?.text || obj.semantic.text.trim() === "")) {
@@ -8137,9 +8383,12 @@ var CodbDocs = (() => {
     const hasErrors = issues.some((i) => i.severity === "error");
     const hasWarnings = issues.some((i) => i.severity === "warning");
     let level = "AAA";
-    if (score < 60) level = "fail";
-    else if (score < 80 || hasErrors) level = "A";
-    else if (score < 95 || hasWarnings) level = "AA";
+    if (score < 60)
+      level = "fail";
+    else if (score < 80 || hasErrors)
+      level = "A";
+    else if (score < 95 || hasWarnings)
+      level = "AA";
     return {
       score: Math.max(0, score),
       level,
@@ -8156,7 +8405,8 @@ var CodbDocs = (() => {
     };
   }
   function parseColor(color) {
-    if (!color) return null;
+    if (!color)
+      return null;
     if (Array.isArray(color)) {
       return { r: color[0] || 0, g: color[1] || 0, b: color[2] || 0 };
     }
@@ -8186,7 +8436,8 @@ var CodbDocs = (() => {
   function computeContrastRatio(fg, bg) {
     const fgColor = parseColor(fg);
     const bgColor = parseColor(bg);
-    if (!fgColor || !bgColor) return 21;
+    if (!fgColor || !bgColor)
+      return 21;
     const l1 = relativeLuminance(fgColor);
     const l2 = relativeLuminance(bgColor);
     const lighter = Math.max(l1, l2);
@@ -8210,17 +8461,23 @@ var CodbDocs = (() => {
     const docLang = lang || ir.document.metadata?.language || "en";
     const title = ir.document.metadata?.title || "Document";
     const author = ir.document.metadata?.author || "";
-    let html = "<!DOCTYPE html>\n";
+    let html = `<!DOCTYPE html>
+`;
     html += `<html lang="${escapeHTML2(docLang)}">
 `;
-    html += "<head>\n";
-    html += '<meta charset="UTF-8">\n';
-    html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+    html += `<head>
+`;
+    html += `<meta charset="UTF-8">
+`;
+    html += `<meta name="viewport" content="width=device-width, initial-scale=1.0">
+`;
     html += `<title>${escapeHTML2(title)}</title>
 `;
-    if (author) html += `<meta name="author" content="${escapeHTML2(author)}">
+    if (author)
+      html += `<meta name="author" content="${escapeHTML2(author)}">
 `;
-    html += '<meta name="description" content="Accessible document export from CodbDocs">\n';
+    html += `<meta name="description" content="Accessible document export from CodbDocs">
+`;
     if (includeStyles) {
       html += generateAccessibleStyles2();
     }
@@ -8230,13 +8487,16 @@ ${customStyles}
 </style>
 `;
     }
-    html += "</head>\n";
-    html += "<body>\n";
+    html += `</head>
+`;
+    html += `<body>
+`;
     if (includeSkipNav) {
       html += generateSkipNav(ir);
     }
     if (includeLandmarks) {
-      html += '<header role="banner" aria-label="Document header">\n';
+      html += `<header role="banner" aria-label="Document header">
+`;
       html += `  <h1>${escapeHTML2(title)}</h1>
 `;
       if (author) {
@@ -8248,30 +8508,39 @@ ${customStyles}
         html += `  <p class="doc-date"><time datetime="${escapeHTML2(date)}">${escapeHTML2(date)}</time></p>
 `;
       }
-      html += "</header>\n";
+      html += `</header>
+`;
     }
-    html += '<main id="main-content" role="main" aria-label="Document content">\n';
+    html += `<main id="main-content" role="main" aria-label="Document content">
+`;
     if (includeAriaLive) {
-      html += '  <div id="doc-status" role="status" aria-live="polite" class="visually-hidden"></div>\n';
+      html += `  <div id="doc-status" role="status" aria-live="polite" class="visually-hidden"></div>
+`;
     }
     const pageCount = ir.document.pages.length;
     if (pageCount > 1) {
-      html += '  <nav aria-label="Page navigation">\n';
-      html += '    <ul class="page-nav">\n';
+      html += `  <nav aria-label="Page navigation">
+`;
+      html += `    <ul class="page-nav">
+`;
       for (const pageId of ir.document.pages) {
         const page = ir.pages[pageId];
-        if (!page) continue;
+        if (!page)
+          continue;
         const label = page.labels?.print || `Page ${page.num}`;
         html += `      <li><a href="#${pageId}" aria-label="Go to ${escapeHTML2(label)}">${escapeHTML2(label)}</a></li>
 `;
       }
-      html += "    </ul>\n";
-      html += "  </nav>\n";
+      html += `    </ul>
+`;
+      html += `  </nav>
+`;
     }
     let headingTracker = { current: 0, enforced: enforceHeadingHierarchy };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
-      if (!page) continue;
+      if (!page)
+        continue;
       const pageNum = parseInt(pageId.split("_")[1]);
       const pageLabel = page.labels?.print || `Page ${pageNum}`;
       const dataAttr = includeDataAttributes2 ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}"` : "";
@@ -8280,6 +8549,14 @@ ${customStyles}
 `;
       html += `    <h2 class="page-heading" aria-label="${escapeHTML2(pageLabel)}">${escapeHTML2(pageLabel)}</h2>
 `;
+      if (page.background) {
+        html += `    <div class="pdf-page-raster" aria-hidden="true">
+`;
+        html += `      <img src="${page.background}" alt="" width="${page.width}" height="${page.height}">
+`;
+        html += `    </div>
+`;
+      }
       html += renderAccessiblePage(page, ir, {
         pageNum,
         includeDataAttributes: includeDataAttributes2,
@@ -8288,37 +8565,74 @@ ${customStyles}
         wrapImagesInFigures,
         mode
       });
-      html += "  </section>\n";
+      html += `  </section>
+`;
     }
-    html += "</main>\n";
+    html += `</main>
+`;
+    html += '<script type="application/json" id="codbdocs-rag" data-page-count="' + (ir.document.pages.length || 0) + '">' + JSON.stringify(buildAccessibleRAGPayload(ir)).replace(/</g, "\\u003c") + `</script>
+`;
     if (includeLandmarks) {
-      html += '<footer role="contentinfo" aria-label="Document footer">\n';
-      html += '  <p>Generated by <a href="https://github.com/CityofDaytonaBeach/codbdocs">CodbDocs</a></p>\n';
+      html += `<footer role="contentinfo" aria-label="Document footer">
+`;
+      html += `  <p>Generated by <a href="https://github.com/CityofDaytonaBeach/codbdocs">CodbDocs</a></p>
+`;
       html += `  <p>${pageCount} page${pageCount !== 1 ? "s" : ""}</p>
 `;
-      html += "</footer>\n";
+      html += `</footer>
+`;
     }
     if (includeKeyboardNav) {
       html += generateKeyboardScript();
     }
-    html += "</body>\n</html>";
+    html += `</body>
+</html>`;
     return html;
   }
+  function buildAccessibleRAGPayload(ir) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page)
+        return null;
+      const text = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
+      return { page: page.num, text };
+    }).filter(Boolean);
+    return {
+      format: "codbdocs-rag-v1",
+      source: ir.document.metadata?.title || "PDF document",
+      title: ir.document.metadata?.title || null,
+      author: ir.document.metadata?.author || null,
+      pageCount: (ir.document.pages || []).length,
+      pages,
+      fullText: pages.map((p) => `[Page ${p.page}]
+${p.text}`).join(`
+
+`),
+      metadata: ir.document.metadata || {}
+    };
+  }
   function generateSkipNav(ir) {
-    let html = "<!-- Skip Navigation -->\n";
-    html += '<a href="#main-content" class="skip-link" id="skip-to-main">Skip to main content</a>\n';
+    let html = `<!-- Skip Navigation -->
+`;
+    html += `<a href="#main-content" class="skip-link" id="skip-to-main">Skip to main content</a>
+`;
     if (ir.document.pages.length > 5) {
-      html += '<nav aria-label="Quick page access" class="skip-page-nav">\n';
-      html += "  <ul>\n";
+      html += `<nav aria-label="Quick page access" class="skip-page-nav">
+`;
+      html += `  <ul>
+`;
       for (const pageId of ir.document.pages) {
         const page = ir.pages[pageId];
-        if (!page) continue;
+        if (!page)
+          continue;
         const label = page.labels?.print || `Page ${page.num}`;
         html += `    <li><a href="#${pageId}" class="skip-link">${escapeHTML2(label)}</a></li>
 `;
       }
-      html += "  </ul>\n";
-      html += "</nav>\n";
+      html += `  </ul>
+`;
+      html += `</nav>
+`;
     }
     return html;
   }
@@ -8327,7 +8641,8 @@ ${customStyles}
     const { pageNum, includeDataAttributes: includeDataAttributes2, enforceHeadingHierarchy, headingTracker, wrapImagesInFigures, mode } = opts;
     const objects = (page.content || []).map((id) => ir.objects[id]).filter((obj) => obj && obj.bbox).sort((a, b) => {
       const yDiff = (a.bbox[1] || 0) - (b.bbox[1] || 0);
-      if (Math.abs(yDiff) > 10) return yDiff;
+      if (Math.abs(yDiff) > 10)
+        return yDiff;
       return (a.bbox[0] || 0) - (b.bbox[0] || 0);
     });
     for (const obj of objects) {
@@ -8363,7 +8678,8 @@ ${customStyles}
     }
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
-      if (!vec) continue;
+      if (!vec)
+        continue;
       if (vec.semantic?.role === "separator") {
         const dataAttr = includeDataAttributes2 ? ` data-pdf-vector="${vec.id}"` : "";
         html += `    <hr${dataAttr} aria-hidden="true">
@@ -8382,7 +8698,8 @@ ${customStyles}
       headingTracker.current = level;
     }
     const text = escapeHTML2(obj.semantic?.text || "");
-    if (!text) return "";
+    if (!text)
+      return "";
     const id = obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`;
     return `    <h${level} id="${id}"${dataAttr}>${text}</h${level}>
 `;
@@ -8396,8 +8713,10 @@ ${customStyles}
     const rows = obj.semantic?.rows || [];
     const cols = obj.semantic?.cols || [];
     html += `    <table id="${tableId}"${dataAttr}`;
-    if (summary) html += ` aria-label="${escapeHTML2(summary)}"`;
-    html += ">\n";
+    if (summary)
+      html += ` aria-label="${escapeHTML2(summary)}"`;
+    html += `>
+`;
     if (caption) {
       html += `      <caption>${escapeHTML2(caption)}</caption>
 `;
@@ -8406,74 +8725,93 @@ ${customStyles}
 `;
     }
     if (rows.length > 0) {
-      html += "      <thead>\n";
-      html += "        <tr>\n";
+      html += `      <thead>
+`;
+      html += `        <tr>
+`;
       const headerRow = rows[0] || [];
-      for (let c = 0; c < headerRow.length; c++) {
+      for (let c = 0;c < headerRow.length; c++) {
         const cell = headerRow[c];
         html += `          <th scope="col">${escapeHTML2(cell?.text || "")}</th>
 `;
       }
-      html += "        </tr>\n";
-      html += "      </thead>\n";
+      html += `        </tr>
+`;
+      html += `      </thead>
+`;
       if (rows.length > 1) {
-        html += "      <tbody>\n";
-        for (let r = 1; r < rows.length; r++) {
-          html += "        <tr>\n";
+        html += `      <tbody>
+`;
+        for (let r = 1;r < rows.length; r++) {
+          html += `        <tr>
+`;
           const row = rows[r] || [];
-          for (let c = 0; c < row.length; c++) {
+          for (let c = 0;c < row.length; c++) {
             const cell = row[c];
             html += `          <td>${escapeHTML2(cell?.text || "")}</td>
 `;
           }
-          html += "        </tr>\n";
+          html += `        </tr>
+`;
         }
-        html += "      </tbody>\n";
+        html += `      </tbody>
+`;
       }
     } else if (cols.length > 0) {
-      html += "      <thead>\n        <tr>\n";
+      html += `      <thead>
+        <tr>
+`;
       for (const col of cols) {
         html += `          <th scope="col">${escapeHTML2(col.header || col.name || "")}</th>
 `;
       }
-      html += "        </tr>\n      </thead>\n";
+      html += `        </tr>
+      </thead>
+`;
       const maxRows = Math.max(...cols.map((c) => (c.values || []).length));
       if (maxRows > 0) {
-        html += "      <tbody>\n";
-        for (let r = 0; r < maxRows; r++) {
-          html += "        <tr>\n";
+        html += `      <tbody>
+`;
+        for (let r = 0;r < maxRows; r++) {
+          html += `        <tr>
+`;
           for (const col of cols) {
             const val = (col.values || [])[r] || "";
             html += `          <td>${escapeHTML2(typeof val === "string" ? val : JSON.stringify(val))}</td>
 `;
           }
-          html += "        </tr>\n";
+          html += `        </tr>
+`;
         }
-        html += "      </tbody>\n";
+        html += `      </tbody>
+`;
       }
     } else {
       html += renderTableFromNearbyText(obj, ir, pageNum);
     }
-    html += "    </table>\n";
+    html += `    </table>
+`;
     return html;
   }
   function renderTableFromNearbyText(obj, ir, pageNum) {
     let html = "";
-    if (!obj.bbox) return html;
+    if (!obj.bbox)
+      return html;
     const pageId = `page_${pageNum}`;
     const page = ir.pages[pageId];
-    if (!page) return html;
-    const cells = (page.content || []).map((id) => ir.objects[id]).filter(
-      (o) => o?.bbox && o.type === "text" && o.bbox[0] >= obj.bbox[0] - 5 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[0] + (o.bbox[2] || 0) <= obj.bbox[0] + obj.bbox[2] + 5 && o.bbox[1] + (o.bbox[3] || 0) <= obj.bbox[1] + obj.bbox[3] + 5
-    ).sort((a, b) => {
+    if (!page)
+      return html;
+    const cells = (page.content || []).map((id) => ir.objects[id]).filter((o) => o?.bbox && o.type === "text" && o.bbox[0] >= obj.bbox[0] - 5 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[0] + (o.bbox[2] || 0) <= obj.bbox[0] + obj.bbox[2] + 5 && o.bbox[1] + (o.bbox[3] || 0) <= obj.bbox[1] + obj.bbox[3] + 5).sort((a, b) => {
       const yDiff = (a.bbox[1] || 0) - (b.bbox[1] || 0);
-      if (Math.abs(yDiff) > 5) return yDiff;
+      if (Math.abs(yDiff) > 5)
+        return yDiff;
       return (a.bbox[0] || 0) - (b.bbox[0] || 0);
     });
-    if (cells.length === 0) return html;
+    if (cells.length === 0)
+      return html;
     const rows = [];
     let currentRow = [cells[0]];
-    for (let i = 1; i < cells.length; i++) {
+    for (let i = 1;i < cells.length; i++) {
       const prev = cells[i - 1];
       const curr = cells[i];
       if (Math.abs((curr.bbox[1] || 0) - (prev.bbox[1] || 0)) < 10) {
@@ -8484,24 +8822,33 @@ ${customStyles}
       }
     }
     rows.push(currentRow);
-    if (rows.length === 0) return html;
-    html += "      <thead>\n        <tr>\n";
+    if (rows.length === 0)
+      return html;
+    html += `      <thead>
+        <tr>
+`;
     for (const cell of rows[0]) {
       html += `          <th scope="col">${escapeHTML2(cell.semantic?.text || "")}</th>
 `;
     }
-    html += "        </tr>\n      </thead>\n";
+    html += `        </tr>
+      </thead>
+`;
     if (rows.length > 1) {
-      html += "      <tbody>\n";
-      for (let r = 1; r < rows.length; r++) {
-        html += "        <tr>\n";
+      html += `      <tbody>
+`;
+      for (let r = 1;r < rows.length; r++) {
+        html += `        <tr>
+`;
         for (const cell of rows[r]) {
           html += `          <td>${escapeHTML2(cell.semantic?.text || "")}</td>
 `;
         }
-        html += "        </tr>\n";
+        html += `        </tr>
+`;
       }
-      html += "      </tbody>\n";
+      html += `      </tbody>
+`;
     }
     return html;
   }
@@ -8530,12 +8877,14 @@ ${customStyles}
     return html;
   }
   function findNearbyListItems(obj, ir) {
-    if (!obj.bbox) return [];
+    if (!obj.bbox)
+      return [];
     const items = [];
     for (const [id, o] of Object.entries(ir.objects)) {
       if (o?.type === "text" && o.bbox && o.semantic?.role !== "heading") {
         if (Math.abs((o.bbox[0] || 0) - (obj.bbox[0] || 0)) < 50 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[1] <= obj.bbox[1] + obj.bbox[3] + 5) {
-          if (o.semantic?.text) items.push(o.semantic.text);
+          if (o.semantic?.text)
+            items.push(o.semantic.text);
         }
       }
     }
@@ -8584,7 +8933,8 @@ ${customStyles}
           html += `        <option value="${escapeHTML2(optVal)}"${optVal === value ? " selected" : ""}>${escapeHTML2(optLabel)}</option>
 `;
         }
-        html += "      </select>\n";
+        html += `      </select>
+`;
         break;
       case "textarea":
         html += `      <textarea id="${fieldId}" name="${escapeHTML2(fieldName)}" rows="4"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>${escapeHTML2(value)}</textarea>
@@ -8599,7 +8949,8 @@ ${customStyles}
       html += `      <span id="${fieldId}-error" class="field-error" role="alert">${escapeHTML2(error)}</span>
 `;
     }
-    html += "    </div>\n";
+    html += `    </div>
+`;
     return html;
   }
   function renderAccessibleLink(obj, opts) {
@@ -8609,8 +8960,10 @@ ${customStyles}
     const target = obj.accessibility?.target || "";
     const ariaLabel = obj.accessibility?.ariaLabel || "";
     let attrs = dataAttr;
-    if (ariaLabel) attrs += ` aria-label="${escapeHTML2(ariaLabel)}"`;
-    if (target === "_blank") attrs += ' target="_blank" rel="noopener noreferrer"';
+    if (ariaLabel)
+      attrs += ` aria-label="${escapeHTML2(ariaLabel)}"`;
+    if (target === "_blank")
+      attrs += ' target="_blank" rel="noopener noreferrer"';
     return `    <p><a href="${escapeHTML2(href)}"${attrs}>${text}</a></p>
 `;
   }
@@ -8636,7 +8989,8 @@ ${customStyles}
         html += `      <span class="image-role visually-hidden">${escapeHTML2(role)}</span>
 `;
       }
-      html += "    </figure>\n";
+      html += `    </figure>
+`;
     } else {
       html += `    <img${dataAttr} src="${escapeHTML2(src)}"${altAttr} loading="lazy">
 `;
@@ -8646,7 +9000,8 @@ ${customStyles}
   function renderAccessibleText(obj, opts) {
     const { dataAttr } = opts;
     const text = escapeHTML2(obj.semantic?.text || "");
-    if (!text) return "";
+    if (!text)
+      return "";
     return `    <p${dataAttr}>${text}</p>
 `;
   }
@@ -8711,7 +9066,12 @@ ${customStyles}
     main { padding: 0 20px; }
 
     /* Page sections */
-    .pdf-page { margin: 32px 0; padding: 16px 0; border-bottom: 1px solid #dee2e6; }
+    .pdf-page { margin: 32px 0; padding: 16px 0; border-bottom: 1px solid #dee2e6; position: relative; }
+    .pdf-page-raster { margin: 0 0 16px; text-align: center; }
+    .pdf-page-raster img {
+      display: block; max-width: 100%; height: auto; border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12); border: 1px solid #e9ecef;
+    }
     .page-heading {
       font-size: 1.25rem; color: #005a9c;
       margin: 0 0 16px; padding-bottom: 8px;
@@ -8906,7 +9266,7 @@ ${customStyles}
     }
   }
 })();
-<\/script>
+</script>
 `;
   }
   function remediateAccessibility(ir, options = {}) {
@@ -8932,7 +9292,8 @@ ${customStyles}
           break;
         }
       }
-      if (!inferredTitle) inferredTitle = "Untitled Document";
+      if (!inferredTitle)
+        inferredTitle = "Untitled Document";
       ir.document.metadata.title = inferredTitle;
       report.fixes.push({ type: "title", action: `Set document title to "${inferredTitle}"` });
     }
@@ -8959,7 +9320,8 @@ ${customStyles}
       let currentLevel = 0;
       for (const pageId of ir.document.pages) {
         const page = ir.pages[pageId];
-        if (!page) continue;
+        if (!page)
+          continue;
         for (const objId of page.content || []) {
           const obj = ir.objects[objId];
           if (obj?.semantic?.role === "heading") {
@@ -8982,7 +9344,8 @@ ${customStyles}
     if (fixFormLabels) {
       for (const [id, obj] of Object.entries(ir.objects)) {
         if (obj?.semantic?.role === "form_field") {
-          if (!obj.accessibility) obj.accessibility = {};
+          if (!obj.accessibility)
+            obj.accessibility = {};
           if (!obj.accessibility.label && !obj.accessibility.labelledby) {
             const name = obj.semantic?.fieldName || id;
             obj.accessibility.label = name.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
@@ -9007,7 +9370,9 @@ ${customStyles}
   function generateAccessibilityReport(ir) {
     const audit = wcagAudit(ir);
     const { report: remediations } = remediateAccessibility(ir, { fixAltText: true, fixHeadingHierarchy: true, fixLanguage: true, fixTitle: true, fixFormLabels: true });
-    let text = "=== CodbDocs Accessibility Report ===\n\n";
+    let text = `=== CodbDocs Accessibility Report ===
+
+`;
     text += `WCAG Level: ${audit.level}
 `;
     text += `Score: ${audit.score}/100
@@ -9017,54 +9382,81 @@ ${customStyles}
     text += `WCAG Criteria Met: ${audit.summary.criteriaMet}/${audit.summary.criteriaTotal}
 
 `;
-    text += "--- Issues ---\n";
+    text += `--- Issues ---
+`;
     for (const issue of audit.issues) {
       text += `[${issue.severity.toUpperCase()}] ${issue.wcag || "N/A"}: ${issue.message}`;
-      if (issue.page) text += ` (Page ${issue.page})`;
-      text += "\n";
-      if (issue.suggestion) text += `  Suggestion: ${issue.suggestion}
+      if (issue.page)
+        text += ` (Page ${issue.page})`;
+      text += `
+`;
+      if (issue.suggestion)
+        text += `  Suggestion: ${issue.suggestion}
 `;
     }
-    text += "\n--- WCAG Criteria ---\n";
+    text += `
+--- WCAG Criteria ---
+`;
     for (const [criteria, info] of Object.entries(audit.wcagCriteria)) {
       text += `${criteria} ${info.name}: ${info.status.toUpperCase()}
 `;
     }
-    text += "\n--- Auto-Remediations Applied ---\n";
+    text += `
+--- Auto-Remediations Applied ---
+`;
     text += `${remediations.summary.totalFixes} fixes applied
 `;
     for (const fix of remediations.fixes) {
       text += `  [${fix.type}] ${fix.action}`;
-      if (fix.element) text += ` (${fix.element})`;
-      text += "\n";
+      if (fix.element)
+        text += ` (${fix.element})`;
+      text += `
+`;
     }
-    let html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n';
-    html += '<meta charset="UTF-8">\n';
-    html += "<title>CodbDocs Accessibility Report</title>\n";
+    let html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+`;
+    html += `<meta charset="UTF-8">
+`;
+    html += `<title>CodbDocs Accessibility Report</title>
+`;
     html += "<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:20px;line-height:1.6}";
     html += ".pass{color:#2e7d32}.fail{color:#c62828}.warn{color:#f57f17}";
     html += ".score{font-size:2em;font-weight:bold}.issue{margin:8px 0;padding:8px;border-left:4px solid #ccc}";
-    html += ".error{border-color:#c62828}.warning{border-color:#f57f17}.info{border-color:#1976d2}</style>\n";
-    html += "</head>\n<body>\n";
-    html += "<h1>Accessibility Report</h1>\n";
+    html += `.error{border-color:#c62828}.warning{border-color:#f57f17}.info{border-color:#1976d2}</style>
+`;
+    html += `</head>
+<body>
+`;
+    html += `<h1>Accessibility Report</h1>
+`;
     html += `<p class="score ${audit.score >= 90 ? "pass" : audit.score >= 70 ? "warn" : "fail"}">Score: ${audit.score}/100 (Level ${audit.level})</p>
 `;
     html += `<p>${audit.summary.criteriaMet}/${audit.summary.criteriaTotal} WCAG criteria met</p>
 `;
-    html += "<h2>Issues</h2>\n";
+    html += `<h2>Issues</h2>
+`;
     for (const issue of audit.issues) {
       html += `<div class="issue ${issue.severity}"><strong>[${issue.severity.toUpperCase()}]</strong> ${issue.message}`;
-      if (issue.page) html += ` <em>(Page ${issue.page})</em>`;
-      if (issue.suggestion) html += `<br><small>${issue.suggestion}</small>`;
-      html += "</div>\n";
+      if (issue.page)
+        html += ` <em>(Page ${issue.page})</em>`;
+      if (issue.suggestion)
+        html += `<br><small>${issue.suggestion}</small>`;
+      html += `</div>
+`;
     }
-    html += "<h2>WCAG Criteria</h2>\n<table><thead><tr><th>Criteria</th><th>Name</th><th>Status</th></tr></thead><tbody>\n";
+    html += `<h2>WCAG Criteria</h2>
+<table><thead><tr><th>Criteria</th><th>Name</th><th>Status</th></tr></thead><tbody>
+`;
     for (const [criteria, info] of Object.entries(audit.wcagCriteria)) {
       html += `<tr><td>${criteria}</td><td>${info.name}</td><td class="${info.status}">${info.status.toUpperCase()}</td></tr>
 `;
     }
-    html += "</tbody></table>\n";
-    html += "<h2>Auto-Remediations</h2>\n";
+    html += `</tbody></table>
+`;
+    html += `<h2>Auto-Remediations</h2>
+`;
     html += `<p>${remediations.summary.totalFixes} fixes applied</p>
 <ul>
 `;
@@ -9072,8 +9464,10 @@ ${customStyles}
       html += `<li><strong>${fix.type}:</strong> ${fix.action}</li>
 `;
     }
-    html += "</ul>\n";
-    html += "</body>\n</html>";
+    html += `</ul>
+`;
+    html += `</body>
+</html>`;
     return { html, text, audit, remediations };
   }
 
@@ -9083,8 +9477,7 @@ ${customStyles}
     const workspace = {
       name,
       description,
-      documents: /* @__PURE__ */ new Map(),
-      // docId -> { doc, graph, fingerprint, concepts }
+      documents: new Map,
       crossDocRelationships: [],
       terminology: { aliases: {}, acronyms: {}, definitions: {} }
     };
@@ -9119,7 +9512,8 @@ ${customStyles}
       const allResults = [];
       for (const [docId, entry] of this.documents) {
         const graph = entry.graph;
-        if (!graph?.hybridSearch) continue;
+        if (!graph?.hybridSearch)
+          continue;
         const results = graph.hybridSearch(query, {
           maxResults: perDocLimit,
           rerank: false,
@@ -9134,7 +9528,7 @@ ${customStyles}
         }
       }
       allResults.sort((a, b) => b.score - a.score);
-      const entityCounts = /* @__PURE__ */ new Map();
+      const entityCounts = new Map;
       for (const r of allResults) {
         for (const e of r.entities || []) {
           const key = `${e.type}:${e.value}`;
@@ -9160,7 +9554,8 @@ ${customStyles}
       const reasoningResults = [];
       for (const [docId, entry] of this.documents) {
         const graph = entry.graph;
-        if (!graph?.executeReasoning) continue;
+        if (!graph?.executeReasoning)
+          continue;
         const reasoning = graph.executeReasoning(question);
         if (reasoning) {
           reasoningResults.push({ ...reasoning, docId, metadata: entry.metadata });
@@ -9176,7 +9571,7 @@ ${customStyles}
     workspace.getSummary = function() {
       let totalWords = 0;
       let totalPages = 0;
-      const allEntityTypes = /* @__PURE__ */ new Map();
+      const allEntityTypes = new Map;
       for (const [, entry] of this.documents) {
         const summary = entry.graph?.getSummary?.() || {};
         totalWords += summary.wordCount || 0;
@@ -9210,8 +9605,8 @@ ${customStyles}
     workspace._buildCrossDocRelationships = function() {
       this.crossDocRelationships = [];
       const docEntries = Array.from(this.documents.entries());
-      for (let i = 0; i < docEntries.length; i++) {
-        for (let j = i + 1; j < docEntries.length; j++) {
+      for (let i = 0;i < docEntries.length; i++) {
+        for (let j = i + 1;j < docEntries.length; j++) {
           const [, entry1] = docEntries[i];
           const [, entry2] = docEntries[j];
           const entities1 = entry1.graph?._contentGraph?.allEntities || [];
@@ -9238,8 +9633,8 @@ ${customStyles}
     workspace._learnTerminology = function() {
       const allPages = [];
       for (const [, entry] of this.documents) {
-        const pages2 = entry.graph?.text?.pages || [];
-        allPages.push(...pages2);
+        const pages = entry.graph?.text?.pages || [];
+        allPages.push(...pages);
       }
       this.terminology = learnTerminology(allPages);
     };
@@ -9257,9 +9652,9 @@ ${customStyles}
     const hashArray = Array.from(new Uint8Array(hashBuffer2));
     return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
-  async function computeCacheKey(pdfBuffer, config2 = {}) {
+  async function computeCacheKey(pdfBuffer, config = {}) {
     const pdfHash = await hashBuffer(pdfBuffer);
-    const configStr = JSON.stringify(config2 || {});
+    const configStr = JSON.stringify(config || {});
     const configHash = await hashBuffer(new TextEncoder().encode(configStr));
     return `${pdfHash}_${ENGINE_VERSION}_${IR_VERSION}_${configHash.slice(0, 8)}`;
   }
@@ -9281,9 +9676,9 @@ ${customStyles}
     });
   }
   async function saveToCache(pdfBuffer, analysisData, options = {}) {
-    const { ttl = 7 * 24 * 60 * 60 * 1e3, config: config2 = {} } = options;
+    const { ttl = 7 * 24 * 60 * 60 * 1000, config = {} } = options;
     try {
-      const cacheKey = await computeCacheKey(pdfBuffer, config2);
+      const cacheKey = await computeCacheKey(pdfBuffer, config);
       const db = await openDB();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readwrite");
@@ -9304,9 +9699,9 @@ ${customStyles}
       return { hash: null, saved: false, error: err.message };
     }
   }
-  async function loadFromCache(pdfBuffer, config2 = {}) {
+  async function loadFromCache(pdfBuffer, config = {}) {
     try {
-      const cacheKey = await computeCacheKey(pdfBuffer, config2);
+      const cacheKey = await computeCacheKey(pdfBuffer, config);
       const db = await openDB();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readonly");
@@ -9371,7 +9766,7 @@ ${customStyles}
 
   // src/index.js
   function trackImageBboxes(pageOps) {
-    const imageBboxes = /* @__PURE__ */ new Map();
+    const imageBboxes = new Map;
     const ctmStack = [];
     let ctm = [1, 0, 0, 1, 0, 0];
     for (const op of pageOps) {
@@ -9454,18 +9849,16 @@ ${customStyles}
   function getPdfjs() {
     const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
     if (!lib) {
-      throw new Error(
-        '[codbdocs] pdfjsLib not found. Load PDF.js before calling CodbDocs.load().\n  <script src="vendor/pdf.js/pdf.min.js"><\/script>'
-      );
+      throw new Error(`[codbdocs] pdfjsLib not found. Load PDF.js before calling CodbDocs.load().
+` + '  <script src="vendor/pdf.js/pdf.min.js"></script>');
     }
     return lib;
   }
   function getTesseract() {
     const lib = typeof window !== "undefined" && window.Tesseract;
     if (!lib) {
-      throw new Error(
-        '[codbdocs] Tesseract not found. Load Tesseract.js before calling doc.analyze({ ocr: true }).\n  <script src="vendor/tesseract.js/tesseract.min.js"><\/script>'
-      );
+      throw new Error(`[codbdocs] Tesseract not found. Load Tesseract.js before calling doc.analyze({ ocr: true }).
+` + '  <script src="vendor/tesseract.js/tesseract.min.js"></script>');
     }
     return lib;
   }
@@ -9486,15 +9879,12 @@ ${customStyles}
     const pdf = await pdfjsLib2.getDocument(data).promise;
     return new CodbDoc(pdf);
   }
-  var CodbDoc = class {
+
+  class CodbDoc {
     constructor(pdf) {
       this._pdf = pdf;
       this.pageCount = pdf.numPages;
     }
-    /**
-     * Run the full analysis pipeline.
-     * Returns a DocumentGraph with spatial search, content graph, and ask().
-     */
     async analyze(opts = {}) {
       const {
         ocr = true,
@@ -9505,12 +9895,13 @@ ${customStyles}
         onProgress,
         onLayer
       } = opts;
-      const graph = new DocumentGraph();
-      const contentGraph = new DocumentContentGraph();
+      const graph = new DocumentGraph;
+      const contentGraph = new DocumentContentGraph;
       const ir = createIR();
       const listeners = {};
       graph.on = (event, fn) => {
-        if (!listeners[event]) listeners[event] = [];
+        if (!listeners[event])
+          listeners[event] = [];
         listeners[event].push(fn);
       };
       graph.emit = (event, data) => {
@@ -9544,7 +9935,7 @@ ${customStyles}
       graph._allContentItems = {};
       graph._allImages = {};
       try {
-        for (let num = 1; num <= this.pageCount; num++) {
+        for (let num = 1;num <= this.pageCount; num++) {
           onProgress && onProgress({ page: num, total: this.pageCount, status: "reading" });
           const page = await this._pdf.getPage(num);
           const viewport = page.getViewport({ scale: 1 });
@@ -9593,11 +9984,11 @@ ${customStyles}
             classification = classifyPage(text, spatial);
           }
           if (visual || config.enableVisual) {
-            if (!canvas) canvas = await renderPageToCanvas(page, config.ocrScale);
+            if (!canvas)
+              canvas = await renderPageToCanvas(page, config.ocrScale);
             try {
               visualRegions = analyzeVisualRegions(canvas);
-            } catch (e) {
-            }
+            } catch (e) {}
           }
           let contentPageGraph = null;
           if (config.enableContent) {
@@ -9610,19 +10001,16 @@ ${customStyles}
             onProgress && onProgress({ page: num, total: this.pageCount, status: "vectors" });
             try {
               vectors = await extractVectors(page);
-            } catch (e) {
-            }
+            } catch (e) {}
           }
           let structureTree = null;
           try {
             structureTree = await extractStructureTree(page);
-          } catch (e) {
-          }
+          } catch (e) {}
           let annotations = [];
           try {
             annotations = await extractAnnotations(page);
-          } catch (e) {
-          }
+          } catch (e) {}
           const irPage = addPage(ir, num, {
             width: pageSize.width,
             height: pageSize.height,
@@ -9655,92 +10043,74 @@ ${customStyles}
           if (extractExtended) {
             try {
               irPage.markedContent = await extractMarkedContent(page);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.artifacts = await extractArtifacts(page);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.glyphs = await extractGlyphs(page);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.signatures = await extractSignatures(page, this._pdf);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.appearanceStreams = await extractAppearanceStreams(page);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               const pageOps = await page.getOperatorList();
               irPage.graphicsStates = extractGraphicsState(pageOps);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.textQuality = analyzeTextQuality(irPage, content.items, pageSize);
-            } catch (e) {
-            }
+            } catch (e) {}
             if (visualRegions) {
               try {
                 irPage.visualComparison = compareVisualInternal(irPage, visualRegions, content.items);
-              } catch (e) {
-              }
+              } catch (e) {}
             }
             if (vectors.length > 0) {
               try {
                 irPage.redactions = detectRedactions(vectors, content.items);
-              } catch (e) {
-              }
+              } catch (e) {}
             }
             if (structureTree) {
               try {
                 irPage.tagValidation = validateTags(irPage, structureTree, content.items);
-              } catch (e) {
-              }
+              } catch (e) {}
             }
             try {
               irPage.rotationSkew = detectRotationSkew(irPage, content.items, vectors);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.glyphIssues = detectGlyphIssues(irPage, content.items);
-            } catch (e) {
-            }
+            } catch (e) {}
             if (vectors.length > 0) {
               try {
                 irPage.outlinedText = detectOutlinedText(vectors, content.items);
-              } catch (e) {
-              }
+              } catch (e) {}
             }
             try {
               irPage.flattenedForms = detectFlattenedForms(vectors, content.items, annotations);
-            } catch (e) {
-            }
+            } catch (e) {}
             if (vectors.length > 0) {
               try {
                 irPage.checkboxes = detectCheckboxes(vectors, content.items);
-              } catch (e) {
-              }
+              } catch (e) {}
             }
             try {
               irPage.footnotes = detectFootnotes(content.items, pageSize);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.language = detectLanguage(content.items);
-            } catch (e) {
-            }
+            } catch (e) {}
           }
           let pageImages = [];
           try {
-            let imageBboxesByName = /* @__PURE__ */ new Map();
+            let imageBboxesByName = new Map;
             try {
               const pageOps = page._opTree || [];
               imageBboxesByName = trackImageBboxes(pageOps);
-            } catch (e) {
-            }
+            } catch (e) {}
             pageImages = await extractImages(page);
             for (const img of pageImages) {
               if (img.name && imageBboxesByName.has(img.name)) {
@@ -9751,22 +10121,51 @@ ${customStyles}
               img.role = inferImageRole(img, content.items, pageSize);
               img.caption = findNearestCaption(img, content.items, pageSize);
               img.nearbyText = extractNearbyText(img, content.items, pageSize);
-              if (!irPage.images) irPage.images = [];
+              if (!irPage.images)
+                irPage.images = [];
               irPage.images.push(img);
+              const imgBbox = Array.isArray(img.bbox) ? img.bbox : img.bbox && img.bbox.x != null ? [img.bbox.x, img.bbox.y, img.bbox.width, img.bbox.height] : null;
+              try {
+                addObject(ir, `page_${num}`, {
+                  type: "image",
+                  raw: {
+                    src: img.dataUrl || img.thumbnail?.dataUrl || "",
+                    thumb: img.thumbnail?.dataUrl || null,
+                    format: img.format,
+                    width: img.width,
+                    height: img.height
+                  },
+                  semantic: {
+                    role: "image",
+                    caption: img.caption || "",
+                    text: img.caption || "",
+                    imageRole: img.role || null
+                  },
+                  accessibility: {
+                    alt: img.caption || img.role || "Image"
+                  },
+                  provenance: { method: "native", confidence: 1 },
+                  bbox: imgBbox
+                });
+              } catch (e) {}
             }
-          } catch (e) {
-          }
+          } catch (e) {}
+          let pageRaster = null;
+          try {
+            if (!canvas)
+              canvas = await renderPageToCanvas(page, 1.5);
+            pageRaster = canvas.toDataURL("image/png");
+            irPage.background = pageRaster;
+          } catch (e) {}
           let readingOrder = [];
           try {
             readingOrder = detectReadingOrder(ir, num);
-          } catch (e) {
-          }
+          } catch (e) {}
           let repeatedElements = null;
           if (num === this.pageCount) {
             try {
               repeatedElements = detectRepeatedElements(graph._pageResults || {}, graph._allContentItems || {});
-            } catch (e) {
-            }
+            } catch (e) {}
           }
           const pageResult = {
             num,
@@ -9822,8 +10221,7 @@ ${customStyles}
           });
           try {
             page.cleanup();
-          } catch (e) {
-          }
+          } catch (e) {}
         }
       } catch (e) {
         console.error("[codbdocs] Analysis error:", e);
@@ -9831,7 +10229,7 @@ ${customStyles}
       if (config.enableContent) {
         contentGraph.documentType = classifyDocumentType(contentGraph);
       }
-      const conceptGraph = new ConceptGraph();
+      const conceptGraph = new ConceptGraph;
       if (config.enableContent) {
         extractRelationships(contentGraph, conceptGraph);
       }
@@ -9878,7 +10276,8 @@ ${customStyles}
       graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
       graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
       graph.getImages = (pageNum) => {
-        if (pageNum) return graph._allImages[`page_${pageNum}`] || [];
+        if (pageNum)
+          return graph._allImages[`page_${pageNum}`] || [];
         const all = [];
         for (const pageImages of Object.values(graph._allImages)) {
           all.push(...pageImages);
@@ -9969,10 +10368,8 @@ ${customStyles}
       };
       graph.getAccessibilityReport = () => generateAccessibilityReport(ir);
       graph.toPDF = (options) => createPDF(ir, options);
-      graph.createTextPDF = (options) => createTextPDF(
-        Object.values(ir.pages).map((p) => p.content?.join("\n") || ""),
-        options
-      );
+      graph.createTextPDF = (options) => createTextPDF(Object.values(ir.pages).map((p) => p.content?.join(`
+`) || ""), options);
       graph.diagnose = () => diagnoseDocument(pageResults, graph);
       graph.normalize = (options) => normalizeDocument(graph, options);
       graph.getTextQuality = (pageNum) => {
@@ -10066,9 +10463,11 @@ ${customStyles}
         }
         const anchors = [];
         const currencyMatch = lower.match(/\$[\d,]+(?:\.\d{2})?/g);
-        if (currencyMatch) anchors.push(...currencyMatch.map((v) => ({ type: "currency", value: v })));
+        if (currencyMatch)
+          anchors.push(...currencyMatch.map((v) => ({ type: "currency", value: v })));
         const dateMatch = lower.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g);
-        if (dateMatch) anchors.push(...dateMatch.map((v) => ({ type: "date", value: v })));
+        if (dateMatch)
+          anchors.push(...dateMatch.map((v) => ({ type: "date", value: v })));
         const expected = [];
         if (/who|person|people|name|author|approved?\s+by|signed?\s+by/i.test(lower)) {
           expected.push("person");
@@ -10092,7 +10491,8 @@ ${customStyles}
           { pattern: /created?\s+by/i, relation: "createdBy" }
         ];
         for (const { pattern, relation } of relationPatterns) {
-          if (pattern.test(lower)) relations.push(relation);
+          if (pattern.test(lower))
+            relations.push(relation);
         }
         let operation = null;
         if (/total|sum|add\s+up|combined|aggregate/i.test(lower)) {
@@ -10131,7 +10531,8 @@ ${customStyles}
       graph.reason = (query) => executeReasoning(graph, query);
       graph.askEnhanced = (question) => {
         const reasoningResult = executeReasoning(graph, question);
-        if (reasoningResult) return reasoningResult;
+        if (reasoningResult)
+          return reasoningResult;
         const searchResults = hybridSearch(graph, question, { maxResults: 10 });
         const ranked = rankResults(searchResults, question);
         if (ranked.length === 0) {
@@ -10176,8 +10577,8 @@ ${customStyles}
       };
       graph.expandQuery = (query, options) => expandQuery(query, options);
       graph.fuzzySearch = (query, options) => {
-        const pages2 = graph.text?.pages || [];
-        return fuzzySearch(query, pages2, options);
+        const pages = graph.text?.pages || [];
+        return fuzzySearch(query, pages, options);
       };
       graph.getTerminology = () => graph._terminology || { aliases: {}, acronyms: {}, definitions: {} };
       graph.getAcronyms = () => {
@@ -10228,15 +10629,6 @@ ${customStyles}
       };
       return graph;
     }
-    /**
-     * Batteries-included analysis: runs the full pipeline and returns
-     * a document ready for hybrid search, reasoning, and concept queries.
-     *
-     * Usage:
-     *   const doc = await CodbDocs.load(file);
-     *   await doc.prepare();
-     *   const result = await doc.askEnhanced("Who approved the $425,000 contract?");
-     */
     async prepare(opts = {}) {
       return this.analyze({
         ocr: true,
@@ -10246,13 +10638,10 @@ ${customStyles}
         ...opts
       });
     }
-    /**
-     * Quick text-only extraction (no analysis).
-     */
     async extractText(opts = {}) {
       const { ocr = true, onProgress } = opts;
-      const pages2 = [];
-      for (let num = 1; num <= this.pageCount; num++) {
+      const pages = [];
+      for (let num = 1;num <= this.pageCount; num++) {
         onProgress && onProgress({ page: num, total: this.pageCount, status: "reading" });
         const page = await this._pdf.getPage(num);
         const content = await page.getTextContent();
@@ -10276,23 +10665,21 @@ ${customStyles}
           source = "skipped";
           text = "";
         }
-        pages2.push({ num, text, source });
+        pages.push({ num, text, source });
       }
       return {
         pageCount: this.pageCount,
-        pages: pages2,
-        fullText: pages2.map((p) => `--- page ${p.num} (${p.source}) ---
-${p.text}`).join("\n\n")
+        pages,
+        fullText: pages.map((p) => `--- page ${p.num} (${p.source}) ---
+${p.text}`).join(`
+
+`)
       };
     }
     async renderPage(pageNum, scale = 1.5) {
       const page = await this._pdf.getPage(pageNum);
       return renderPageToCanvas(page, scale);
     }
-    /**
-     * Process pages in batches for large PDFs (900+ pages).
-     * This reduces memory usage by processing pages in chunks.
-     */
     async analyzeBatched(opts = {}) {
       const {
         batchSize = 50,
@@ -10305,8 +10692,8 @@ ${p.text}`).join("\n\n")
         onLayer,
         onBatchComplete
       } = opts;
-      const graph = new DocumentGraph();
-      const contentGraph = new DocumentContentGraph();
+      const graph = new DocumentGraph;
+      const contentGraph = new DocumentContentGraph;
       const ir = createIR();
       if (extractExtended) {
         try {
@@ -10322,7 +10709,7 @@ ${p.text}`).join("\n\n")
         }
       }
       const totalPages = this.pageCount;
-      for (let batchStart = 1; batchStart <= totalPages; batchStart += batchSize) {
+      for (let batchStart = 1;batchStart <= totalPages; batchStart += batchSize) {
         const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
         onProgress && onProgress({
           page: batchStart,
@@ -10330,7 +10717,7 @@ ${p.text}`).join("\n\n")
           status: "batch",
           batch: { start: batchStart, end: batchEnd, total: Math.ceil(totalPages / batchSize) }
         });
-        for (let num = batchStart; num <= batchEnd; num++) {
+        for (let num = batchStart;num <= batchEnd; num++) {
           const page = await this._pdf.getPage(num);
           const viewport = page.getViewport({ scale: 1 });
           const pageSize = { width: viewport.width, height: viewport.height };
@@ -10372,19 +10759,16 @@ ${p.text}`).join("\n\n")
           if (extractVecs) {
             try {
               vectors = await extractVectors(page);
-            } catch (e) {
-            }
+            } catch (e) {}
           }
           let structureTree = null;
           try {
             structureTree = await extractStructureTree(page);
-          } catch (e) {
-          }
+          } catch (e) {}
           let annotations = [];
           try {
             annotations = await extractAnnotations(page);
-          } catch (e) {
-          }
+          } catch (e) {}
           const irPage = addPage(ir, num, {
             width: pageSize.width,
             height: pageSize.height,
@@ -10392,7 +10776,8 @@ ${p.text}`).join("\n\n")
             mediaBox: page.mediaBox,
             cropBox: page.cropBox
           });
-          for (const vec of vectors) addVectorObject(ir, `page_${num}`, vec);
+          for (const vec of vectors)
+            addVectorObject(ir, `page_${num}`, vec);
           for (const item of content.items) {
             if (item.str && item.str.trim()) {
               addTextObject(ir, `page_${num}`, {
@@ -10408,26 +10793,23 @@ ${p.text}`).join("\n\n")
             irPage.annotations = annotations;
             ir.annotations[`page_${num}`] = annotations;
           }
-          if (structureTree) ir.structure[`page_${num}`] = structureTree;
+          if (structureTree)
+            ir.structure[`page_${num}`] = structureTree;
           if (extractExtended) {
             try {
               irPage.markedContent = await extractMarkedContent(page);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.artifacts = await extractArtifacts(page);
-            } catch (e) {
-            }
+            } catch (e) {}
             try {
               irPage.glyphs = await extractGlyphs(page);
-            } catch (e) {
-            }
+            } catch (e) {}
           }
           let readingOrder = [];
           try {
             readingOrder = detectReadingOrder(ir, num);
-          } catch (e) {
-          }
+          } catch (e) {}
           const pageResult = {
             num,
             text,
@@ -10449,8 +10831,7 @@ ${p.text}`).join("\n\n")
           onPageComplete && onPageComplete(pageResult);
           try {
             page.cleanup();
-          } catch (e) {
-          }
+          } catch (e) {}
         }
         onBatchComplete && onBatchComplete({
           batchStart,
@@ -10506,60 +10887,78 @@ ${p.text}`).join("\n\n")
       return graph;
     }
     destroy() {
-      if (this._pdf) this._pdf.destroy();
+      if (this._pdf)
+        this._pdf.destroy();
     }
-  };
+  }
   function computeTextQuality(contentItems, pageSize) {
-    if (!contentItems || contentItems.length === 0) return 0;
+    if (!contentItems || contentItems.length === 0)
+      return 0;
     let score = 1;
     const allText = contentItems.map((i) => i.str || "").join(" ");
     const wordCount = allText.split(/\s+/).filter((w) => w.length > 0).length;
-    if (wordCount < 5) score -= 0.4;
-    else if (wordCount < 15) score -= 0.2;
+    if (wordCount < 5)
+      score -= 0.4;
+    else if (wordCount < 15)
+      score -= 0.2;
     const nonPrintable = allText.replace(/[\x20-\x7E\n\r\t]/g, "").length;
     const nonPrintRatio = allText.length > 0 ? nonPrintable / allText.length : 0;
-    if (nonPrintRatio > 0.3) score -= 0.3;
+    if (nonPrintRatio > 0.3)
+      score -= 0.3;
     const outsideBounds = contentItems.filter((item) => {
       const x = item.transform?.[4] || 0;
       const y = item.transform?.[5] || 0;
       return x < 0 || x > pageSize.width || y < 0 || y > pageSize.height;
     }).length;
     const outsideRatio = contentItems.length > 0 ? outsideBounds / contentItems.length : 0;
-    if (outsideRatio > 0.5) score -= 0.3;
+    if (outsideRatio > 0.5)
+      score -= 0.3;
     const words = allText.split(/\s+/).filter((w) => w.length > 0);
     const avgWordLen = words.length > 0 ? words.reduce((s, w) => s + w.length, 0) / words.length : 0;
-    if (avgWordLen < 1.5 || avgWordLen > 25) score -= 0.2;
+    if (avgWordLen < 1.5 || avgWordLen > 25)
+      score -= 0.2;
     const fragments = contentItems.map((i) => (i.str || "").trim()).filter((t) => t.length > 3);
     const uniqueFragments = new Set(fragments.map((f) => f.toLowerCase()));
     const duplicateRatio = fragments.length > 0 ? 1 - uniqueFragments.size / fragments.length : 0;
-    if (duplicateRatio > 0.5) score -= 0.15;
+    if (duplicateRatio > 0.5)
+      score -= 0.15;
     const uniqueChars = new Set(allText.replace(/\s/g, "")).size;
-    if (uniqueChars < 10 && wordCount > 10) score -= 0.15;
+    if (uniqueChars < 10 && wordCount > 10)
+      score -= 0.15;
     return Math.max(0, Math.min(1, score));
   }
   function inferImageRole(img, contentItems, pageSize) {
-    if (!img.bbox) return "unknown";
+    if (!img.bbox)
+      return "unknown";
     const imgY = img.bbox.y || 0;
     const imgCenterY = imgY + (img.bbox.height || 0) / 2;
     const normalizedY = imgCenterY / pageSize.height;
-    if (normalizedY < 0.15) return "header";
-    if (normalizedY > 0.85) return "footer";
-    if (normalizedY < 0.3 && img.originalWidth < 300 && img.originalHeight < 150) return "logo";
+    if (normalizedY < 0.15)
+      return "header";
+    if (normalizedY > 0.85)
+      return "footer";
+    if (normalizedY < 0.3 && img.originalWidth < 300 && img.originalHeight < 150)
+      return "logo";
     if (img.originalWidth > 400 && img.originalHeight > 300) {
       const centerX = (img.bbox.x || 0) + (img.bbox.width || 0) / 2;
-      if (centerX > pageSize.width * 0.2 && centerX < pageSize.width * 0.8) return "chart";
+      if (centerX > pageSize.width * 0.2 && centerX < pageSize.width * 0.8)
+        return "chart";
     }
-    if (img.originalWidth < 50 && img.originalHeight < 50) return "icon";
+    if (img.originalWidth < 50 && img.originalHeight < 50)
+      return "icon";
     const nearbyText = contentItems.filter((item) => {
       const y = item.transform?.[5] || 0;
       return Math.abs(y - imgY) < 100;
     }).map((item) => item.str || "").join(" ");
-    if (/figure|fig\.|chart|graph|diagram|image|photo|picture/i.test(nearbyText)) return "figure";
-    if (/logo|emblem|seal|crest|badge/i.test(nearbyText)) return "logo";
+    if (/figure|fig\.|chart|graph|diagram|image|photo|picture/i.test(nearbyText))
+      return "figure";
+    if (/logo|emblem|seal|crest|badge/i.test(nearbyText))
+      return "logo";
     return "content";
   }
   function fuseNativeOCR(nativeText, ocrText, contentItems, pageSize) {
-    if (!nativeText || !ocrText) return nativeText || ocrText || "";
+    if (!nativeText || !ocrText)
+      return nativeText || ocrText || "";
     const nativeQuality = computeTextQuality(contentItems, pageSize);
     if (nativeQuality > 0.8) {
       return nativeText;
@@ -10576,7 +10975,8 @@ ${p.text}`).join("\n\n")
     return nativeText.length >= ocrText.length ? nativeText : ocrText;
   }
   function findNearestCaption(img, contentItems, pageSize) {
-    if (!img.bbox) return null;
+    if (!img.bbox)
+      return null;
     const imgY = img.bbox.y || 0;
     const imgBottom = imgY;
     const imgLeft = img.bbox.x || 0;
@@ -10592,7 +10992,8 @@ ${p.text}`).join("\n\n")
       const distB = imgBottom - (b.transform?.[5] || 0);
       return distA - distB;
     });
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0)
+      return null;
     const firstText = candidates[0].str.trim();
     if (/^(figure|fig\.|chart|graph|diagram|table|photo|image|picture)/i.test(firstText)) {
       return firstText;
@@ -10600,7 +11001,8 @@ ${p.text}`).join("\n\n")
     return firstText;
   }
   function extractNearbyText(img, contentItems, pageSize) {
-    if (!img.bbox) return "";
+    if (!img.bbox)
+      return "";
     const imgX = img.bbox[0] || 0;
     const imgY = img.bbox[1] || 0;
     const imgW = img.bbox[2] || 0;
@@ -10629,11 +11031,5 @@ ${p.text}`).join("\n\n")
     return canvas;
   }
   var CodbDocs = { load, configure, canUseWorkers };
-  var index_default = CodbDocs;
-  var __ns = __toCommonJS(index_exports);
-  __ns.load = load;
-  __ns.configure = configure;
-  __ns.canUseWorkers = canUseWorkers;
-  return __ns;
+  var src_default = CodbDocs;
 })();
-

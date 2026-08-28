@@ -280,6 +280,12 @@ import {
 
 import { createWorkspace } from './workspace.js';
 import { saveToCache, loadFromCache, clearCache, getCacheStats } from './persistence.js';
+import {
+  buildRAGContext,
+  toMarkdown,
+  toReflowedText,
+  toFullJSON,
+} from './exporters.js';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -693,8 +699,47 @@ class CodbDoc {
             // Store in IR
             if (!irPage.images) irPage.images = [];
             irPage.images.push(img);
+            // Register as a first-class image object so HTML renderers can embed it.
+            // Normalize the CTM bbox from [x, y, w, h] to the renderer's [x, y, w, h] shape.
+            const imgBbox = Array.isArray(img.bbox)
+              ? img.bbox
+              : (img.bbox && img.bbox.x != null
+                  ? [img.bbox.x, img.bbox.y, img.bbox.width, img.bbox.height]
+                  : null);
+            try {
+              addObject(ir, `page_${num}`, {
+                type: 'image',
+                raw: {
+                  src: img.dataUrl || img.thumbnail?.dataUrl || '',
+                  thumb: img.thumbnail?.dataUrl || null,
+                  format: img.format,
+                  width: img.width,
+                  height: img.height,
+                },
+                semantic: {
+                  role: 'image',
+                  caption: img.caption || '',
+                  text: img.caption || '',
+                  imageRole: img.role || null,
+                },
+                accessibility: {
+                  alt: img.caption || img.role || 'Image',
+                },
+                provenance: { method: 'native', confidence: 1.0 },
+                bbox: imgBbox,
+              });
+            } catch (e) { /* image object registration may fail */ }
           }
         } catch (e) { /* image extraction may fail */ }
+
+        // Rasterize the page once so exporters can produce a pixel-accurate
+        // "looks like the PDF" visual layer. Store as a data URL on the IR page.
+        let pageRaster = null;
+        try {
+          if (!canvas) canvas = await renderPageToCanvas(page, 1.5);
+          pageRaster = canvas.toDataURL('image/png');
+          irPage.background = pageRaster;
+        } catch (e) { /* page rasterization may fail */ }
 
         // Detect reading order
         let readingOrder = [];
