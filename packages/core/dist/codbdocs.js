@@ -2536,6 +2536,419 @@ ${p.text}`).join("\n\n")
     return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
   }
 
+  // src/viewer.js
+  function generateViewerChrome(ragPayload) {
+    const outline = ragPayload && ragPayload.outline || [];
+    return {
+      toolbar: viewerToolbarHTML(),
+      sidebar: viewerSidebarHTML(outline),
+      script: viewerScript(),
+      styles: viewerStyles()
+    };
+  }
+  function viewerToolbarHTML() {
+    return `
+  <div class="codbdocs-toolbar" role="group" aria-label="Document viewer controls">
+    <div class="codbdocs-searchbox">
+      <input type="search" id="codbdocs-search-input" aria-label="Search this document"
+        placeholder="Search document\u2026" autocomplete="off">
+      <span id="codbdocs-search-count" class="codbdocs-search-count" role="status" aria-live="polite"></span>
+    </div>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-view-pdf" data-codbdocs-view="pdf" aria-pressed="true">PDF</button>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-view-text" data-codbdocs-view="text" aria-pressed="false">Text</button>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-view-both" data-codbdocs-view="both" aria-pressed="false">Both</button>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-btn" id="codbdocs-page-prev" aria-label="Previous page">\u2039</button>
+    <span id="codbdocs-page-label" class="codbdocs-page-label" aria-live="polite">Page 1 / 1</span>
+    <button type="button" class="codbdocs-btn" id="codbdocs-page-next" aria-label="Next page">\u203A</button>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-out" aria-label="Zoom out">\u2212</button>
+    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-fit" aria-label="Fit to width">Fit</button>
+    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-in" aria-label="Zoom in">+</button>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-contrast" aria-pressed="false">High contrast</button>
+    <button type="button" class="codbdocs-btn" id="codbdocs-outline-toggle" aria-expanded="true" aria-controls="codbdocs-outline">Outline</button>
+  </div>
+  `;
+  }
+  function viewerSidebarHTML(outline) {
+    const lis = renderOutlineList(outline);
+    return `
+  <aside id="codbdocs-outline" class="codbdocs-outline" aria-label="Document outline">
+    <section class="codbdocs-search-results-wrap" aria-label="Search results">
+      <h2 class="codbdocs-panel-title">Search Results</h2>
+      <div id="codbdocs-search-results" class="codbdocs-search-results" role="list"></div>
+    </section>
+    <section class="codbdocs-outline-wrap" aria-label="Outline">
+      <h2 class="codbdocs-panel-title">Outline</h2>
+    <div class="codbdocs-outline-inner">
+      ${lis || '<p class="codbdocs-outline-empty">No outline in this document.</p>'}
+    </div>
+    </section>
+  </aside>
+  `;
+  }
+  function renderOutlineList(nodes, depth) {
+    if (!Array.isArray(nodes) || nodes.length === 0) return "";
+    const d = depth || 0;
+    let html = '<ul class="codbdocs-outline-list">';
+    for (const node of nodes) {
+      const label = escapeHTML(node.title || "Untitled");
+      const page = node.page || node.pageNum || 0;
+      const dest = encodeURIComponent(node.title || "");
+      html += `<li class="codbdocs-outline-item" style="padding-left:${d * 14}px"><a href="#codbdocs-search" class="codbdocs-outline-link" data-outline-dest="${dest}"
+         data-outline-page="${page}">${label}</a></li>`;
+      if (node.items && node.items.length) html += renderOutlineList(node.items, d + 1);
+    }
+    html += "</ul>";
+    return html;
+  }
+  function viewerStyles() {
+    return `
+  <style id="codbdocs-viewer-styles">
+    body { max-width: none; margin: 0; padding: 20px; }
+    #codbdocs-viewer { display: flex; align-items: flex-start; gap: 16px; max-width: 1200px; margin: 0 auto; padding: 0 12px 40px; }
+    #codbdocs-main { flex: 1 1 auto; min-width: 0; overflow: auto; }
+    .pdf-page { width: fit-content; max-width: none; padding: 0; overflow: hidden; }
+    .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
+    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; }
+    .codbdocs-sidebar { width: 240px; flex: 0 0 240px; }
+    .codbdocs-outline { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); max-height: 70vh; overflow: auto; position: sticky; top: 12px; }
+    .codbdocs-outline-list { list-style: none; margin: 0; padding: 0; }
+    .codbdocs-outline-item { border-bottom: 1px solid #f0f0f0; }
+    .codbdocs-outline-link { display: block; padding: 5px 6px; color: #334; text-decoration: none; font-size: 13px; border-radius: 4px; }
+    .codbdocs-outline-link:hover, .codbdocs-outline-link.is-active { background: #eef1ff; color: #1c2b8a; }
+    .codbdocs-outline-empty { color: #888; font-size: 13px; padding: 6px; margin: 0; }
+    .codbdocs-panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #667; margin: 2px 6px 8px; }
+    .codbdocs-search-results-wrap { border-bottom: 1px solid #eee; margin-bottom: 10px; padding-bottom: 10px; }
+    .codbdocs-search-result { display: block; width: 100%; text-align: left; border: 0; border-radius: 6px; background: transparent; padding: 7px 8px; margin: 2px 0; color: #334; cursor: pointer; font-size: 12px; }
+    .codbdocs-search-result:hover, .codbdocs-search-result.is-active { background: #fff4cc; color: #222; }
+    .codbdocs-search-result-page { display: block; font-weight: 700; margin-bottom: 2px; }
+    .codbdocs-search-result-snippet { display: block; color: #667; line-height: 1.35; }
+    .codbdocs-toolbar { display: flex; align-items: center; gap: 6px; background: #1f2430; color: #fff; padding: 8px 12px; border-radius: 8px; margin: 12px auto; flex-wrap: wrap; justify-content: center; position: sticky; top: 0; z-index: 40; box-shadow: 0 2px 6px rgba(0,0,0,.25); max-width: 1180px; }
+    .codbdocs-toolbar .codbdocs-toggle, .codbdocs-toolbar .codbdocs-btn { background: #2b3140; color: #cfd6e6; border: 1px solid #40475a; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+    .codbdocs-toolbar .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
+    .codbdocs-toolbar .codbdocs-btn:hover, .codbdocs-toolbar .codbdocs-toggle:hover { background: #394159; }
+    .codbdocs-searchbox { display: flex; align-items: center; gap: 8px; }
+    .codbdocs-searchbox input { padding: 6px 10px; border: 1px solid #40475a; border-radius: 6px; background: #0d1117; color: #eee; font-size: 13px; width: 220px; }
+    .codbdocs-searchbox input:focus { outline: 2px solid #4361ee; }
+    .codbdocs-search-count { font-size: 12px; color: #9aa4bd; min-width: 28px; text-align: center; white-space: nowrap; }
+    .codbdocs-page-label { color: #cfd6e6; font-size: 13px; min-width: 90px; text-align: center; }
+    .codbdocs-sep { width: 1px; height: 22px; background: #3a4155; margin: 0 2px; }
+    .codbdocs-viewer-hint { color: #9aa4bd; font-size: 11px; text-align: center; margin: 8px auto 0; max-width: 1180px; }
+
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
+    body[data-codbdocs-view="text"] .pdf-embedded-image { display: none; }
+    body[data-codbdocs-view="pdf"] .pdf-text-layer { visibility: hidden; }
+    body[data-codbdocs-view="pdf"] .pdf-text-layer { pointer-events: none; }
+    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
+    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text { color: transparent !important; }
+    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text.sr-highlight { color: #000 !important; }
+
+    .pdf-text.sr-highlight { background: rgba(255, 213, 79, 0.9); color: #000; border-radius: 2px; }
+    .pdf-text.sr-highlight.is-current { background: #ff8c1a; color: #000; }
+    .codbdocs-zoom-wrap { position: relative; margin: 20px auto; transform-origin: top center; transition: width .15s ease, height .15s ease; }
+
+    body[data-codbdocs-contrast="high"] { background: #000; color: #fff; }
+    body[data-codbdocs-contrast="high"] .pdf-page { box-shadow: 0 0 0 1px #777; }
+    body[data-codbdocs-contrast="high"] .codbdocs-outline { border-color: #555; }
+    :focus-visible { outline: 3px solid #4361ee; outline-offset: 1px; }
+    .skip-link { position: absolute; left: -999px; top: 0; background: #4361ee; color: #fff; padding: 8px 12px; border-radius: 0 0 6px 0; z-index: 100; }
+    .skip-link:focus { left: 0; }
+    @media (max-width: 900px) { #codbdocs-viewer { flex-direction: column; } .codbdocs-sidebar { width: 100%; flex: 1 1 auto; } .codbdocs-outline { position: static; max-height: none; } }
+  </style>
+  `;
+  }
+  function viewerScript() {
+    return `
+  <script>
+  (function () {
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+    var body = document.body;
+    var pages = $$('.pdf-page');
+    var currentPage = 1;
+    var zoom = 1;
+    var fitMode = true;
+    var rag = {};
+    var ragEl = $('#codbdocs-rag');
+    if (ragEl) {
+      try { rag = JSON.parse(ragEl.textContent || '{}') || {}; } catch (e) { rag = {}; }
+    }
+    var pageTextIndex = (rag.pages || []).map(function (p) {
+      return { page: p.page || 1, text: normalize(p.text || ''), raw: p.text || '' };
+    });
+
+    // Wrap each page so zoom scales raster + text together and keeps alignment.
+    pages.forEach(function (pg) {
+      var wrap = document.createElement('div');
+      wrap.className = 'codbdocs-zoom-wrap';
+      pg.parentNode.insertBefore(wrap, pg);
+      wrap.appendChild(pg);
+      pg.style.margin = '0 auto';
+    });
+    var wraps = $$('.codbdocs-zoom-wrap');
+    function applyZoom() {
+      wraps.forEach(function (w) {
+        var pg = $('.pdf-page', w);
+        if (!pg) return;
+        w.style.width = (pg.offsetWidth * zoom) + 'px';
+        w.style.height = (pg.offsetHeight * zoom) + 'px';
+        pg.style.transform = 'scale(' + zoom + ')';
+        pg.style.transformOrigin = 'top center';
+      });
+    }
+    function fitWidth() {
+      var main = $('#codbdocs-main') || document.body;
+      var first = pages[0];
+      if (!main || !first || !first.offsetWidth) return;
+      var available = Math.max(280, main.clientWidth - 24);
+      zoom = Math.max(0.35, Math.min(2, +(available / first.offsetWidth).toFixed(2)));
+      fitMode = true;
+      applyZoom();
+    }
+
+    function updatePageLabel(n) {
+      var total = pages.length;
+      currentPage = Math.max(1, Math.min(total || 1, n || 1));
+      var label = $('#codbdocs-page-label');
+      if (label) label.textContent = 'Page ' + currentPage + ' / ' + (total || 1);
+    }
+
+    function setView(v) {
+      body.dataset.codbdocsView = v;
+      var states = { pdf: false, text: false, both: false };
+      states[v] = true;
+      ['pdf', 'text', 'both'].forEach(function (k) {
+        var b = $('#codbdocs-view-' + k);
+        if (b) { b.classList.toggle('is-active', states[k]); b.setAttribute('aria-pressed', states[k] ? 'true' : 'false'); }
+      });
+    }
+
+    function gotoPage(n, opts) {
+      opts = opts || {};
+      var total = pages.length;
+      if (!total) return;
+      n = Math.max(1, Math.min(total, n));
+      updatePageLabel(n);
+      var el = pages[n - 1];
+      if (el) {
+        var wrap = el.closest('.codbdocs-zoom-wrap');
+        var target = wrap || el;
+        if (opts.smooth) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else target.scrollIntoView({ block: 'start' });
+      }
+    }
+
+    var prevBtn = $('#codbdocs-page-prev'), nextBtn = $('#codbdocs-page-next');
+    if (prevBtn) prevBtn.addEventListener('click', function () { gotoPage(currentPage - 1, { smooth: true }); });
+    if (nextBtn) nextBtn.addEventListener('click', function () { gotoPage(currentPage + 1, { smooth: true }); });
+
+    var zi = $('#codbdocs-zoom-in'), zo = $('#codbdocs-zoom-out'), zf = $('#codbdocs-zoom-fit');
+    if (zi) zi.addEventListener('click', function () { fitMode = false; zoom = Math.min(3, +(zoom + 0.25).toFixed(2)); applyZoom(); });
+    if (zo) zo.addEventListener('click', function () { fitMode = false; zoom = Math.max(0.35, +(zoom - 0.25).toFixed(2)); applyZoom(); });
+    if (zf) zf.addEventListener('click', fitWidth);
+    window.addEventListener('resize', function () { if (fitMode) fitWidth(); });
+
+    $$('#codbdocs-viewer [data-codbdocs-view]').forEach(function (b) {
+      b.addEventListener('click', function () { setView(b.getAttribute('data-codbdocs-view')); });
+    });
+
+    // Toggles (binding after view-mode handlers since the layout is re-generated).
+    var views = { pdf: $('#codbdocs-view-pdf'), text: $('#codbdocs-view-text'), both: $('#codbdocs-view-both') };
+    if (views.pdf) views.pdf.addEventListener('click', function () { setView('pdf'); });
+    if (views.text) views.text.addEventListener('click', function () { setView('text'); });
+    if (views.both) views.both.addEventListener('click', function () { setView('both'); });
+
+    // High contrast
+    var contrastBtn = $('#codbdocs-contrast');
+    if (contrastBtn) contrastBtn.addEventListener('click', function () {
+      var on = body.dataset.codbdocsContrast !== 'high';
+      body.dataset.codbdocsContrast = on ? 'high' : 'normal';
+      contrastBtn.classList.toggle('is-active', on);
+      contrastBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+
+    // Outline toggle
+    var outlineToggle = $('#codbdocs-outline-toggle');
+    var outline = $('#codbdocs-outline');
+    if (outlineToggle && outline) {
+      outlineToggle.addEventListener('click', function () {
+        var open = outline.style.display !== 'none';
+        outline.style.display = open ? 'none' : 'block';
+        outlineToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+      });
+      $$('.codbdocs-outline-link', outline).forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          var page = parseInt(a.getAttribute('data-outline-page'), 10) || 1;
+          gotoPage(page, { smooth: true });
+          $$('.codbdocs-outline-link').forEach(function (x) { x.classList.remove('is-active'); });
+          a.classList.add('is-active');
+        });
+      });
+    }
+
+    if ('IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          var page = parseInt(entry.target.getAttribute('data-pdf-page'), 10);
+          if (page) updatePageLabel(page);
+        });
+      }, { threshold: 0.45 });
+      pages.forEach(function (pg) { observer.observe(pg); });
+    }
+
+    // ---- Offline search over positioned text runs ----
+    function normalize(s) { return String(s || '').toLowerCase().replace(/\\s+/g, ' ').trim(); }
+
+    // Index: every positioned text run -> {el, page, text}
+    var index = [];
+    var root = $('#codbdocs-root');
+    $$('.pdf-text', root).forEach(function (el) {
+      var t = (el.textContent || '').trim();
+      if (!t) return;
+      var pg = parseInt(el.getAttribute('data-pdf-page'), 10) || 1;
+      index.push({ el: el, page: pg, text: normalize(t) });
+    });
+
+    var searchInput = $('#codbdocs-search-input');
+    var countEl = $('#codbdocs-search-count');
+    var resultsEl = $('#codbdocs-search-results');
+    var matches = [];
+    var cursor = -1;
+
+    function clearHighlights() {
+      matches.forEach(function (m) {
+        m.el.classList.remove('sr-highlight', 'is-current');
+      });
+      matches = [];
+      cursor = -1;
+    }
+
+    function snippet(text, query) {
+      text = String(text || '').replace(/s+/g, ' ').trim();
+      var lower = text.toLowerCase();
+      var pos = lower.indexOf(query);
+      if (pos < 0) return text.slice(0, 160) + (text.length > 160 ? '...' : '');
+      var start = Math.max(0, pos - 60);
+      var end = Math.min(text.length, pos + query.length + 90);
+      return (start ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
+    }
+
+    function renderResults(query, pageMatches) {
+      if (!resultsEl) return;
+      resultsEl.textContent = '';
+      if (!query) return;
+      if (!pageMatches.length) {
+        var empty = document.createElement('p');
+        empty.className = 'codbdocs-outline-empty';
+        empty.textContent = 'No RAG page matches.';
+        resultsEl.appendChild(empty);
+        return;
+      }
+      pageMatches.slice(0, 40).forEach(function (p, i) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'codbdocs-search-result';
+        btn.setAttribute('role', 'listitem');
+        btn.setAttribute('data-result-page', p.page);
+        var label = document.createElement('span');
+        label.className = 'codbdocs-search-result-page';
+        label.textContent = 'Page ' + p.page;
+        var snip = document.createElement('span');
+        snip.className = 'codbdocs-search-result-snippet';
+        snip.textContent = snippet(p.raw, query);
+        btn.appendChild(label);
+        btn.appendChild(snip);
+        btn.addEventListener('click', function () {
+          $$('.codbdocs-search-result').forEach(function (x) { x.classList.remove('is-active'); });
+          btn.classList.add('is-active');
+          var matchIndex = matches.findIndex(function (m) { return m.page === p.page; });
+          if (matchIndex >= 0) goMatch(matchIndex, false);
+          else gotoPage(p.page, { smooth: true });
+        });
+        if (i === 0) btn.classList.add('is-active');
+        resultsEl.appendChild(btn);
+      });
+    }
+
+    function runSearch(query) {
+      clearHighlights();
+      query = normalize(query);
+      if (!query) {
+        body.dataset.codbdocsSearching = 'false';
+        renderResults('', []);
+        if (countEl) countEl.textContent = '';
+        return;
+      }
+      body.dataset.codbdocsSearching = 'true';
+      matches = index.filter(function (m) { return m.text.indexOf(query) !== -1; });
+      var pageMatches = pageTextIndex.filter(function (p) { return p.text.indexOf(query) !== -1; });
+      renderResults(query, pageMatches);
+      if (countEl) countEl.textContent = matches.length + ' run' + (matches.length === 1 ? '' : 's') + ' / ' + pageMatches.length + ' page' + (pageMatches.length === 1 ? '' : 's');
+      if (!matches.length) {
+        if (pageMatches.length) gotoPage(pageMatches[0].page, { smooth: true });
+        return;
+      }
+      matches.forEach(function (m, i) {
+        m.el.classList.add('sr-highlight');
+        m.el.setAttribute('data-sr-index', i);
+      });
+      goMatch(0, true);
+    }
+
+    function goMatch(i, first) {
+      if (!matches.length) return;
+      if (i < 0) i = matches.length - 1;
+      if (i >= matches.length) i = 0;
+      cursor = i;
+      matches.forEach(function (m, k) { m.el.classList.toggle('is-current', k === i); });
+      gotoPage(matches[i].page, { smooth: !first });
+      matches[i].el.scrollIntoView({ block: 'center', behavior: first ? 'auto' : 'smooth' });
+    }
+
+    if (searchInput) {
+      var timer = null;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { runSearch(searchInput.value); }, 220);
+      });
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (matches.length) goMatch(e.shiftKey ? cursor - 1 : cursor + 1, false);
+        }
+      });
+    }
+
+    // Keyboard shortcuts: f=search, p/n=page, c=contrast, o=outline
+    document.addEventListener('keydown', function (e) {
+      var tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      var k = (e.key || '').toLowerCase();
+      if (k === 'f') { e.preventDefault(); if (searchInput) { searchInput.focus(); searchInput.select(); } }
+      else if (k === 'p') gotoPage(currentPage - 1, { smooth: true });
+      else if (k === 'n') gotoPage(currentPage + 1, { smooth: true });
+      else if (k === 'c' && contrastBtn) contrastBtn.click();
+      else if (k === 'o' && outlineToggle) outlineToggle.click();
+    });
+
+    // init
+    setView('pdf');
+    fitWidth();
+    gotoPage(1);
+  })();
+  <\/script>
+  `;
+  }
+  function escapeHTML(str) {
+    return String(str == null ? "" : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
   // src/pdfir.js
   function createIR() {
     return {
@@ -3031,21 +3444,30 @@ ${p.text}`).join("\n\n")
       includeRawText = true
     } = options;
     const ragPayload = buildRAGPayload(ir);
+    const viewer = generateViewerChrome(ragPayload);
     let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || "en") + '">\n<head>\n';
     html += '<meta charset="UTF-8">\n';
     html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
-    html += "<title>" + escapeHTML(ir.document.metadata?.title || "Document") + "</title>\n";
+    html += "<title>" + escapeHTML2(ir.document.metadata?.title || "Document") + "</title>\n";
     html += generateVisualStyles(ir);
     html += generateAccessibleStyles();
+    html += viewer.styles;
     html += '</head>\n<body data-codbdocs-view="pdf">\n';
+    html += '<a class="skip-link" href="#codbdocs-root">Skip to document</a>\n';
     html += '<main role="document" id="codbdocs-root">\n';
-    html += viewToggleHTML();
+    html += '<div id="codbdocs-viewer">\n';
+    html += '<aside class="codbdocs-sidebar">\n';
+    html += viewer.sidebar;
+    html += "</aside>\n";
+    html += '<div id="codbdocs-main">\n';
+    html += viewer.toolbar;
+    html += '<div class="codbdocs-viewer-hint">Keyboard: <b>F</b> search &middot; <b>P</b>/<b>N</b> page &middot; <b>C</b> contrast &middot; <b>O</b> outline</div>\n';
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
       if (!page) continue;
       const attrs = includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "";
       const pageLabel = page.labels?.print || `Page ${page.num}`;
-      html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML(pageLabel)}" role="region">
+      html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML2(pageLabel)}" role="region">
 `;
       if (page.background) {
         html += `<div class="pdf-page-raster" aria-hidden="true">
@@ -3057,13 +3479,20 @@ ${p.text}`).join("\n\n")
       } else {
         html += renderPageVisual(page, ir, attrs);
       }
-      html += renderPageAccessible(page, ir, attrs, mode);
+      if (page.background) {
+        html += renderPagePositionedText(page, ir, attrs);
+      } else {
+        html += renderPageAccessible(page, ir, attrs, mode);
+      }
       html += "</section>\n";
     }
+    html += "</div>\n";
+    html += "</div>\n";
     html += "</main>\n";
     if (includeRAG || includeRawText) {
       html += '<script type="application/json" id="codbdocs-rag" data-page-count="' + (ir.document.pages.length || 0) + '">' + JSON.stringify(ragPayload).replace(/</g, "\\u003c") + "<\/script>\n";
     }
+    html += viewer.script;
     html += "</body>\n</html>";
     return html;
   }
@@ -3075,39 +3504,12 @@ ${p.text}`).join("\n\n")
       const src = obj.raw?.src;
       if (!src) continue;
       const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
-      const alt = escapeHTML(obj.accessibility?.alt || obj.semantic?.caption || "Image");
+      const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
       html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
       html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
 `;
     }
     return html;
-  }
-  function viewToggleHTML() {
-    return `
-  <div class="codbdocs-toolbar" role="group" aria-label="View options">
-    <button type="button" class="codbdocs-toggle is-active" data-codbdocs-view="pdf" aria-pressed="true">PDF view</button>
-    <button type="button" class="codbdocs-toggle" data-codbdocs-view="text" aria-pressed="false">Selectable text view</button>
-  </div>
-  <script>
-    (function () {
-      var btnPdf = document.querySelector('[data-codbdocs-view="pdf"]');
-      var btnText = document.querySelector('[data-codbdocs-view="text"]');
-      if (!btnPdf || !btnText) return;
-      function setView(view) {
-        document.querySelectorAll('.pdf-page-raster').forEach(function (el) {
-          el.style.display = view === 'pdf' ? '' : 'none';
-        });
-        document.body.dataset.codbdocsView = view;
-        btnPdf.classList.toggle('is-active', view === 'pdf');
-        btnText.classList.toggle('is-active', view === 'text');
-        btnPdf.setAttribute('aria-pressed', view === 'pdf' ? 'true' : 'false');
-        btnText.setAttribute('aria-pressed', view === 'text' ? 'true' : 'false');
-      }
-      btnPdf.addEventListener('click', function () { setView('pdf'); });
-      btnText.addEventListener('click', function () { setView('text'); });
-    })();
-  <\/script>
-  `;
   }
   function buildRAGPayload(ir) {
     return buildRAGContext(ir, null);
@@ -3125,13 +3527,13 @@ ${p.text}`).join("\n\n")
       if (obj.type === "text") {
         const bbox = obj.bbox || [];
         const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic?.text || "")}</div>
+        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic?.text || "")}</div>
 `;
       } else if (obj.type === "image") {
         const bbox = obj.bbox || [];
         const src = obj.raw?.src || "";
         if (src) {
-          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML(obj.accessibility?.alt || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(obj.accessibility?.alt || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
         } else {
           html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
@@ -3139,8 +3541,36 @@ ${p.text}`).join("\n\n")
         }
       } else if (obj.type === "link") {
         const bbox = obj.bbox || [];
-        const href = escapeHTML(obj.raw?.href || "#");
-        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML(obj.semantic?.text || obj.raw?.url || "link")}</a>
+        const href = escapeHTML2(obj.raw?.href || "#");
+        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
+`;
+      }
+    }
+    html += "</div>\n";
+    return html;
+  }
+  function renderPagePositionedText(page, ir, attrs) {
+    let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
+    for (const objId of page.content) {
+      const obj = ir.objects[objId];
+      if (!obj) continue;
+      const dataAttr = includeDataAttributes(objId, attrs);
+      const bbox = obj.bbox || [];
+      if (obj.type === "text" && obj.semantic?.text) {
+        const style = textRunStyle(obj);
+        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
+`;
+      } else if (obj.type === "image") {
+        const src = obj.raw?.src || "";
+        const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
+        if (src) {
+          html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+`;
+        }
+      } else if (obj.type === "link") {
+        const href = escapeHTML2(obj.raw?.href || "#");
+        const text = escapeHTML2(obj.semantic?.text || obj.raw?.url || "link");
+        html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>
 `;
       }
     }
@@ -3159,9 +3589,9 @@ ${p.text}`).join("\n\n")
         const src = obj.raw?.src || "";
         html += `<figure${dataAttr}>
 `;
-        if (src) html += `<img src="${escapeHTML(src)}" alt="${escapeHTML(alt)}" loading="lazy">
+        if (src) html += `<img src="${escapeHTML2(src)}" alt="${escapeHTML2(alt)}" loading="lazy">
 `;
-        if (obj.semantic?.caption) html += `<figcaption>${escapeHTML(obj.semantic.caption)}</figcaption>
+        if (obj.semantic?.caption) html += `<figcaption>${escapeHTML2(obj.semantic.caption)}</figcaption>
 `;
         if (mode === "intelligent" && obj.provenance?.method === "vision") {
           html += `<small class="ai-generated">AI-generated description</small>
@@ -3170,12 +3600,12 @@ ${p.text}`).join("\n\n")
         html += "</figure>\n";
       } else if (role === "heading") {
         const level = obj.semantic?.level || 2;
-        html += `<h${level}${dataAttr}>${escapeHTML(obj.semantic?.text || "")}</h${level}>
+        html += `<h${level}${dataAttr}>${escapeHTML2(obj.semantic?.text || "")}</h${level}>
 `;
       } else if (role === "table") {
         html += `<table${dataAttr}>
 `;
-        html += `<caption>${escapeHTML(obj.semantic?.caption || "Table")}</caption>
+        html += `<caption>${escapeHTML2(obj.semantic?.caption || "Table")}</caption>
 `;
         html += "</table>\n";
       } else if (role === "list") {
@@ -3183,12 +3613,12 @@ ${p.text}`).join("\n\n")
 `;
         html += "</ul>\n";
       } else if (obj.type === "link") {
-        const href = escapeHTML(obj.raw?.href || "#");
-        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML(obj.semantic?.text || obj.raw?.url || "link")}</a>
+        const href = escapeHTML2(obj.raw?.href || "#");
+        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
 `;
       } else if (obj.type === "text" && obj.semantic?.text) {
         const style = textRunStyle(obj);
-        html += `<p${dataAttr}${style ? ' style="' + style + '"' : ""}>${escapeHTML(obj.semantic.text)}</p>
+        html += `<p${dataAttr}${style ? ' style="' + style + '"' : ""}>${escapeHTML2(obj.semantic.text)}</p>
 `;
       }
     }
@@ -3251,17 +3681,20 @@ ${p.text}`).join("\n\n")
   function generateVisualStyles(ir) {
     return `<style>
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
-    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
+    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
     .pdf-page-raster { position: relative; }
     .pdf-page-raster > img { display: block; position: relative; z-index: 1; }
     .pdf-embedded-image { position: absolute; z-index: 2; }
-    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; }
-    body[data-codbdocs-view="pdf"] .pdf-text-layer { display: none; }
+    /* The positioned text layer sits directly over the raster at the same
+       coordinates, so it renders on top of the pixels and stays selectable.
+       This makes the page look exactly like the source PDF while keeping
+       every run precise and copyable. */
+    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; user-select: text; }
     body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
     .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
     .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
     .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
-    .pdf-text { white-space: pre-wrap; }
+    .pdf-text { position: absolute; white-space: pre; line-height: 1; transform-origin: 0 0; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
     .ai-generated { color: #999; font-style: italic; }
@@ -3441,7 +3874,7 @@ ${p.text}`).join("\n\n")
   function generateId(prefix) {
     return `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`;
   }
-  function escapeHTML(str) {
+  function escapeHTML2(str) {
     if (!str) return "";
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
@@ -8383,7 +8816,7 @@ ${p.text}`).join("\n\n")
   }
 
   // src/docaccess.js
-  function escapeHTML2(str) {
+  function escapeHTML3(str) {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
@@ -8662,14 +9095,14 @@ ${p.text}`).join("\n\n")
     const title = ir.document.metadata?.title || "Document";
     const author = ir.document.metadata?.author || "";
     let html = "<!DOCTYPE html>\n";
-    html += `<html lang="${escapeHTML2(docLang)}">
+    html += `<html lang="${escapeHTML3(docLang)}">
 `;
     html += "<head>\n";
     html += '<meta charset="UTF-8">\n';
     html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
-    html += `<title>${escapeHTML2(title)}</title>
+    html += `<title>${escapeHTML3(title)}</title>
 `;
-    if (author) html += `<meta name="author" content="${escapeHTML2(author)}">
+    if (author) html += `<meta name="author" content="${escapeHTML3(author)}">
 `;
     html += '<meta name="description" content="Accessible document export from CodbDocs">\n';
     if (includeStyles) {
@@ -8688,15 +9121,15 @@ ${customStyles}
     }
     if (includeLandmarks) {
       html += '<header role="banner" aria-label="Document header">\n';
-      html += `  <h1>${escapeHTML2(title)}</h1>
+      html += `  <h1>${escapeHTML3(title)}</h1>
 `;
       if (author) {
-        html += `  <p class="doc-author">By ${escapeHTML2(author)}</p>
+        html += `  <p class="doc-author">By ${escapeHTML3(author)}</p>
 `;
       }
       const date = ir.document.metadata?.creationDate || ir.document.metadata?.modDate;
       if (date) {
-        html += `  <p class="doc-date"><time datetime="${escapeHTML2(date)}">${escapeHTML2(date)}</time></p>
+        html += `  <p class="doc-date"><time datetime="${escapeHTML3(date)}">${escapeHTML3(date)}</time></p>
 `;
       }
       html += "</header>\n";
@@ -8713,7 +9146,7 @@ ${customStyles}
         const page = ir.pages[pageId];
         if (!page) continue;
         const label = page.labels?.print || `Page ${page.num}`;
-        html += `      <li><a href="#${pageId}" aria-label="Go to ${escapeHTML2(label)}">${escapeHTML2(label)}</a></li>
+        html += `      <li><a href="#${pageId}" aria-label="Go to ${escapeHTML3(label)}">${escapeHTML3(label)}</a></li>
 `;
       }
       html += "    </ul>\n";
@@ -8727,9 +9160,9 @@ ${customStyles}
       const pageLabel = page.labels?.print || `Page ${pageNum}`;
       const dataAttr = includeDataAttributes2 ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}"` : "";
       html += `
-  <section id="${pageId}" class="pdf-page"${dataAttr} aria-label="${escapeHTML2(pageLabel)}">
+  <section id="${pageId}" class="pdf-page"${dataAttr} aria-label="${escapeHTML3(pageLabel)}">
 `;
-      html += `    <h2 class="page-heading" aria-label="${escapeHTML2(pageLabel)}">${escapeHTML2(pageLabel)}</h2>
+      html += `    <h2 class="page-heading" aria-label="${escapeHTML3(pageLabel)}">${escapeHTML3(pageLabel)}</h2>
 `;
       if (page.background) {
         html += `    <div class="pdf-page-raster" aria-hidden="true">
@@ -8777,7 +9210,7 @@ ${customStyles}
         const page = ir.pages[pageId];
         if (!page) continue;
         const label = page.labels?.print || `Page ${page.num}`;
-        html += `    <li><a href="#${pageId}" class="skip-link">${escapeHTML2(label)}</a></li>
+        html += `    <li><a href="#${pageId}" class="skip-link">${escapeHTML3(label)}</a></li>
 `;
       }
       html += "  </ul>\n";
@@ -8844,7 +9277,7 @@ ${customStyles}
       }
       headingTracker.current = level;
     }
-    const text = escapeHTML2(obj.semantic?.text || "");
+    const text = escapeHTML3(obj.semantic?.text || "");
     if (!text) return "";
     const id = obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`;
     return `    <h${level} id="${id}"${dataAttr}>${text}</h${level}>
@@ -8859,13 +9292,13 @@ ${customStyles}
     const rows = obj.semantic?.rows || [];
     const cols = obj.semantic?.cols || [];
     html += `    <table id="${tableId}"${dataAttr}`;
-    if (summary) html += ` aria-label="${escapeHTML2(summary)}"`;
+    if (summary) html += ` aria-label="${escapeHTML3(summary)}"`;
     html += ">\n";
     if (caption) {
-      html += `      <caption>${escapeHTML2(caption)}</caption>
+      html += `      <caption>${escapeHTML3(caption)}</caption>
 `;
     } else if (summary) {
-      html += `      <caption>${escapeHTML2(summary)}</caption>
+      html += `      <caption>${escapeHTML3(summary)}</caption>
 `;
     }
     if (rows.length > 0) {
@@ -8874,7 +9307,7 @@ ${customStyles}
       const headerRow = rows[0] || [];
       for (let c = 0; c < headerRow.length; c++) {
         const cell = headerRow[c];
-        html += `          <th scope="col">${escapeHTML2(cell?.text || "")}</th>
+        html += `          <th scope="col">${escapeHTML3(cell?.text || "")}</th>
 `;
       }
       html += "        </tr>\n";
@@ -8886,7 +9319,7 @@ ${customStyles}
           const row = rows[r] || [];
           for (let c = 0; c < row.length; c++) {
             const cell = row[c];
-            html += `          <td>${escapeHTML2(cell?.text || "")}</td>
+            html += `          <td>${escapeHTML3(cell?.text || "")}</td>
 `;
           }
           html += "        </tr>\n";
@@ -8896,7 +9329,7 @@ ${customStyles}
     } else if (cols.length > 0) {
       html += "      <thead>\n        <tr>\n";
       for (const col of cols) {
-        html += `          <th scope="col">${escapeHTML2(col.header || col.name || "")}</th>
+        html += `          <th scope="col">${escapeHTML3(col.header || col.name || "")}</th>
 `;
       }
       html += "        </tr>\n      </thead>\n";
@@ -8907,7 +9340,7 @@ ${customStyles}
           html += "        <tr>\n";
           for (const col of cols) {
             const val = (col.values || [])[r] || "";
-            html += `          <td>${escapeHTML2(typeof val === "string" ? val : JSON.stringify(val))}</td>
+            html += `          <td>${escapeHTML3(typeof val === "string" ? val : JSON.stringify(val))}</td>
 `;
           }
           html += "        </tr>\n";
@@ -8950,7 +9383,7 @@ ${customStyles}
     if (rows.length === 0) return html;
     html += "      <thead>\n        <tr>\n";
     for (const cell of rows[0]) {
-      html += `          <th scope="col">${escapeHTML2(cell.semantic?.text || "")}</th>
+      html += `          <th scope="col">${escapeHTML3(cell.semantic?.text || "")}</th>
 `;
     }
     html += "        </tr>\n      </thead>\n";
@@ -8959,7 +9392,7 @@ ${customStyles}
       for (let r = 1; r < rows.length; r++) {
         html += "        <tr>\n";
         for (const cell of rows[r]) {
-          html += `          <td>${escapeHTML2(cell.semantic?.text || "")}</td>
+          html += `          <td>${escapeHTML3(cell.semantic?.text || "")}</td>
 `;
         }
         html += "        </tr>\n";
@@ -8978,13 +9411,13 @@ ${customStyles}
     if (items.length > 0) {
       for (const item of items) {
         const text = typeof item === "string" ? item : item?.text || "";
-        html += `      <li>${escapeHTML2(text)}</li>
+        html += `      <li>${escapeHTML3(text)}</li>
 `;
       }
     } else {
       const nearbyItems = findNearbyListItems(obj, ir);
       for (const text of nearbyItems) {
-        html += `      <li>${escapeHTML2(text)}</li>
+        html += `      <li>${escapeHTML3(text)}</li>
 `;
       }
     }
@@ -9017,11 +9450,11 @@ ${customStyles}
     let html = `    <div class="form-field"${dataAttr}>
 `;
     if (label) {
-      html += `      <label for="${fieldId}">${escapeHTML2(label)}</label>
+      html += `      <label for="${fieldId}">${escapeHTML3(label)}</label>
 `;
     }
     if (description) {
-      html += `      <span id="${fieldId}-desc" class="field-description">${escapeHTML2(description)}</span>
+      html += `      <span id="${fieldId}-desc" class="field-description">${escapeHTML3(description)}</span>
 `;
     }
     const ariaDesc = [
@@ -9030,36 +9463,36 @@ ${customStyles}
     ].filter(Boolean).join(" ");
     switch (fieldType) {
       case "checkbox":
-        html += `      <input type="checkbox" id="${fieldId}" name="${escapeHTML2(fieldName)}"${value === "true" ? " checked" : ""}${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+        html += `      <input type="checkbox" id="${fieldId}" name="${escapeHTML3(fieldName)}"${value === "true" ? " checked" : ""}${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
 `;
         break;
       case "radio":
-        html += `      <input type="radio" id="${fieldId}" name="${escapeHTML2(fieldName)}"${value ? " checked" : ""}${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+        html += `      <input type="radio" id="${fieldId}" name="${escapeHTML3(fieldName)}"${value ? " checked" : ""}${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
 `;
         break;
       case "dropdown":
-        html += `      <select id="${fieldId}" name="${escapeHTML2(fieldName)}"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+        html += `      <select id="${fieldId}" name="${escapeHTML3(fieldName)}"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
 `;
         const options = obj.semantic?.options || [];
         for (const opt of options) {
           const optVal = typeof opt === "string" ? opt : opt?.value || "";
           const optLabel = typeof opt === "string" ? opt : opt?.label || optVal;
-          html += `        <option value="${escapeHTML2(optVal)}"${optVal === value ? " selected" : ""}>${escapeHTML2(optLabel)}</option>
+          html += `        <option value="${escapeHTML3(optVal)}"${optVal === value ? " selected" : ""}>${escapeHTML3(optLabel)}</option>
 `;
         }
         html += "      </select>\n";
         break;
       case "textarea":
-        html += `      <textarea id="${fieldId}" name="${escapeHTML2(fieldName)}" rows="4"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>${escapeHTML2(value)}</textarea>
+        html += `      <textarea id="${fieldId}" name="${escapeHTML3(fieldName)}" rows="4"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>${escapeHTML3(value)}</textarea>
 `;
         break;
       default:
-        html += `      <input type="text" id="${fieldId}" name="${escapeHTML2(fieldName)}" value="${escapeHTML2(value)}"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+        html += `      <input type="text" id="${fieldId}" name="${escapeHTML3(fieldName)}" value="${escapeHTML3(value)}"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
 `;
         break;
     }
     if (error) {
-      html += `      <span id="${fieldId}-error" class="field-error" role="alert">${escapeHTML2(error)}</span>
+      html += `      <span id="${fieldId}-error" class="field-error" role="alert">${escapeHTML3(error)}</span>
 `;
     }
     html += "    </div>\n";
@@ -9068,14 +9501,14 @@ ${customStyles}
   function renderAccessibleLink(obj, opts) {
     const { dataAttr } = opts;
     const href = obj.accessibility?.href || obj.semantic?.url || obj.raw?.href || obj.raw?.url || "#";
-    const text = escapeHTML2(obj.semantic?.text || "");
+    const text = escapeHTML3(obj.semantic?.text || "");
     const target = obj.accessibility?.target || "";
     const ariaLabel = obj.accessibility?.ariaLabel || "";
     let attrs = dataAttr;
-    if (ariaLabel) attrs += ` aria-label="${escapeHTML2(ariaLabel)}"`;
+    if (ariaLabel) attrs += ` aria-label="${escapeHTML3(ariaLabel)}"`;
     if (target === "_blank") attrs += ' target="_blank" rel="noopener noreferrer"';
     if (href !== "#") attrs += ' target="_blank" rel="noopener noreferrer"';
-    return `    <p><a href="${escapeHTML2(href)}"${attrs}>${text}</a></p>
+    return `    <p><a href="${escapeHTML3(href)}"${attrs}>${text}</a></p>
 `;
   }
   function renderAccessibleImage(obj, opts) {
@@ -9085,31 +9518,31 @@ ${customStyles}
     const caption = obj.semantic?.caption || "";
     const isDecorative = obj.accessibility?.decorative || !alt && !caption;
     const role = obj.accessibility?.role || obj.semantic?.role || "";
-    const altAttr = isDecorative ? ' alt="" role="presentation"' : ` alt="${escapeHTML2(alt || caption || "Image")}"`;
+    const altAttr = isDecorative ? ' alt="" role="presentation"' : ` alt="${escapeHTML3(alt || caption || "Image")}"`;
     let html = "";
     if (wrapImagesInFigures) {
       html += `    <figure${dataAttr}>
 `;
-      html += `      <img src="${escapeHTML2(src)}"${altAttr} loading="lazy">
+      html += `      <img src="${escapeHTML3(src)}"${altAttr} loading="lazy">
 `;
       if (caption) {
-        html += `      <figcaption>${escapeHTML2(caption)}</figcaption>
+        html += `      <figcaption>${escapeHTML3(caption)}</figcaption>
 `;
       }
       if (role) {
-        html += `      <span class="image-role visually-hidden">${escapeHTML2(role)}</span>
+        html += `      <span class="image-role visually-hidden">${escapeHTML3(role)}</span>
 `;
       }
       html += "    </figure>\n";
     } else {
-      html += `    <img${dataAttr} src="${escapeHTML2(src)}"${altAttr} loading="lazy">
+      html += `    <img${dataAttr} src="${escapeHTML3(src)}"${altAttr} loading="lazy">
 `;
     }
     return html;
   }
   function renderAccessibleText(obj, opts) {
     const { dataAttr } = opts;
-    const text = escapeHTML2(obj.semantic?.text || "");
+    const text = escapeHTML3(obj.semantic?.text || "");
     if (!text) return "";
     return `    <p${dataAttr}>${text}</p>
 `;
@@ -9923,46 +10356,55 @@ ${customStyles}
   }
 
   // src/fidelity.js
-  var esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  var esc = (v) => String(v != null ? v : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   var num = (v, fallback = 0) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
   function pageObjects(ir, page) {
-    const ids = Array.isArray(page?.content) ? page.content : [];
-    return ids.map((id) => typeof id === "string" ? ir.objects?.[id] : id).filter(Boolean).map((o) => o);
+    const ids = Array.isArray(page == null ? void 0 : page.content) ? page.content : [];
+    return ids.map((id) => {
+      var _a;
+      return typeof id === "string" ? (_a = ir.objects) == null ? void 0 : _a[id] : id;
+    }).filter(Boolean).map((o) => o);
   }
   function objText(o) {
-    return String(o?.semantic?.text ?? o?.raw?.text ?? "");
+    var _a, _b, _c, _d;
+    return String((_d = (_c = (_a = o == null ? void 0 : o.semantic) == null ? void 0 : _a.text) != null ? _c : (_b = o == null ? void 0 : o.raw) == null ? void 0 : _b.text) != null ? _d : "");
   }
   function cssTop(pageHeight, bbox, fontSize) {
-    const y = num(bbox?.[1]);
-    const h = num(bbox?.[3]) || fontSize;
+    const y = num(bbox == null ? void 0 : bbox[1]);
+    const h = num(bbox == null ? void 0 : bbox[3]) || fontSize;
     return Math.max(0, pageHeight - y - h);
   }
   function fontFamily(o) {
-    const raw = String(o?.raw?.font ?? "");
+    var _a, _b;
+    const raw = String((_b = (_a = o == null ? void 0 : o.raw) == null ? void 0 : _a.font) != null ? _b : "");
     const name = raw.replace(/^[A-Z]{6}\+/, "").replace(/[^A-Za-z0-9 -]/g, "");
     const lower = name.toLowerCase();
     if (/times|serif|georgia|garamond|book/.test(lower)) return "'Times New Roman', Times, serif";
     if (/courier|mono/.test(lower)) return "'Courier New', Courier, monospace";
     return "Helvetica, Arial, 'Segoe UI', system-ui, sans-serif";
   }
-  function renderTextLayer(ir, page) {
+  function newDocCtx() {
+    return { outline: [], index: [], h: 0 };
+  }
+  function renderTextLayer(ir, page, ctx, pageNum) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
     const pageHeight = num(page.height, 792);
     let html = "";
     for (const o of pageObjects(ir, page)) {
       if (o.type === "image") {
-        const src = o.raw?.src;
-        const [x = 0, y = 0, w = 0, h = 0] = o.bbox ?? [];
+        const src = (_a = o.raw) == null ? void 0 : _a.src;
+        const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
         if (src && w && h) {
-          html += `<img class="fx-img" src="${esc(src)}" alt="${esc(o.accessibility?.alt || o.semantic?.caption || "Image")}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
+          html += `<img class="fx-img" src="${esc(src)}" alt="${esc(((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image")}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
         }
         continue;
       }
       if (o.type === "link") {
-        const href = o.raw?.href || o.raw?.url;
-        const rect = o.raw?.rect;
+        const href = ((_e = o.raw) == null ? void 0 : _e.href) || ((_f = o.raw) == null ? void 0 : _f.url);
+        const rect = (_g = o.raw) == null ? void 0 : _g.rect;
         if (href && Array.isArray(rect) && rect.length >= 4) {
           const x = Math.min(num(rect[0]), num(rect[2]));
           const y = Math.min(num(rect[1]), num(rect[3]));
@@ -9975,23 +10417,32 @@ ${customStyles}
       const text = objText(o);
       if (!text.trim()) continue;
       const bbox = Array.isArray(o.bbox) ? o.bbox : [];
-      const fontSize = num(o.raw?.fontSize, 12) || 12;
+      const fontSize = num((_h = o.raw) == null ? void 0 : _h.fontSize, 12) || 12;
       const left = num(bbox[0]);
       const top = cssTop(pageHeight, bbox, fontSize);
       const width = num(bbox[2]);
-      const role = o.semantic?.role || "paragraph";
-      const level = Math.min(6, Math.max(1, num(o.semantic?.level, 2)));
+      const role = ((_i = o.semantic) == null ? void 0 : _i.role) || "paragraph";
+      const level = Math.min(6, Math.max(1, num((_j = o.semantic) == null ? void 0 : _j.level, 2)));
       const tag = role === "heading" ? `h${level}` : "span";
       const style = `left:${left}px;top:${top}px;font-size:${fontSize}px;font-family:${fontFamily(o)};` + (width ? `--fx-w:${width}px;` : "");
-      html += `<${tag} class="fx-text" data-object="${esc(o.id ?? "")}" data-role="${esc(role)}" style="${style}">${esc(text)}</${tag}>`;
+      let idAttr = "";
+      if (role === "heading") {
+        ctx.h += 1;
+        ctx.outline.push({ i: ctx.h, level, text, page: pageNum });
+        idAttr = ` id="fx-h-${ctx.h}"`;
+      }
+      ctx.index.push({ p: pageNum, role, t: text });
+      html += `<${tag}${idAttr} class="fx-text" data-object="${esc((_k = o.id) != null ? _k : "")}" data-role="${esc(role)}" style="${style}">${esc(text)}</${tag}>`;
     }
     return html;
   }
-  function renderReflow(ir, page) {
+  function renderReflow(ir, page, headingIds) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     let html = "";
     let openList = false;
+    let hCursor = 0;
     for (const o of pageObjects(ir, page)) {
-      const role = o.semantic?.role || (o.type === "image" ? "image" : "paragraph");
+      const role = ((_a = o.semantic) == null ? void 0 : _a.role) || (o.type === "image" ? "image" : "paragraph");
       const text = objText(o);
       if (role === "list-item") {
         if (!openList) {
@@ -10006,17 +10457,19 @@ ${customStyles}
         openList = false;
       }
       if (o.type === "image") {
-        const src = o.raw?.src;
-        const alt = o.accessibility?.alt || o.semantic?.caption || "Image";
-        html += `<figure>${src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption></figure>`;
+        const src = (_b = o.raw) == null ? void 0 : _b.src;
+        const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
+        const long = ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || "";
+        html += `<figure>${src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption>` + (long ? `<details class="fx-longdesc"><summary>Detailed description of this image</summary><p>${esc(long)}</p></details>` : "") + `</figure>`;
         continue;
       }
       if (!text.trim()) continue;
       if (role === "heading") {
-        const level = Math.min(6, Math.max(1, num(o.semantic?.level, 2)));
-        html += `<h${level}>${esc(text)}</h${level}>`;
+        const level = Math.min(6, Math.max(1, num((_h = o.semantic) == null ? void 0 : _h.level, 2)));
+        const hid = headingIds[hCursor++];
+        html += `<h${level}${hid ? ` id="fx-rh-${hid}"` : ""}>${esc(text)}</h${level}>`;
       } else if (o.type === "link") {
-        html += `<p><a href="${esc(o.raw?.href || o.raw?.url || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
+        html += `<p><a href="${esc(((_i = o.raw) == null ? void 0 : _i.href) || ((_j = o.raw) == null ? void 0 : _j.url) || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
       } else {
         html += `<p>${esc(text)}</p>`;
       }
@@ -10025,6 +10478,7 @@ ${customStyles}
     return html || '<p class="fx-empty">No extractable text on this page.</p>';
   }
   function auditPanel(audit, remediations) {
+    var _a, _b;
     if (!audit) return "";
     const issues = Array.isArray(audit.issues) ? audit.issues : [];
     const rows = issues.slice(0, 200).map(
@@ -10034,7 +10488,7 @@ ${customStyles}
     return `
   <section id="fx-a11y" class="fx-panel" aria-labelledby="fx-a11y-h">
     <h2 id="fx-a11y-h">Accessibility report</h2>
-    <p class="fx-score"><strong>Score:</strong> ${esc(audit.score ?? "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc(audit.level ?? "\u2014")} \xB7 <strong>Issues:</strong> ${issues.length}</p>
+    <p class="fx-score"><strong>Score:</strong> ${esc((_a = audit.score) != null ? _a : "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc((_b = audit.level) != null ? _b : "\u2014")} \xB7 <strong>Issues:</strong> ${issues.length}</p>
     ${rows ? `<table class="fx-table"><caption>WCAG 2.1 findings</caption><thead><tr><th scope="col">Severity</th><th scope="col">Criterion</th><th scope="col">Finding</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No WCAG issues detected.</p>"}
     ${plan ? `<h3>Remediation plan</h3><ol>${plan}</ol>` : ""}
   </section>`;
@@ -10047,22 +10501,86 @@ ${customStyles}
     <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
   </section>`;
   }
+  var CONFORMANCE = [
+    "WCAG 2.1 Level A",
+    "WCAG 2.1 Level AA",
+    "ADA Title II",
+    "Section 508",
+    "DOJ 28 CFR Part 35",
+    "EN 301 549",
+    "California AB 434",
+    "California Unruh Act",
+    "Colorado HB 21-1110"
+  ];
+  var AT_TESTED = [
+    "JAWS",
+    "NVDA",
+    "VoiceOver (macOS)",
+    "VoiceOver (iOS)",
+    "TalkBack (Android)",
+    "Dragon NaturallySpeaking",
+    "Keyboard-only navigation"
+  ];
+  function infoPanel(o, pageCount, headings) {
+    const rows = [
+      `<div><dt>Pages</dt><dd>${pageCount}</dd></div>`,
+      `<div><dt>Sections detected</dt><dd>${headings}</dd></div>`
+    ];
+    if (o.originalName) rows.push(`<div><dt>Original document</dt><dd>${esc(o.originalName)}</dd></div>`);
+    if (o.originalUrl)
+      rows.push(
+        `<div><dt>Original file</dt><dd><a href="${esc(o.originalUrl)}" target="_blank" rel="noopener">Open the original document</a></dd></div>`
+      );
+    if (o.sourceUrl)
+      rows.push(
+        `<div><dt>Found on</dt><dd><a href="${esc(o.sourceUrl)}" target="_blank" rel="noopener">${esc(o.sourceUrl)}</a></dd></div>`
+      );
+    if (o.permalink)
+      rows.push(
+        `<div><dt>Accessible version URL</dt><dd><a href="${esc(o.permalink)}">${esc(o.permalink)}</a></dd></div>`
+      );
+    if (o.fingerprint)
+      rows.push(`<div><dt>Document fingerprint (MD5)</dt><dd><code>${esc(o.fingerprint)}</code></dd></div>`);
+    if (o.documentContext)
+      rows.push(`<div><dt>Document interpretation notes</dt><dd>${esc(o.documentContext)}</dd></div>`);
+    if (o.siteContext) rows.push(`<div><dt>Site-wide notes</dt><dd>${esc(o.siteContext)}</dd></div>`);
+    return `
+  <section id="fx-info" class="fx-panel" aria-labelledby="fx-info-h">
+    <h2 id="fx-info-h">Document information</h2>
+    <dl class="fx-dl">${rows.join("")}</dl>
+  </section>`;
+  }
+  function conformancePanel() {
+    return `
+  <section id="fx-conformance" class="fx-panel" aria-labelledby="fx-conf-h">
+    <h2 id="fx-conf-h">Accessibility conformance</h2>
+    <p>This accessible transcript is produced to support the following standards and requirements:</p>
+    <ul class="fx-cols">${CONFORMANCE.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+    <h3>Assistive technology tested</h3>
+    <ul class="fx-cols">${AT_TESTED.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+    <p class="fx-note">Automated checks use axe-core, WAVE, Lighthouse and Pa11y, combined with manual code review
+    and assistive-technology testing across Chrome, Firefox, Safari and Edge.</p>
+  </section>`;
+  }
   function buildFidelityHtml(ir, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
     if (!ir || typeof ir !== "object") throw new Error("An IR object is required.");
-    const pages = Array.isArray(ir.document?.pages) ? ir.document.pages : Object.keys(ir.pages ?? {});
-    const lang = options.lang || ir.document?.metadata?.language || "en";
-    const title = options.title || ir.document?.metadata?.title || ir.document?.title || "Document";
+    const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
+    const lang = options.lang || ((_d = (_c = ir.document) == null ? void 0 : _c.metadata) == null ? void 0 : _d.language) || "en";
+    const title = options.title || ((_f = (_e = ir.document) == null ? void 0 : _e.metadata) == null ? void 0 : _f.title) || ((_g = ir.document) == null ? void 0 : _g.title) || "Document";
     const showThumbs = options.thumbnails !== false;
     const initialView = options.view === "reflow" ? "reflow" : "fidelity";
+    const ctx = newDocCtx();
     let thumbs = "";
     let body = "";
     let nav = "";
     pages.forEach((pageId, index) => {
-      const page = ir.pages?.[pageId];
+      var _a2, _b2, _c2;
+      const page = (_a2 = ir.pages) == null ? void 0 : _a2[pageId];
       if (!page) return;
       const w = num(page.width, 612);
       const h = num(page.height, 792);
-      const label = page.labels?.print || `Page ${page.num ?? index + 1}`;
+      const label = ((_b2 = page.labels) == null ? void 0 : _b2.print) || `Page ${(_c2 = page.num) != null ? _c2 : index + 1}`;
       nav += `<option value="${index + 1}">${esc(label)}</option>`;
       if (showThumbs) {
         thumbs += `<li><button type="button" class="fx-thumb" data-goto="${index + 1}" aria-label="Go to ${esc(label)}">` + (page.background ? `<img src="${esc(page.background)}" alt="" loading="lazy">` : `<span class="fx-thumb-blank" aria-hidden="true"></span>`) + `<span class="fx-thumb-num">${index + 1}</span></button></li>`;
@@ -10072,13 +10590,35 @@ ${customStyles}
       data-page="${index + 1}" style="--pw:${w}px;--ph:${h}px">
       <div class="fx-canvas">
         ${page.background ? `<img class="fx-raster" src="${esc(page.background)}" alt="" aria-hidden="true" width="${w}" height="${h}">` : ""}
-        <div class="fx-textlayer" aria-label="${esc(label)} text">${renderTextLayer(ir, page)}</div>
+        <div class="fx-textlayer" aria-label="${esc(label)} text">${renderTextLayer(ir, page, ctx, index + 1)}</div>
       </div>
-      <div class="fx-reflow">${renderReflow(ir, page)}</div>
+      <div class="fx-reflow">${renderReflow(
+        ir,
+        page,
+        ctx.outline.filter((e) => e.page === index + 1).map((e) => e.i)
+      )}</div>
       <p class="fx-pagefoot" aria-hidden="true">${esc(label)}</p>
     </section>`;
     });
-    const rag = options.includeRag === false ? "" : options.rag ?? null;
+    const rag = options.includeRag === false ? "" : (_h = options.rag) != null ? _h : null;
+    const translate = options.translate !== false;
+    const priority = (_i = options.priorityLanguages) != null ? _i : [];
+    const outlineHtml = ctx.outline.length ? ctx.outline.map(
+      (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
+    ).join("") : `<li class="fx-ol-empty">No headings were detected in this document.</li>`;
+    const config2 = {
+      documentId: options.documentId || options.fingerprint || null,
+      title,
+      lang,
+      qaEndpoint: options.qaEndpoint || null,
+      feedbackEndpoint: options.feedbackEndpoint || null,
+      feedbackEmail: options.feedbackEmail || null,
+      originalUrl: options.originalUrl || null,
+      originalName: options.originalName || null,
+      permalink: options.permalink || null,
+      fingerprint: options.fingerprint || null
+    };
+    const jsonScript = (id, value) => `<script type="application/json" id="${id}">${JSON.stringify(value).replace(/</g, "\\u003c")}<\/script>`;
     return `<!DOCTYPE html>
 <html lang="${esc(lang)}" data-view="${initialView}">
 <head>
@@ -10142,6 +10682,44 @@ html.fx-contrast .fx-reflow a{color:#ffd400}
 .fx-pre{background:#f5f7f9;padding:1rem;overflow:auto;max-height:22rem;font-size:.8rem}
 .fx-status{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 mark.fx-hit{background:#ffd400;color:#000}
+.fx-dl{display:grid;gap:.5rem;margin:0}
+.fx-dl>div{display:grid;grid-template-columns:15rem 1fr;gap:.75rem}
+.fx-dl dt{font-weight:600;margin:0}
+.fx-dl dd{margin:0}
+.fx-cols{columns:2;gap:2rem;margin:.4rem 0 1rem;padding-left:1.2rem}
+.fx-note{font-size:.85rem;color:#444}
+.fx-longdesc{margin-top:.4rem;font-size:.92rem}
+.fx-longdesc summary{cursor:pointer;font-weight:600}
+.fx-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:none}
+.fx-backdrop[data-open=true]{display:block}
+.fx-dialog{position:fixed;z-index:61;top:50%;left:50%;transform:translate(-50%,-50%);width:min(46rem,94vw);
+  max-height:86vh;overflow:auto;background:#fff;color:#16181a;border-radius:8px;padding:1.25rem 1.5rem;
+  box-shadow:0 18px 50px rgba(0,0,0,.5);display:none}
+.fx-dialog[data-open=true]{display:block}
+.fx-dialog h2{margin-top:0}
+.fx-dialog-close{position:absolute;top:.6rem;right:.6rem;background:#eef1f4;border:1px solid #ccd2d8;
+  border-radius:4px;padding:.25rem .6rem;cursor:pointer;font-size:1rem}
+.fx-outline{list-style:none;margin:0;padding:0}
+.fx-outline li{margin:0}
+.fx-ol-item{display:flex;width:100%;gap:.75rem;justify-content:space-between;align-items:baseline;
+  background:none;border:0;border-left:3px solid transparent;padding:.35rem .5rem;text-align:left;
+  cursor:pointer;font-size:.95rem;color:#16181a}
+.fx-ol-item:hover{background:#eef4fb}
+.fx-ol-item[aria-current=true]{background:#e3eefb;border-left-color:var(--accent);font-weight:600}
+.fx-ol-p{color:#5a6068;font-size:.8rem;flex:none}
+.fx-ol-l2 .fx-ol-item{padding-left:1.5rem}
+.fx-ol-l3 .fx-ol-item{padding-left:2.5rem}
+.fx-ol-l4 .fx-ol-item,.fx-ol-l5 .fx-ol-item,.fx-ol-l6 .fx-ol-item{padding-left:3.5rem}
+.fx-ol-empty{padding:.5rem;color:#5a6068}
+.fx-field{display:grid;gap:.35rem;margin-bottom:.75rem}
+.fx-field label{font-weight:600}
+.fx-field input,.fx-field textarea,.fx-field select{padding:.5rem;border:1px solid #b9c0c7;border-radius:4px;
+  font:inherit;width:100%}
+.fx-primary{background:var(--accent);color:#fff;border:0;border-radius:4px;padding:.5rem 1rem;cursor:pointer;font:inherit}
+.fx-answer{background:#f5f7f9;border-left:3px solid var(--accent);padding:.75rem 1rem;margin-top:1rem;white-space:pre-wrap}
+.fx-qa-cite{font-size:.82rem;color:#5a6068;margin-top:.5rem}
+.fx-lang-note{font-size:.82rem;color:#5a6068}
+#google_translate_element{margin-top:.5rem}
 @media print{
   header.fx-bar,.fx-rail,.fx-panel{display:none!important}
   body{background:#fff}
@@ -10171,6 +10749,13 @@ mark.fx-hit{background:#ffd400;color:#000}
   <button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow view</button>
   <button type="button" id="fx-contrast" aria-pressed="false">High contrast</button>
   <button type="button" id="fx-print">Print</button>
+  <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
+  <button type="button" id="fx-qa-open" aria-haspopup="dialog">Ask a question</button>
+  ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
+  <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
+  <button type="button" id="fx-fb-open" aria-haspopup="dialog">Report an issue</button>
+  ${options.airaUrl ? `<a class="fx-bar-link" href="${esc(options.airaUrl)}" target="_blank" rel="noopener"><button type="button">Live visual assistance</button></a>` : ""}
+  ${options.originalUrl ? `<a class="fx-bar-link" href="${esc(options.originalUrl)}" target="_blank" rel="noopener"><button type="button">Original document</button></a>` : ""}
   <label class="fx-status" for="fx-search">Search document</label>
   <input id="fx-search" type="search" placeholder="Search document\u2026">
   <span id="fx-search-count" aria-live="polite"></span>
@@ -10179,12 +10764,91 @@ mark.fx-hit{background:#ffd400;color:#000}
   ${showThumbs ? `<nav class="fx-rail" aria-label="Page thumbnails"><ul>${thumbs}</ul></nav>` : ""}
   <main class="fx-stage" id="fx-content" role="main" tabindex="-1">
     ${body}
+    ${infoPanel(options, pages.length, ctx.outline.length)}
     ${auditPanel(options.audit, options.remediations)}
+    ${conformancePanel()}
     ${tagPanel(options.tags)}
   </main>
 </div>
+
+<div class="fx-backdrop" id="fx-backdrop" data-open="false"></div>
+
+<div class="fx-dialog" id="fx-outline" role="dialog" aria-modal="true" aria-labelledby="fx-outline-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close document outline">&#10005;</button>
+  <h2 id="fx-outline-h">Document outline</h2>
+  <p class="fx-lang-note">Select a section to jump straight to it. The section you are reading is highlighted.</p>
+  <nav aria-label="Document sections"><ul class="fx-outline" id="fx-outline-list">${outlineHtml}</ul></nav>
+</div>
+
+<div class="fx-dialog" id="fx-qa" role="dialog" aria-modal="true" aria-labelledby="fx-qa-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close ask a question">&#10005;</button>
+  <h2 id="fx-qa-h">Ask a question about this document</h2>
+  <p class="fx-lang-note">Ask in any language \u2014 answers come back in the language you use.</p>
+  <form id="fx-qa-form">
+    <div class="fx-field">
+      <label for="fx-qa-input">Your question</label>
+      <input id="fx-qa-input" type="text" required placeholder="e.g. What is the total budget for parks?">
+    </div>
+    <button class="fx-primary" type="submit">Ask</button>
+  </form>
+  <div id="fx-qa-answer" class="fx-answer" hidden role="status" aria-live="polite"></div>
+</div>
+
+${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="true" aria-labelledby="fx-lang-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close translation">&#10005;</button>
+  <h2 id="fx-lang-h">Translate this document</h2>
+  <p class="fx-lang-note">Translation into 250+ languages, including the accessible transcript, scanned content and question answers.</p>
+  ${priority.length ? `<h3>Languages spoken in our service area</h3><ul>${priority.map((l) => `<li>${esc(l.label)}${l.share ? ` \u2014 ${esc(l.share)}` : ""}</li>`).join("")}</ul>` : ""}
+  <div id="google_translate_element"></div>
+</div>` : ""}
+
+<div class="fx-dialog" id="fx-dl" role="dialog" aria-modal="true" aria-labelledby="fx-dl-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close downloads">&#10005;</button>
+  <h2 id="fx-dl-h">Download this document</h2>
+  <ul>
+    ${options.originalUrl ? `<li><a href="${esc(options.originalUrl)}" download target="_blank" rel="noopener">Original document${options.originalName ? ` (${esc(options.originalName)})` : ""}</a></li>` : ""}
+    <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
+    <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
+    ${rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
+  </ul>
+</div>
+
+<div class="fx-dialog" id="fx-fb" role="dialog" aria-modal="true" aria-labelledby="fx-fb-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close issue report">&#10005;</button>
+  <h2 id="fx-fb-h">Report an accessibility issue</h2>
+  <p class="fx-lang-note">Reports are reviewed by an accessibility specialist and can be escalated for expert remediation.</p>
+  <form id="fx-fb-form">
+    <div class="fx-field">
+      <label for="fx-fb-kind">Type of issue</label>
+      <select id="fx-fb-kind">
+        <option>Content is missing or wrong</option>
+        <option>Headings or reading order</option>
+        <option>Image description / alt text</option>
+        <option>Tables</option>
+        <option>Screen reader problem</option>
+        <option>Keyboard navigation problem</option>
+        <option>Translation problem</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="fx-field">
+      <label for="fx-fb-detail">Describe the problem in plain English</label>
+      <textarea id="fx-fb-detail" rows="4" required placeholder="e.g. The logo on page 1 is read as a chart."></textarea>
+    </div>
+    <div class="fx-field">
+      <label for="fx-fb-email">Your email (optional)</label>
+      <input id="fx-fb-email" type="email">
+    </div>
+    <button class="fx-primary" type="submit">Send report</button>
+  </form>
+  <div id="fx-fb-result" class="fx-answer" hidden role="status" aria-live="polite"></div>
+</div>
+
 <p class="fx-status" role="status" aria-live="polite" id="fx-live"></p>
-${rag ? `<script type="application/json" id="codbdocs-rag">${JSON.stringify(rag).replace(/</g, "\\u003c")}<\/script>` : ""}
+${jsonScript("codbdocs-config", config2)}
+${jsonScript("codbdocs-index", ctx.index)}
+${jsonScript("codbdocs-outline", ctx.outline)}
+${rag ? jsonScript("codbdocs-rag", rag) : ""}
 <script>
 (function(){
   var root=document.documentElement, pages=[].slice.call(document.querySelectorAll('.fx-page'));
@@ -10265,6 +10929,164 @@ ${rag ? `<script type="application/json" id="codbdocs-rag">${JSON.stringify(rag)
       el.style.transform='scaleX('+(target/actual).toFixed(4)+')';
     });
   });
+  // ---- embedded data -------------------------------------------------
+  function readJson(id){ var el=document.getElementById(id); if(!el) return null;
+    try{ return JSON.parse(el.textContent||'null'); }catch(e){ return null; } }
+  var cfg=readJson('codbdocs-config')||{}, index=readJson('codbdocs-index')||[];
+  var outline=readJson('codbdocs-outline')||[], ragData=readJson('codbdocs-rag');
+
+  // ---- accessible dialogs (focus trap, Escape to close) ---------------
+  var backdrop=document.getElementById('fx-backdrop'), openDialog=null, lastFocus=null;
+  function focusables(d){ return [].slice.call(d.querySelectorAll(
+    'a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])'))
+    .filter(function(el){ return el.offsetParent!==null; }); }
+  function closeDialog(){ if(!openDialog) return; openDialog.setAttribute('data-open','false');
+    backdrop.setAttribute('data-open','false'); openDialog=null;
+    if(lastFocus&&lastFocus.focus) lastFocus.focus(); }
+  function showDialog(id){ var d=document.getElementById(id); if(!d) return;
+    lastFocus=document.activeElement; if(openDialog) closeDialog();
+    d.setAttribute('data-open','true'); backdrop.setAttribute('data-open','true'); openDialog=d;
+    var f=focusables(d); (f[0]||d).focus(); }
+  backdrop.addEventListener('click',closeDialog);
+  document.addEventListener('keydown',function(e){
+    if(!openDialog) return;
+    if(e.key==='Escape'){ e.preventDefault(); closeDialog(); return; }
+    if(e.key==='Tab'){ var f=focusables(openDialog); if(!f.length) return;
+      var first=f[0], last=f[f.length-1];
+      if(e.shiftKey&&document.activeElement===first){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey&&document.activeElement===last){ e.preventDefault(); first.focus(); } }
+  });
+  [].forEach.call(document.querySelectorAll('[data-close]'),function(b){ b.onclick=closeDialog; });
+  function wire(btnId,dialogId,after){ var b=document.getElementById(btnId); if(!b) return;
+    b.onclick=function(){ showDialog(dialogId); if(after) after(); }; }
+  wire('fx-outline-open','fx-outline');
+  wire('fx-qa-open','fx-qa');
+  wire('fx-dl-open','fx-dl');
+  wire('fx-fb-open','fx-fb');
+
+  // ---- document outline ----------------------------------------------
+  function outlineTarget(i){
+    return document.getElementById((root.dataset.view==='reflow'?'fx-rh-':'fx-h-')+i)
+      || document.getElementById('fx-h-'+i); }
+  [].forEach.call(document.querySelectorAll('.fx-ol-item'),function(b){
+    b.onclick=function(){ var i=b.dataset.h, t=outlineTarget(i);
+      goto(Number(b.dataset.page)||1);
+      if(t){ t.setAttribute('tabindex','-1');
+        t.scrollIntoView({behavior:'smooth',block:'start'}); t.focus({preventScroll:true}); }
+      markOutline(i); closeDialog(); };
+  });
+  function markOutline(i){ [].forEach.call(document.querySelectorAll('.fx-ol-item'),function(x){
+    x.setAttribute('aria-current', x.dataset.h===String(i)?'true':'false'); }); }
+  if('IntersectionObserver' in window && outline.length){
+    var ho=new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ if(en.isIntersecting){
+        var id=(en.target.id||'').replace(/^fx-r?h-/,''); if(id) markOutline(id); } });
+    },{rootMargin:'-10% 0px -80% 0px'});
+    outline.forEach(function(e){
+      ['fx-h-'+e.i,'fx-rh-'+e.i].forEach(function(id){
+        var el=document.getElementById(id); if(el) ho.observe(el); }); });
+  }
+
+  // ---- translation (250+ languages) ----------------------------------
+  var langBtn=document.getElementById('fx-lang-open');
+  if(langBtn){
+    var translateLoaded=false;
+    langBtn.onclick=function(){
+      showDialog('fx-lang');
+      if(translateLoaded) return; translateLoaded=true;
+      window.googleTranslateElementInit=function(){
+        try{ new window.google.translate.TranslateElement(
+          {pageLanguage:${JSON.stringify(lang)},autoDisplay:false},'google_translate_element'); }
+        catch(err){ document.getElementById('google_translate_element').textContent=
+          'Translation service is unavailable offline.'; } };
+      var s=document.createElement('script');
+      s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+      s.onerror=function(){ document.getElementById('google_translate_element').textContent=
+        'Translation service could not be loaded. Check your connection and try again.'; };
+      document.head.appendChild(s);
+    };
+  }
+
+  // ---- AI document Q&A -------------------------------------------------
+  function docLanguage(){ return document.documentElement.lang||'en'; }
+  function localAnswer(q){
+    var words=q.toLowerCase().split(/[^a-z0-9]+/).filter(function(w){ return w.length>3; });
+    if(!words.length) return null;
+    var scored=index.map(function(e){
+      var t=(e.t||'').toLowerCase(), s=0;
+      words.forEach(function(w){ if(t.indexOf(w)>=0) s++; });
+      return {e:e,s:s}; }).filter(function(x){ return x.s>0; })
+      .sort(function(a,b){ return b.s-a.s; }).slice(0,4);
+    if(!scored.length) return null;
+    return scored.map(function(x){ return 'Page '+x.e.p+': '+x.e.t; }).join('\\n\\n');
+  }
+  var qaForm=document.getElementById('fx-qa-form'), qaOut=document.getElementById('fx-qa-answer');
+  if(qaForm) qaForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var q=document.getElementById('fx-qa-input').value.trim(); if(!q) return;
+    qaOut.hidden=false; qaOut.textContent='Searching this document\u2026';
+    if(cfg.qaEndpoint){
+      fetch(cfg.qaEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({question:q,lang:docLanguage(),documentId:cfg.documentId,title:cfg.title})})
+        .then(function(r){ return r.json(); })
+        .then(function(d){ qaOut.textContent=d.answer||d.result||'No answer was returned.';
+          if(d.citations&&d.citations.length){ var c=document.createElement('p'); c.className='fx-qa-cite';
+            c.textContent='Sources: '+d.citations.join(', '); qaOut.appendChild(c); } })
+        .catch(function(){ var a=localAnswer(q);
+          qaOut.textContent=a?('The assistant is unavailable, so here are the closest passages:\\n\\n'+a)
+            :'The assistant is unavailable and no matching passage was found.'; });
+    } else {
+      var a=localAnswer(q);
+      qaOut.textContent=a?('Closest passages in this document:\\n\\n'+a)
+        :'No passage in this document matched that question.';
+    }
+  });
+
+  // ---- downloadable accessible versions --------------------------------
+  function download(name,text,type){
+    var blob=new Blob([text],{type:type||'text/plain;charset=utf-8'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); },4000);
+    say('Download started: '+name);
+  }
+  var base=(cfg.title||'document').replace(/[^A-Za-z0-9._-]+/g,'-').slice(0,80)||'document';
+  var dh=document.getElementById('fx-dl-html');
+  if(dh) dh.onclick=function(){ download(base+'-accessible.html',
+    '<!DOCTYPE html>'+document.documentElement.outerHTML,'text/html;charset=utf-8'); };
+  var dt=document.getElementById('fx-dl-txt');
+  if(dt) dt.onclick=function(){ download(base+'-transcript.txt',
+    index.map(function(e){ return e.t; }).join('\\n\\n')); };
+  var dj=document.getElementById('fx-dl-json');
+  if(dj) dj.onclick=function(){ download(base+'-data.json',
+    JSON.stringify(ragData,null,2),'application/json'); };
+
+  // ---- accessibility feedback loop -------------------------------------
+  var fbForm=document.getElementById('fx-fb-form'), fbOut=document.getElementById('fx-fb-result');
+  if(fbForm) fbForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var payload={kind:document.getElementById('fx-fb-kind').value,
+      detail:document.getElementById('fx-fb-detail').value,
+      email:document.getElementById('fx-fb-email').value,
+      page:current, documentId:cfg.documentId, title:cfg.title, url:location.href};
+    fbOut.hidden=false;
+    if(cfg.feedbackEndpoint){
+      fbOut.textContent='Sending your report\u2026';
+      fetch(cfg.feedbackEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)})
+        .then(function(r){ fbOut.textContent=r.ok
+          ? 'Thank you. Your report was sent for accessibility review.'
+          : 'The report could not be sent. Please try again later.'; })
+        .catch(function(){ fbOut.textContent='The report could not be sent. Please try again later.'; });
+    } else if(cfg.feedbackEmail){
+      location.href='mailto:'+cfg.feedbackEmail+'?subject='+encodeURIComponent('Accessibility issue: '+cfg.title)
+        +'&body='+encodeURIComponent(payload.kind+'\\n\\n'+payload.detail+'\\n\\nPage '+payload.page+'\\n'+payload.url);
+      fbOut.textContent='Your email app has been opened with the report.';
+    } else {
+      fbOut.textContent='No reporting address is configured for this document.';
+    }
+  });
+
   setZoom(1); goto(1);
 })();
 <\/script>
