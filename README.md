@@ -2,7 +2,12 @@
 
 **A complete browser-based PDF document processing library with offline AI understanding, full RAG support, and round-trip PDF creation.**
 
-No server. No CDN. No external APIs. Pure browser JavaScript.
+No server. No external APIs. Pure browser JavaScript. Use the CDN or host the files yourself.
+
+**jsDelivr access URL:**
+```text
+https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js
+```
 
 ```
 CodbDocs
