@@ -2067,5 +2067,7 @@ export {
   rerankResults,
 } from './concepts.js';
 
+export { normalizeIR, hydrateGraph } from './guards.js';
+export { buildFidelityHtml } from './fidelity.js';
 export { createWorkspace } from './workspace.js';
 export { saveToCache, loadFromCache, clearCache, getCacheStats } from './persistence.js';
