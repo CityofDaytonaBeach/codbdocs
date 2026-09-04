@@ -1,3 +1,4 @@
+/* CodbDocs build 2026-09-04T18:59:04.865029Z */
 var CodbDocs = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
