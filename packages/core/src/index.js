@@ -294,10 +294,6 @@ const DEFAULTS = {
   nativeTextMinLength: 20,
   ocrScale: 2,
   ocrLang: 'eng',
-  // Raster resolution multiplier for the embedded "looks like the PDF" visual
-  // layer. 2x is a good HD/offline-size balance; set 1 for small files or 3+
-  // for maximum sharpness.
-  rasterScale: 2,
   enableVisual: false,
   enableBrain: true,
   enableContent: true,
@@ -791,17 +787,11 @@ class CodbDoc {
 
         // Rasterize the page once so exporters can produce a pixel-accurate
         // "looks like the PDF" visual layer. Store as a data URL on the IR page.
-        // The raster is rendered at config.rasterScale (default 2x) so it stays
-        // HD/sharp when the exporter displays it at PDF-coordinate CSS size.
         let pageRaster = null;
         try {
-          const rasterScale = config.rasterScale > 0 ? config.rasterScale : 2;
-          if (!canvas) canvas = await renderPageToCanvas(page, rasterScale);
+          if (!canvas) canvas = await renderPageToCanvas(page, 1.5);
           pageRaster = canvas.toDataURL('image/png');
           irPage.background = pageRaster;
-          irPage.backgroundScale = rasterScale;
-          irPage.backgroundPixelWidth = canvas.width;
-          irPage.backgroundPixelHeight = canvas.height;
         } catch (e) { /* page rasterization may fail */ }
 
         // Detect reading order
@@ -2077,5 +2067,7 @@ export {
   rerankResults,
 } from './concepts.js';
 
+export { normalizeIR, hydrateGraph } from './guards.js';
+export { buildFidelityHtml } from './fidelity.js';
 export { createWorkspace } from './workspace.js';
 export { saveToCache, loadFromCache, clearCache, getCacheStats } from './persistence.js';
