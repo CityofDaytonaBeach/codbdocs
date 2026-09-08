@@ -2072,3 +2072,14 @@ export { buildFidelityHtml } from './fidelity.js';
 export { createWorkspace } from './workspace.js';
 export { saveToCache, loadFromCache, clearCache, getCacheStats } from './persistence.js';
 export { processLargeDocument, packageDocument, createZip, shouldStream } from './large.js';
+export {
+  documentData,
+  packageDocumentFull,
+  extractPageVector,
+  renderPageImage,
+  extractPageImages,
+  ocrPage,
+  ocrImage,
+  terminateOcr,
+  serverlessCapabilities,
+} from './serverless.js';
