@@ -2090,7 +2090,25 @@ export { normalizeIR, hydrateGraph } from './guards.js';
 export { buildFidelityHtml } from './fidelity.js';
 export { createWorkspace } from './workspace.js';
 export { saveToCache, loadFromCache, clearCache, getCacheStats } from './persistence.js';
-export { processLargeDocument, packageDocument, createZip, shouldStream } from './large.js';
+export { processLargeDocument, createZip, shouldStream } from './large.js';
+import { packageDocument as _packageDocumentStream } from './large.js';
+import { packageDocumentFull as _packageDocumentFull } from './serverless.js';
+
+/**
+ * Build a full ZIP package. By default the bundled index.html is the same
+ * PDF-perfect accessible page produced by exportFidelityHTML / the server.
+ * Pass { mode: 'stream' } for the low-memory streaming packager, or supply
+ * { html } to bundle your own page.
+ */
+export async function packageDocument(source, options = {}) {
+  if (options.mode === 'stream') return _packageDocumentStream(source, options);
+  try {
+    return await _packageDocumentFull(source, options);
+  } catch (err) {
+    const html = options.html ?? null;
+    return _packageDocumentStream(source, { ...options, html, packagerFallbackError: String(err) });
+  }
+}
 export {
   documentData,
   buildAccessibleHtml,

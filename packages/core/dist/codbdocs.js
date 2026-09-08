@@ -147,7 +147,7 @@ var CodbDocs = (() => {
     operatorMax: () => operatorMax,
     operatorMin: () => operatorMin,
     operatorSum: () => operatorSum,
-    packageDocument: () => packageDocument,
+    packageDocument: () => packageDocument2,
     packageDocumentFull: () => packageDocumentFull,
     parseBlendMode: () => parseBlendMode,
     parseShading: () => parseShading,
@@ -14210,6 +14210,16 @@ ${p.text}`).join("\n\n")
     const rag = (_c = options.rag) != null ? _c : safe(() => graph.toRAG());
     const tags = (_d = options.tags) != null ? _d : safe(() => graph.getAccessibilityTree());
     return buildFidelityHtml(ir, { ...options, audit, remediations, rag, tags });
+  }
+  async function packageDocument2(source, options = {}) {
+    var _a;
+    if (options.mode === "stream") return packageDocument(source, options);
+    try {
+      return await packageDocumentFull(source, options);
+    } catch (err) {
+      const html = (_a = options.html) != null ? _a : null;
+      return packageDocument(source, { ...options, html, packagerFallbackError: String(err) });
+    }
   }
   return __toCommonJS(index_exports);
 })();
