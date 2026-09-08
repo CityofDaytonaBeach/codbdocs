@@ -24,6 +24,7 @@
  *   graph.toJSON()
  */
 
+import { buildFidelityHtml as _buildFidelityHtml } from './fidelity.js';
 import {
   analyzeSpatialLayout,
   detectStructure,
@@ -1051,6 +1052,7 @@ class CodbDoc {
     // Add document access methods
     graph.wcagAudit = () => wcagAudit(ir);
     graph.toAccessibleHTML = (options) => exportAccessibleHTML(ir, options);
+    graph.toFidelityHTML = (options) => exportFidelityHTML(graph, options);
     graph.remediateAccessibility = (options) => {
       const result = remediateAccessibility(ir, options);
       return result.report;
@@ -1667,6 +1669,7 @@ class CodbDoc {
     graph.getRemediations = () => generateRemediations(graph.auditAccessibility(), ir);
     graph.wcagAudit = () => wcagAudit(ir);
     graph.toAccessibleHTML = (options) => exportAccessibleHTML(ir, options);
+    graph.toFidelityHTML = (options) => exportFidelityHTML(graph, options);
     graph.remediateAccessibility = (options) => {
       const result = remediateAccessibility(ir, options);
       return result.report;
@@ -2066,6 +2069,22 @@ export {
   queryTable,
   rerankResults,
 } from './concepts.js';
+
+
+/**
+ * Build the PDF-perfect accessible HTML export for a hydrated graph.
+ * Mirrors the reference "Export PDF-perfect accessible HTML" action:
+ * IR + WCAG audit + remediation plan + RAG payload + tag tree.
+ */
+export function exportFidelityHTML(graph, options = {}) {
+  const ir = typeof graph?.getIR === 'function' ? graph.getIR() : graph;
+  const safe = (fn) => { try { return fn(); } catch { return undefined; } };
+  const audit = options.audit ?? safe(() => graph.wcagAudit());
+  const remediations = options.remediations ?? safe(() => graph.getRemediations());
+  const rag = options.rag ?? safe(() => graph.toRAG());
+  const tags = options.tags ?? safe(() => graph.getAccessibilityTree());
+  return _buildFidelityHtml(ir, { ...options, audit, remediations, rag, tags });
+}
 
 export { normalizeIR, hydrateGraph } from './guards.js';
 export { buildFidelityHtml } from './fidelity.js';
