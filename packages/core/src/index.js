@@ -2074,6 +2074,8 @@ export { saveToCache, loadFromCache, clearCache, getCacheStats } from './persist
 export { processLargeDocument, packageDocument, createZip, shouldStream } from './large.js';
 export {
   documentData,
+  buildAccessibleHtml,
+  dataToIR,
   packageDocumentFull,
   extractPageVector,
   renderPageImage,

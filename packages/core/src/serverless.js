@@ -10,6 +10,7 @@
  */
 
 import { processLargeDocument, createZip } from './large.js';
+import { buildFidelityHtml } from './fidelity.js';
 
 function getPdfjs() {
   const lib =
@@ -565,7 +566,7 @@ export async function packageDocumentFull(source, options = {}) {
     ...options,
     includeLayout: true,
     includeVectors: options.includeVectors !== false,
-    includePageImages: false,
+    includePageImages: options.pageBackgrounds !== false,
   });
 
   const entries = [];
@@ -573,7 +574,17 @@ export async function packageDocumentFull(source, options = {}) {
   const vectorFiles = [];
   const bytes = await sourceBytes(source);
 
-  if (options.html) entries.push({ name: 'index.html', data: options.html });
+  const html =
+    options.html ||
+    buildFidelityHtml(dataToIR(data, options), {
+      title: data.document.title,
+      lang: data.document.language || 'en',
+      rag: { chunks: data.chunks },
+      originalName: data.document.source,
+      originalPdfSrc: options.includeOriginal !== false ? 'original.pdf' : undefined,
+      ...(options.htmlOptions ?? {}),
+    });
+  entries.push({ name: 'index.html', data: html });
   entries.push({ name: 'transcript.txt', data: data.transcript });
   entries.push({ name: 'rag.json', data: JSON.stringify({ chunks: data.chunks }, null, 2) });
   entries.push({ name: 'outline.json', data: JSON.stringify(data.outline, null, 2) });
@@ -684,6 +695,107 @@ async function sourceBytes(source) {
     }
   }
   return null;
+}
+
+
+
+/* ── 6. Acrobat-grade accessible HTML, built in the browser ───────── */
+
+/**
+ * Convert a documentData() payload into the fidelity renderer's IR shape,
+ * including rasterised page backgrounds, positioned text runs and embedded
+ * images, so the browser output matches the server package exactly.
+ */
+export function dataToIR(data, options = {}) {
+  const objects = {};
+  const pages = {};
+  const pageIds = [];
+  const layout = data.layout?.pages ?? [];
+  const byNumber = new Map(layout.map((p) => [p.page_number, p]));
+
+  for (const page of data.pages) {
+    const pid = `page-${page.page_number}`;
+    pageIds.push(pid);
+    const lay = byNumber.get(page.page_number);
+    const content = [];
+
+    (lay?.spans ?? []).forEach((run, i) => {
+      if (!run.text || !run.text.trim()) return;
+      const id = `${pid}-t${i}`;
+      const size = run.font_size || run.height || 11;
+      objects[id] = {
+        id,
+        type: 'text',
+        bbox: [run.x, run.y, run.width, run.height || size],
+        raw: {
+          text: run.text,
+          font: run.font_family || '',
+          fontSize: size,
+          bbox: [run.x, run.y, run.width, run.height || size],
+        },
+        semantic: { text: run.text, role: 'paragraph' },
+      };
+      content.push(id);
+    });
+
+    (lay?.images ?? []).forEach((img, i) => {
+      if (!img.data_uri) return;
+      const id = `${pid}-img${i}`;
+      objects[id] = {
+        id,
+        type: 'image',
+        bbox: [img.x, img.y, img.width, img.height],
+        raw: { src: img.data_uri, bbox: [img.x, img.y, img.width, img.height] },
+        semantic: { role: 'figure', caption: `Image on page ${page.page_number}` },
+        accessibility: { alt: `Image on page ${page.page_number}` },
+      };
+      content.push(id);
+    });
+
+    pages[pid] = {
+      id: pid,
+      num: page.page_number,
+      width: page.width,
+      height: page.height,
+      background: lay?.page_image || '',
+      content,
+    };
+  }
+
+  return {
+    document: {
+      title: options.title || data.document?.title || 'Document',
+      pages: pageIds,
+      metadata: { ...(data.document?.metadata ?? {}), title: data.document?.title, language: data.document?.language },
+    },
+    pages,
+    objects,
+  };
+}
+
+/**
+ * One call: parse the PDF in the browser and return the same modern,
+ * Acrobat-style accessible HTML the server pipeline produces (toolbar,
+ * thumbnails, zoom, search, RAG, AI Q&A, original-PDF toggle).
+ */
+export async function buildAccessibleHtml(source, options = {}) {
+  const data = await documentData(source, {
+    ...options,
+    includeLayout: true,
+    includeImages: options.includeImages !== false,
+    includePageImages: options.pageBackgrounds !== false,
+    includeVectors: options.includeVectors === true,
+    dpi: options.dpi ?? 150,
+  });
+  const ir = dataToIR(data, options);
+  const html = buildFidelityHtml(ir, {
+    title: data.document.title,
+    lang: data.document.language || 'en',
+    rag: { chunks: data.chunks },
+    originalName: data.document.source,
+    ...(options.html ?? {}),
+  });
+  return { html, data, ir };
 }
 
 /** True when the browser can do the whole job without a server. */

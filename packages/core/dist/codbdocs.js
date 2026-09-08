@@ -17,7 +17,7 @@ var CodbDocs = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // packages/core/src/index.js
+  // src/index.js
   var index_exports = {};
   __export(index_exports, {
     BlockTypes: () => BlockTypes,
@@ -44,6 +44,7 @@ var CodbDocs = (() => {
     analyzeVisualRegions: () => analyzeVisualRegions,
     associateCaptionsWithImages: () => associateCaptionsWithImages,
     bestFuzzyMatch: () => bestFuzzyMatch,
+    buildAccessibleHtml: () => buildAccessibleHtml,
     buildActionsSummary: () => buildActionsSummary,
     buildAppearanceStreamsSummary: () => buildAppearanceStreamsSummary,
     buildCrossPageContext: () => buildCrossPageContext,
@@ -75,6 +76,7 @@ var CodbDocs = (() => {
     createTransparencyGroup: () => createTransparencyGroup,
     createWorkspace: () => createWorkspace,
     createZip: () => createZip,
+    dataToIR: () => dataToIR,
     decomposeQuery: () => decomposeQuery,
     default: () => index_default,
     detectAcronyms: () => detectAcronyms,
@@ -168,7 +170,7 @@ var CodbDocs = (() => {
     wordNGrams: () => wordNGrams
   });
 
-  // packages/core/src/brain.js
+  // src/brain.js
   function analyzeSpatialLayout(items, pageSize) {
     if (!items || items.length === 0) {
       return { columns: 0, rows: [], headings: [], flow: "unknown" };
@@ -241,7 +243,10 @@ var CodbDocs = (() => {
   }
   function detectFlow(rows) {
     if (rows.length < 2) return "single";
-    const leftEdges = rows.map((r) => r[0]?.x || 0);
+    const leftEdges = rows.map((r) => {
+      var _a;
+      return ((_a = r[0]) == null ? void 0 : _a.x) || 0;
+    });
     const variance = leftEdges.reduce((s, x) => s + Math.pow(x - leftEdges[0], 2), 0) / leftEdges.length;
     if (variance < 100) return "left-aligned";
     if (variance < 500) return "mixed";
@@ -262,6 +267,7 @@ var CodbDocs = (() => {
     return structures;
   }
   function detectTables(rows, pageSize) {
+    var _a;
     const tables = [];
     let tableStart = -1;
     for (let i = 0; i < rows.length; i++) {
@@ -282,7 +288,7 @@ var CodbDocs = (() => {
       if (tableStart !== -1 && i - tableStart >= 2) {
         tables.push({
           type: "table",
-          y: rows[tableStart][0]?.y || 0,
+          y: ((_a = rows[tableStart][0]) == null ? void 0 : _a.y) || 0,
           startY: tableStart,
           endY: i - 1,
           rowCount: i - tableStart,
@@ -294,6 +300,7 @@ var CodbDocs = (() => {
     return tables;
   }
   function detectLists(rows) {
+    var _a;
     const lists = [];
     const bulletPattern = /^[\u2022\u2023\u25E6\u2043\u2219\-\*\u25AA\u25AB\u25FB\u25FC]\s/;
     const numberPattern = /^(\d+[\.\)]\s|[a-z][\.\)]\s|[ivxIVX]+[\.\)]\s)/;
@@ -314,7 +321,7 @@ var CodbDocs = (() => {
           lists.push({
             type: "list",
             listType,
-            y: rows[listStart][0]?.y || 0,
+            y: ((_a = rows[listStart][0]) == null ? void 0 : _a.y) || 0,
             itemCount: i - listStart,
             startIndex: listStart,
             endIndex: i - 1
@@ -327,6 +334,7 @@ var CodbDocs = (() => {
     return lists;
   }
   function detectFormFields(rows) {
+    var _a;
     const fields = [];
     const fieldPattern = /^([A-Z][A-Za-z\s]{2,30}):\s*/;
     for (const row of rows) {
@@ -336,7 +344,7 @@ var CodbDocs = (() => {
         fields.push({
           type: "formField",
           label: match[1].trim(),
-          y: row[0]?.y || 0,
+          y: ((_a = row[0]) == null ? void 0 : _a.y) || 0,
           hasValue: text.length > match[0].length + 1
         });
       }
@@ -344,6 +352,7 @@ var CodbDocs = (() => {
     return fields;
   }
   function detectParagraphs(rows) {
+    var _a;
     const paragraphs = [];
     let paraStart = -1;
     for (let i = 0; i < rows.length; i++) {
@@ -356,7 +365,7 @@ var CodbDocs = (() => {
         if (paraStart !== -1 && i - paraStart >= 2) {
           paragraphs.push({
             type: "paragraph",
-            y: rows[paraStart][0]?.y || 0,
+            y: ((_a = rows[paraStart][0]) == null ? void 0 : _a.y) || 0,
             lineCount: i - paraStart
           });
         }
@@ -531,7 +540,7 @@ var CodbDocs = (() => {
     return regions;
   }
 
-  // packages/core/src/layers.js
+  // src/layers.js
   var TextLayer = class {
     constructor() {
       this.pages = [];
@@ -846,7 +855,7 @@ var CodbDocs = (() => {
     }
   };
 
-  // packages/core/src/content.js
+  // src/content.js
   var BlockTypes = {
     HEADING: "heading",
     PARAGRAPH: "paragraph",
@@ -1378,14 +1387,15 @@ var CodbDocs = (() => {
     return dist < threshold;
   }
 
-  // packages/core/src/query.js
+  // src/query.js
   function executeQuery(contentGraph, query, graph = null) {
+    var _a, _b;
     if (graph && graph.planQuery && graph.hybridSearch) {
       const plan = graph.planQuery(query);
       const results2 = graph.hybridSearch(query, { maxResults: 20 });
       return {
-        type: plan.intent?.type || "text-search",
-        label: plan.intent?.type || "text matches",
+        type: ((_a = plan.intent) == null ? void 0 : _a.type) || "text-search",
+        label: ((_b = plan.intent) == null ? void 0 : _b.type) || "text matches",
         plan,
         results: results2,
         query,
@@ -1441,7 +1451,10 @@ var CodbDocs = (() => {
     if (type === EntityTypes.PERSON) {
       const people = [...new Set(resultsArray.map((r) => r.value))];
       answer = `Found ${people.length} person(s): ${people.join(", ")}`;
-      evidence = resultsArray.map((r) => ({ text: r.value, page: r.page, bbox: r.bbox, role: r.metadata?.role }));
+      evidence = resultsArray.map((r) => {
+        var _a;
+        return { text: r.value, page: r.page, bbox: r.bbox, role: (_a = r.metadata) == null ? void 0 : _a.role };
+      });
     }
     if (type === EntityTypes.ORGANIZATION) {
       const orgs = [...new Set(resultsArray.map((r) => r.value))];
@@ -1474,10 +1487,16 @@ var CodbDocs = (() => {
     }
     if (type === BlockTypes.TABLE) {
       answer = `Found ${resultsArray.length} table(s) in the document.`;
-      evidence = resultsArray.map((r) => ({ text: r.text?.substring(0, 50), page: r.page, bbox: r.bbox }));
+      evidence = resultsArray.map((r) => {
+        var _a;
+        return { text: (_a = r.text) == null ? void 0 : _a.substring(0, 50), page: r.page, bbox: r.bbox };
+      });
     }
     if (type === BlockTypes.FORM_FIELD) {
-      const fields = resultsArray.map((r) => r.metadata?.label || r.text?.substring(0, 30));
+      const fields = resultsArray.map((r) => {
+        var _a, _b;
+        return ((_a = r.metadata) == null ? void 0 : _a.label) || ((_b = r.text) == null ? void 0 : _b.substring(0, 30));
+      });
       answer = `Found ${resultsArray.length} form field(s): ${fields.join(", ")}`;
       evidence = resultsArray.map((r) => ({ text: r.text, page: r.page, bbox: r.bbox }));
     }
@@ -1496,23 +1515,24 @@ var CodbDocs = (() => {
     return { answer, confidence, evidence };
   }
   function formatSummaryAnswer(summary) {
+    var _a, _b, _c, _d, _e, _f, _g;
     let answer = `Document Summary:
 `;
-    answer += `- ${summary.blockTypes?.[BlockTypes.HEADING] || 0} headings
+    answer += `- ${((_a = summary.blockTypes) == null ? void 0 : _a[BlockTypes.HEADING]) || 0} headings
 `;
-    answer += `- ${summary.blockTypes?.[BlockTypes.PARAGRAPH] || 0} paragraphs
+    answer += `- ${((_b = summary.blockTypes) == null ? void 0 : _b[BlockTypes.PARAGRAPH]) || 0} paragraphs
 `;
     answer += `- ${summary.tableCount || 0} tables
 `;
-    answer += `- ${summary.entityTypes?.[EntityTypes.DATE] || 0} dates
+    answer += `- ${((_c = summary.entityTypes) == null ? void 0 : _c[EntityTypes.DATE]) || 0} dates
 `;
-    answer += `- ${summary.entityTypes?.[EntityTypes.CURRENCY] || 0} monetary values
+    answer += `- ${((_d = summary.entityTypes) == null ? void 0 : _d[EntityTypes.CURRENCY]) || 0} monetary values
 `;
-    answer += `- ${summary.entityTypes?.[EntityTypes.PERSON] || 0} people
+    answer += `- ${((_e = summary.entityTypes) == null ? void 0 : _e[EntityTypes.PERSON]) || 0} people
 `;
-    answer += `- ${summary.entityTypes?.[EntityTypes.PHONE] || 0} phone numbers
+    answer += `- ${((_f = summary.entityTypes) == null ? void 0 : _f[EntityTypes.PHONE]) || 0} phone numbers
 `;
-    answer += `- ${summary.entityTypes?.[EntityTypes.EMAIL] || 0} emails
+    answer += `- ${((_g = summary.entityTypes) == null ? void 0 : _g[EntityTypes.EMAIL]) || 0} emails
 `;
     return answer;
   }
@@ -1542,8 +1562,9 @@ var CodbDocs = (() => {
     }));
   }
 
-  // packages/core/src/rag.js
+  // src/rag.js
   async function extractImages(page, options = {}) {
+    var _a;
     const {
       format = "png",
       quality = 0.92,
@@ -1569,7 +1590,7 @@ var CodbDocs = (() => {
         if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
           const imgName = args[0];
           try {
-            if (typeof page.objs?.has === "function" && !page.objs.has(imgName)) {
+            if (typeof ((_a = page.objs) == null ? void 0 : _a.has) === "function" && !page.objs.has(imgName)) {
               continue;
             }
             const imgData = await new Promise((resolve, reject) => {
@@ -1841,6 +1862,7 @@ var CodbDocs = (() => {
     return chunks;
   }
   function createChunks(graph, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
     const {
       strategy = ChunkStrategies.SEMANTIC,
       chunkSize = 1e3,
@@ -1852,24 +1874,24 @@ var CodbDocs = (() => {
     } = options;
     const chunks = [];
     const summary = graph.getSummary();
-    const headings = graph.layout?.getAllHeadings() || [];
-    const tables = graph.structure?.getTables() || [];
+    const headings = ((_a = graph.layout) == null ? void 0 : _a.getAllHeadings()) || [];
+    const tables = ((_b = graph.structure) == null ? void 0 : _b.getTables()) || [];
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const pageText = graph.text?.getPageText(pageNum) || "";
-      const pageClassification = graph.classifications?.[pageNum - 1] || null;
-      const pageHeadings = graph.layout?.getHeadings(pageNum) || [];
-      const pageTables = graph.structure?.getTables(pageNum) || [];
-      const pageForms = graph.structure?.getForms(pageNum) || [];
-      const pageLists = graph.structure?.getLists(pageNum) || [];
+      const pageText = ((_c = graph.text) == null ? void 0 : _c.getPageText(pageNum)) || "";
+      const pageClassification = ((_d = graph.classifications) == null ? void 0 : _d[pageNum - 1]) || null;
+      const pageHeadings = ((_e = graph.layout) == null ? void 0 : _e.getHeadings(pageNum)) || [];
+      const pageTables = ((_f = graph.structure) == null ? void 0 : _f.getTables(pageNum)) || [];
+      const pageForms = ((_g = graph.structure) == null ? void 0 : _g.getForms(pageNum)) || [];
+      const pageLists = ((_h = graph.structure) == null ? void 0 : _h.getLists(pageNum)) || [];
       const pageMetadata = {
-        dates: graph.metadata?.getDates(pageNum) || [],
-        phones: graph.metadata?.getPhones(pageNum) || [],
-        emails: graph.metadata?.getEmails(pageNum) || [],
-        addresses: graph.metadata?.getAddresses(pageNum) || [],
-        amounts: graph.metadata?.getAmounts(pageNum) || []
+        dates: ((_i = graph.metadata) == null ? void 0 : _i.getDates(pageNum)) || [],
+        phones: ((_j = graph.metadata) == null ? void 0 : _j.getPhones(pageNum)) || [],
+        emails: ((_k = graph.metadata) == null ? void 0 : _k.getEmails(pageNum)) || [],
+        addresses: ((_l = graph.metadata) == null ? void 0 : _l.getAddresses(pageNum)) || [],
+        amounts: ((_m = graph.metadata) == null ? void 0 : _m.getAmounts(pageNum)) || []
       };
-      const contentBlocks = graph._contentGraph?.blocks?.filter((b) => b.page === pageNum) || [];
-      const contentEntities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
+      const contentBlocks = ((_o = (_n = graph._contentGraph) == null ? void 0 : _n.blocks) == null ? void 0 : _o.filter((b) => b.page === pageNum)) || [];
+      const contentEntities = ((_q = (_p = graph._contentGraph) == null ? void 0 : _p.entities) == null ? void 0 : _q.filter((e) => e.page === pageNum)) || [];
       let pageChunks = [];
       switch (strategy) {
         case ChunkStrategies.FIXED:
@@ -1914,7 +1936,7 @@ var CodbDocs = (() => {
             pageNumber: pageNum,
             pageCount: summary.pageCount,
             classification: pageClassification,
-            documentType: graph.getDocumentType?.() || null,
+            documentType: ((_r = graph.getDocumentType) == null ? void 0 : _r.call(graph)) || null,
             headings: pageHeadings.map((h) => h.text),
             hasTables: pageTables.length > 0,
             hasForms: pageForms.length > 0,
@@ -1939,8 +1961,9 @@ var CodbDocs = (() => {
     return chunks;
   }
   function buildCrossPageContext(graph) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const context = {
-      documentType: graph.getDocumentType?.() || null,
+      documentType: ((_a = graph.getDocumentType) == null ? void 0 : _a.call(graph)) || null,
       globalEntities: [],
       entityRelationships: [],
       topicFlow: [],
@@ -1955,9 +1978,9 @@ var CodbDocs = (() => {
     const summary = graph.getSummary();
     const entityMap = /* @__PURE__ */ new Map();
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const entities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
+      const entities = ((_c = (_b = graph._contentGraph) == null ? void 0 : _b.entities) == null ? void 0 : _c.filter((e) => e.page === pageNum)) || [];
       for (const entity of entities) {
-        const key = `${entity.type}:${entity.text?.toLowerCase()}`;
+        const key = `${entity.type}:${(_d = entity.text) == null ? void 0 : _d.toLowerCase()}`;
         if (entityMap.has(key)) {
           entityMap.get(key).occurrences.push({
             page: pageNum,
@@ -1980,8 +2003,11 @@ var CodbDocs = (() => {
     context.globalEntities = Array.from(entityMap.values());
     const pageEntityMap = /* @__PURE__ */ new Map();
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const entities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
-      pageEntityMap.set(pageNum, entities.map((e) => `${e.type}:${e.text?.toLowerCase()}`));
+      const entities = ((_f = (_e = graph._contentGraph) == null ? void 0 : _e.entities) == null ? void 0 : _f.filter((e) => e.page === pageNum)) || [];
+      pageEntityMap.set(pageNum, entities.map((e) => {
+        var _a2;
+        return `${e.type}:${(_a2 = e.text) == null ? void 0 : _a2.toLowerCase()}`;
+      }));
     }
     const relationshipMap = /* @__PURE__ */ new Map();
     for (const [pageNum, entities] of pageEntityMap) {
@@ -2006,7 +2032,7 @@ var CodbDocs = (() => {
     let topicStart = 1;
     for (let i = 0; i < classifications.length; i++) {
       const classification = classifications[i];
-      const pageType = classification?.type || "unknown";
+      const pageType = (classification == null ? void 0 : classification.type) || "unknown";
       if (pageType !== currentTopic) {
         if (currentTopic) {
           context.topicFlow.push({
@@ -2028,21 +2054,21 @@ var CodbDocs = (() => {
         pageCount: classifications.length - topicStart + 1
       });
     }
-    const allHeadings = graph.layout?.getAllHeadings() || [];
+    const allHeadings = ((_g = graph.layout) == null ? void 0 : _g.getAllHeadings()) || [];
     context.documentStructure.sections = allHeadings.map((h, i) => ({
       ...h,
       index: i,
       nextPageHeading: i + 1 < allHeadings.length ? allHeadings[i + 1] : null
     }));
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const tables = graph.structure?.getTables(pageNum) || [];
-      const forms = graph.structure?.getForms(pageNum) || [];
-      const lists = graph.structure?.getLists(pageNum) || [];
+      const tables = ((_h = graph.structure) == null ? void 0 : _h.getTables(pageNum)) || [];
+      const forms = ((_i = graph.structure) == null ? void 0 : _i.getForms(pageNum)) || [];
+      const lists = ((_j = graph.structure) == null ? void 0 : _j.getLists(pageNum)) || [];
       context.documentStructure.tables.push(...tables.map((t) => ({ ...t, page: pageNum })));
       context.documentStructure.forms.push(...forms.map((f) => ({ ...f, page: pageNum })));
       context.documentStructure.lists.push(...lists.map((l) => ({ ...l, page: pageNum })));
     }
-    const fullText = graph.text?.pages?.map((p) => p.text).join(" ") || "";
+    const fullText = ((_l = (_k = graph.text) == null ? void 0 : _k.pages) == null ? void 0 : _l.map((p) => p.text).join(" ")) || "";
     const crossPagePatterns = [
       /(?:continued|cont)\.?\s+(?:on\s+)?page\s+(\d+)/gi,
       /(?:see|refer\s+to)\s+page\s+(\d+)/gi,
@@ -2065,6 +2091,7 @@ var CodbDocs = (() => {
     return context;
   }
   function createRAGOutput(graph, options = {}) {
+    var _a, _b, _c, _d, _e, _f;
     const {
       chunkStrategy = ChunkStrategies.SEMANTIC,
       chunkSize = 1e3,
@@ -2077,7 +2104,7 @@ var CodbDocs = (() => {
       embeddingProvider = null
     } = options;
     const summary = graph.getSummary();
-    const documentType = graph.getDocumentType?.() || null;
+    const documentType = ((_a = graph.getDocumentType) == null ? void 0 : _a.call(graph)) || null;
     const chunks = createChunks(graph, {
       strategy: chunkStrategy,
       chunkSize,
@@ -2089,8 +2116,8 @@ var CodbDocs = (() => {
     const ragOutput = {
       // Document metadata
       document: {
-        type: documentType?.type || "unknown",
-        confidence: documentType?.confidence || 0,
+        type: (documentType == null ? void 0 : documentType.type) || "unknown",
+        confidence: (documentType == null ? void 0 : documentType.confidence) || 0,
         pageCount: summary.pageCount,
         wordCount: summary.wordCount,
         headings: summary.headings,
@@ -2107,9 +2134,9 @@ var CodbDocs = (() => {
         chunkType: chunk.type
       })),
       // Global entities
-      entities: context?.globalEntities || [],
+      entities: (context == null ? void 0 : context.globalEntities) || [],
       // Entity relationships
-      relationships: context?.entityRelationships || [],
+      relationships: (context == null ? void 0 : context.entityRelationships) || [],
       // Document structure
       structure: {
         headings: summary.headings,
@@ -2118,17 +2145,20 @@ var CodbDocs = (() => {
         lists: summary.listCount
       },
       // Topic flow
-      topicFlow: context?.topicFlow || [],
+      topicFlow: (context == null ? void 0 : context.topicFlow) || [],
       // Cross-page references
-      crossPageReferences: context?.crossPageReferences || [],
+      crossPageReferences: (context == null ? void 0 : context.crossPageReferences) || [],
       // Full text for context
-      fullText: graph.text?.pages?.map((p) => p.text).join("\n\n") || "",
+      fullText: ((_c = (_b = graph.text) == null ? void 0 : _b.pages) == null ? void 0 : _c.map((p) => p.text).join("\n\n")) || "",
       // Page-by-page text
-      pages: graph.text?.pages?.map((p) => ({
-        pageNumber: p.pageNum,
-        text: p.text,
-        source: p.source,
-        classification: graph.classifications?.[p.pageNum - 1] || null
+      pages: ((_e = (_d = graph.text) == null ? void 0 : _d.pages) == null ? void 0 : _e.map((p) => {
+        var _a2;
+        return {
+          pageNumber: p.pageNum,
+          text: p.text,
+          source: p.source,
+          classification: ((_a2 = graph.classifications) == null ? void 0 : _a2[p.pageNum - 1]) || null
+        };
       })) || []
     };
     if (includeImages) {
@@ -2137,7 +2167,7 @@ var CodbDocs = (() => {
     if (includeVectors) {
       ragOutput.vectors = [];
       for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-        const pageVectors = graph.getVectors?.(pageNum) || [];
+        const pageVectors = ((_f = graph.getVectors) == null ? void 0 : _f.call(graph, pageNum)) || [];
         ragOutput.vectors.push(...pageVectors.map((v) => ({
           ...v,
           pageNumber: pageNum
@@ -2264,54 +2294,59 @@ var CodbDocs = (() => {
     return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
   }
 
-  // packages/core/src/workers.js
+  // src/workers.js
   var HAS_OFFSCREEN = typeof OffscreenCanvas !== "undefined";
   var HAS_WORKERS = typeof Worker !== "undefined";
   function canUseWorkers() {
     return HAS_OFFSCREEN && HAS_WORKERS;
   }
 
-  // packages/core/src/exporters.js
+  // src/exporters.js
   function mdEscape(text) {
     return String(text || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/^([#>*+\-]|\d+\.)\s*/gm, "\\$&");
   }
   function buildRAGContext(ir, contentGraph) {
+    var _a, _b, _c, _d, _e, _f;
     const pages = (ir.document.pages || []).map((pageId) => {
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g, _h, _i, _j, _k, _l, _m;
       const page = ir.pages[pageId];
       if (!page) return null;
       const blocks = [];
       const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean);
       for (const obj of objects) {
-        if (obj.type === "text" && obj.semantic?.text) {
+        if (obj.type === "text" && ((_a2 = obj.semantic) == null ? void 0 : _a2.text)) {
           blocks.push({
             type: obj.semantic.role || "text",
             text: obj.semantic.text,
             bbox: obj.bbox || null,
-            fontSize: obj.raw?.fontSize || null,
-            font: obj.raw?.font || null,
-            color: obj.raw?.color || null
+            fontSize: ((_b2 = obj.raw) == null ? void 0 : _b2.fontSize) || null,
+            font: ((_c2 = obj.raw) == null ? void 0 : _c2.font) || null,
+            color: ((_d2 = obj.raw) == null ? void 0 : _d2.color) || null
           });
         } else if (obj.type === "image") {
           blocks.push({
             type: "image",
-            alt: obj.accessibility?.alt || obj.semantic?.caption || "",
-            caption: obj.semantic?.caption || "",
+            alt: ((_e2 = obj.accessibility) == null ? void 0 : _e2.alt) || ((_f2 = obj.semantic) == null ? void 0 : _f2.caption) || "",
+            caption: ((_g = obj.semantic) == null ? void 0 : _g.caption) || "",
             bbox: obj.bbox || null,
-            width: obj.raw?.width || null,
-            height: obj.raw?.height || null
+            width: ((_h = obj.raw) == null ? void 0 : _h.width) || null,
+            height: ((_i = obj.raw) == null ? void 0 : _i.height) || null
           });
         } else if (obj.type === "link") {
           blocks.push({
             type: "link",
-            text: obj.semantic?.text || "",
-            url: obj.raw?.url || null,
-            dest: obj.raw?.dest || null,
+            text: ((_j = obj.semantic) == null ? void 0 : _j.text) || "",
+            url: ((_k = obj.raw) == null ? void 0 : _k.url) || null,
+            dest: ((_l = obj.raw) == null ? void 0 : _l.dest) || null,
             bbox: obj.bbox || null
           });
         }
       }
-      const text = objects.filter((o) => o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
-      const pageEntities = contentGraph ? (contentGraph.pages || []).find((pg) => pg.page === page.num)?.entities || [] : [];
+      const text = objects.filter((o) => {
+        var _a3;
+        return o.type === "text" && ((_a3 = o.semantic) == null ? void 0 : _a3.text);
+      }).map((o) => o.semantic.text).join(" ");
+      const pageEntities = contentGraph ? ((_m = (contentGraph.pages || []).find((pg) => pg.page === page.num)) == null ? void 0 : _m.entities) || [] : [];
       return {
         page: page.num,
         size: { width: page.width, height: page.height },
@@ -2331,10 +2366,10 @@ var CodbDocs = (() => {
     });
     return {
       format: "codbdocs-rag-v2",
-      source: ir.document.metadata?.title || "PDF document",
-      title: ir.document.metadata?.title || null,
-      author: ir.document.metadata?.author || null,
-      createdAt: ir.document.metadata?.creationDate || ir.document.metadata?.modDate || null,
+      source: ((_a = ir.document.metadata) == null ? void 0 : _a.title) || "PDF document",
+      title: ((_b = ir.document.metadata) == null ? void 0 : _b.title) || null,
+      author: ((_c = ir.document.metadata) == null ? void 0 : _c.author) || null,
+      createdAt: ((_d = ir.document.metadata) == null ? void 0 : _d.creationDate) || ((_e = ir.document.metadata) == null ? void 0 : _e.modDate) || null,
       documentType: content.documentType || ir.document.type || null,
       pageCount: (ir.document.pages || []).length,
       pages,
@@ -2346,7 +2381,7 @@ ${p.text}`).join("\n\n"),
       relationships: content.allRelationships || [],
       metadata: ir.document.metadata || {},
       security: ir.document.security ? summarizeSecurity(ir.document.security) : null,
-      outline: ir.document.navigation?.outline || []
+      outline: ((_f = ir.document.navigation) == null ? void 0 : _f.outline) || []
     };
   }
   function summarizeSecurity(security) {
@@ -2360,7 +2395,10 @@ ${p.text}`).join("\n\n"),
     return out;
   }
   function flowLines(objects, { lineTolerance = 1 } = {}) {
-    const texts = objects.filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => {
+    const texts = objects.filter((o) => {
+      var _a;
+      return o && o.type === "text" && ((_a = o.semantic) == null ? void 0 : _a.text);
+    }).map((o) => {
       const b = o.bbox || [0, 0, 0, 0];
       return { o, x: b[0], y: b[1], w: b[2], h: b[3] || 0, cy: b[1] + (b[3] || 0) / 2 };
     });
@@ -2388,9 +2426,10 @@ ${p.text}`).join("\n\n"),
     return paragraphs;
   }
   function toMarkdown(ir, contentGraph) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const out = [];
-    const title = ir.document.metadata?.title || "Document";
-    const author = ir.document.metadata?.author || "";
+    const title = ((_a = ir.document.metadata) == null ? void 0 : _a.title) || "Document";
+    const author = ((_b = ir.document.metadata) == null ? void 0 : _b.author) || "";
     out.push(`# ${title}`);
     if (author) out.push(`
 _By ${author}_`);
@@ -2411,8 +2450,8 @@ _By ${author}_`);
         }
       };
       for (const obj of objects) {
-        const role = obj.semantic?.role || "text";
-        if (obj.type === "text" && obj.semantic?.text) {
+        const role = ((_c = obj.semantic) == null ? void 0 : _c.role) || "text";
+        if (obj.type === "text" && ((_d = obj.semantic) == null ? void 0 : _d.text)) {
           const text = String(obj.semantic.text).replace(/\s+/g, " ").trim();
           if (!text) continue;
           switch (role) {
@@ -2431,16 +2470,16 @@ _By ${author}_`);
           }
         } else if (obj.type === "image") {
           flush();
-          const alt = obj.accessibility?.alt || obj.semantic?.caption || "Image";
-          out.push(`![${mdEscape(alt)}](${obj.raw?.src ? "" : ""})`);
-          if (obj.semantic?.caption) {
+          const alt = ((_e = obj.accessibility) == null ? void 0 : _e.alt) || ((_f = obj.semantic) == null ? void 0 : _f.caption) || "Image";
+          out.push(`![${mdEscape(alt)}](${((_g = obj.raw) == null ? void 0 : _g.src) ? "" : ""})`);
+          if ((_h = obj.semantic) == null ? void 0 : _h.caption) {
             out.push(`*${mdEscape(obj.semantic.caption)}*`);
           }
           out.push("");
         } else if (obj.type === "link") {
           flush();
-          const text = obj.semantic?.text || obj.raw?.url || "link";
-          const href = obj.raw?.url || obj.raw?.href || "#";
+          const text = ((_i = obj.semantic) == null ? void 0 : _i.text) || ((_j = obj.raw) == null ? void 0 : _j.url) || "link";
+          const href = ((_k = obj.raw) == null ? void 0 : _k.url) || ((_l = obj.raw) == null ? void 0 : _l.href) || "#";
           out.push(`[${mdEscape(text)}](${href})`);
           out.push("");
         } else if (role === "separator") {
@@ -2457,7 +2496,10 @@ _By ${author}_`);
     const pages = (ir.document.pages || []).map((pageId) => {
       const page = ir.pages[pageId];
       if (!page) return null;
-      const objs = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && (o.type === "text" || o.type === "link") && (o.semantic?.text || o.raw?.url));
+      const objs = (page.content || []).map((id) => ir.objects[id]).filter((o) => {
+        var _a, _b;
+        return o && (o.type === "text" || o.type === "link") && (((_a = o.semantic) == null ? void 0 : _a.text) || ((_b = o.raw) == null ? void 0 : _b.url));
+      });
       const paragraphs = flowLines(objs).map((par) => par.join(" "));
       return { page: page.num, text: paragraphs.join("\n\n") };
     }).filter(Boolean);
@@ -2469,6 +2511,7 @@ ${p.text}`).join("\n\n")
     };
   }
   function toFullJSON(ir, contentGraph) {
+    var _a, _b, _c, _d;
     const pages = (ir.document.pages || []).map((pageId) => {
       const page = ir.pages[pageId];
       if (!page) return null;
@@ -2481,33 +2524,42 @@ ${p.text}`).join("\n\n")
         cropBox: page.cropBox || null,
         labels: page.labels || null,
         background: page.background || null,
-        textObjects: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text").map((o) => ({
-          id: o.id,
-          text: o.semantic?.text || "",
-          role: o.semantic?.role || "text",
-          level: o.semantic?.level || null,
-          bbox: o.bbox || null,
-          font: o.raw?.font || null,
-          fontSize: o.raw?.fontSize || null,
-          color: o.raw?.color || null,
-          transform: o.raw?.transform || null
-        })),
-        images: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "image").map((o) => ({
-          id: o.id,
-          bbox: o.bbox || null,
-          width: o.raw?.width || null,
-          height: o.raw?.height || null,
-          alt: o.accessibility?.alt || "",
-          caption: o.semantic?.caption || "",
-          src: o.raw?.src || null
-        })),
-        links: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "link").map((o) => ({
-          id: o.id,
-          bbox: o.bbox || null,
-          text: o.semantic?.text || "",
-          url: o.raw?.url || null,
-          dest: o.raw?.dest || null
-        })),
+        textObjects: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text").map((o) => {
+          var _a2, _b2, _c2, _d2, _e, _f, _g;
+          return {
+            id: o.id,
+            text: ((_a2 = o.semantic) == null ? void 0 : _a2.text) || "",
+            role: ((_b2 = o.semantic) == null ? void 0 : _b2.role) || "text",
+            level: ((_c2 = o.semantic) == null ? void 0 : _c2.level) || null,
+            bbox: o.bbox || null,
+            font: ((_d2 = o.raw) == null ? void 0 : _d2.font) || null,
+            fontSize: ((_e = o.raw) == null ? void 0 : _e.fontSize) || null,
+            color: ((_f = o.raw) == null ? void 0 : _f.color) || null,
+            transform: ((_g = o.raw) == null ? void 0 : _g.transform) || null
+          };
+        }),
+        images: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "image").map((o) => {
+          var _a2, _b2, _c2, _d2, _e;
+          return {
+            id: o.id,
+            bbox: o.bbox || null,
+            width: ((_a2 = o.raw) == null ? void 0 : _a2.width) || null,
+            height: ((_b2 = o.raw) == null ? void 0 : _b2.height) || null,
+            alt: ((_c2 = o.accessibility) == null ? void 0 : _c2.alt) || "",
+            caption: ((_d2 = o.semantic) == null ? void 0 : _d2.caption) || "",
+            src: ((_e = o.raw) == null ? void 0 : _e.src) || null
+          };
+        }),
+        links: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "link").map((o) => {
+          var _a2, _b2, _c2;
+          return {
+            id: o.id,
+            bbox: o.bbox || null,
+            text: ((_a2 = o.semantic) == null ? void 0 : _a2.text) || "",
+            url: ((_b2 = o.raw) == null ? void 0 : _b2.url) || null,
+            dest: ((_c2 = o.raw) == null ? void 0 : _c2.dest) || null
+          };
+        }),
         vectors: (page.vectors || []).map((id) => ir.vectors[id]).filter(Boolean),
         annotations: page.annotations || [],
         markedContent: page.markedContent || [],
@@ -2519,13 +2571,13 @@ ${p.text}`).join("\n\n")
       version: ir.version || "1.0",
       document: {
         id: ir.document.id || null,
-        title: ir.document.metadata?.title || null,
-        author: ir.document.metadata?.author || null,
-        type: contentGraph?.documentType || ir.document.type || null,
+        title: ((_a = ir.document.metadata) == null ? void 0 : _a.title) || null,
+        author: ((_b = ir.document.metadata) == null ? void 0 : _b.author) || null,
+        type: (contentGraph == null ? void 0 : contentGraph.documentType) || ir.document.type || null,
         metadata: ir.document.metadata || {},
         security: ir.document.security || {},
-        outline: ir.document.navigation?.outline || [],
-        labels: ir.document.navigation?.labels || []
+        outline: ((_c = ir.document.navigation) == null ? void 0 : _c.outline) || [],
+        labels: ((_d = ir.document.navigation) == null ? void 0 : _d.labels) || []
       },
       pageCount: pages.length,
       pages
@@ -2543,13 +2595,14 @@ ${p.text}`).join("\n\n")
     return payload;
   }
   function byReadingOrder(a, b) {
-    const ay = a.bbox?.[1] || 0;
-    const by = b.bbox?.[1] || 0;
+    var _a, _b, _c, _d;
+    const ay = ((_a = a.bbox) == null ? void 0 : _a[1]) || 0;
+    const by = ((_b = b.bbox) == null ? void 0 : _b[1]) || 0;
     if (Math.abs(ay - by) > 10) return by - ay;
-    return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
+    return (((_c = a.bbox) == null ? void 0 : _c[0]) || 0) - (((_d = b.bbox) == null ? void 0 : _d[0]) || 0);
   }
 
-  // packages/core/src/viewer.js
+  // src/viewer.js
   function generateViewerChrome(ragPayload) {
     const outline = ragPayload && ragPayload.outline || [];
     return {
@@ -2962,7 +3015,7 @@ ${p.text}`).join("\n\n")
     return String(str == null ? "" : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
-  // packages/core/src/pdfir.js
+  // src/pdfir.js
   function createIR() {
     return {
       version: "1.0",
@@ -3015,6 +3068,7 @@ ${p.text}`).join("\n\n")
     return ir.pages[pageId];
   }
   function addTextObject(ir, pageId, data) {
+    var _a;
     const id = generateId("text");
     ir.objects[id] = {
       id,
@@ -3043,16 +3097,19 @@ ${p.text}`).join("\n\n")
       },
       bbox: data.bbox || null
     };
-    ir.pages[pageId]?.content.push(id);
+    (_a = ir.pages[pageId]) == null ? void 0 : _a.content.push(id);
     return ir.objects[id];
   }
   function materializeOCRObject(ir, pageId, { text, source, confidence, pageSize } = {}) {
     const body = (text || "").replace(/\s+/g, " ").trim();
     if (!body) return null;
     const page = ir.pages[pageId];
-    const hasTextObjects = (page?.content || []).some((id) => ir.objects[id]?.type === "text");
+    const hasTextObjects = ((page == null ? void 0 : page.content) || []).some((id) => {
+      var _a;
+      return ((_a = ir.objects[id]) == null ? void 0 : _a.type) === "text";
+    });
     if (hasTextObjects) return null;
-    const size = pageSize || { width: page?.width || 0, height: page?.height || 0 };
+    const size = pageSize || { width: (page == null ? void 0 : page.width) || 0, height: (page == null ? void 0 : page.height) || 0 };
     const obj = addTextObject(ir, pageId, {
       text: body,
       bbox: [0, 0, size.width, size.height],
@@ -3071,6 +3128,7 @@ ${p.text}`).join("\n\n")
     return obj;
   }
   function addVectorObject(ir, pageId, data) {
+    var _a;
     const id = generateId("vec");
     ir.vectors[id] = {
       id,
@@ -3102,10 +3160,11 @@ ${p.text}`).join("\n\n")
         confidence: 1
       }
     };
-    ir.pages[pageId]?.vectors.push(id);
+    (_a = ir.pages[pageId]) == null ? void 0 : _a.vectors.push(id);
     return ir.vectors[id];
   }
   function addObject(ir, pageId, data) {
+    var _a;
     const id = generateId(data.type || "obj");
     ir.objects[id] = {
       id,
@@ -3117,7 +3176,7 @@ ${p.text}`).join("\n\n")
       provenance: data.provenance || { method: "native", confidence: 1 },
       bbox: data.bbox || null
     };
-    ir.pages[pageId]?.content.push(id);
+    (_a = ir.pages[pageId]) == null ? void 0 : _a.content.push(id);
     return ir.objects[id];
   }
   async function extractVectors(page) {
@@ -3133,7 +3192,7 @@ ${p.text}`).join("\n\n")
     let currentClip = null;
     let pathPoints = [];
     let pathStart = null;
-    const FN = pdfjsLib?.OPS || {};
+    const FN = (pdfjsLib == null ? void 0 : pdfjsLib.OPS) || {};
     for (let i = 0; i < opList.fnArray.length; i++) {
       const fn = opList.fnArray[i];
       const args = opList.argsArray[i];
@@ -3291,6 +3350,7 @@ ${p.text}`).join("\n\n")
     return null;
   }
   function auditAccessibility(ir) {
+    var _a, _b, _c, _d, _e;
     const issues = [];
     let score = 100;
     for (const pageId of ir.document.pages) {
@@ -3299,7 +3359,7 @@ ${p.text}`).join("\n\n")
       const pageNum = parseInt(pageId.split("_")[1]);
       for (const objId of page.content) {
         const obj = ir.objects[objId];
-        if (obj?.type === "image" && !obj.accessibility?.alt) {
+        if ((obj == null ? void 0 : obj.type) === "image" && !((_a = obj.accessibility) == null ? void 0 : _a.alt)) {
           issues.push({
             type: "missing_alt_text",
             page: pageNum,
@@ -3311,7 +3371,10 @@ ${p.text}`).join("\n\n")
           score -= 5;
         }
       }
-      const headings = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading");
+      const headings = page.content.map((id) => ir.objects[id]).filter((obj) => {
+        var _a2;
+        return ((_a2 = obj == null ? void 0 : obj.semantic) == null ? void 0 : _a2.role) === "heading";
+      });
       let prevLevel = 0;
       for (const heading of headings) {
         const level = heading.semantic.level || 1;
@@ -3330,10 +3393,13 @@ ${p.text}`).join("\n\n")
       }
       for (const vecId of page.vectors || []) {
         const vec = ir.vectors[vecId];
-        if (vec?.semantic?.role === "table_border") {
-          const nearbyTexts = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.bbox && isNear(vec.bbox, obj.bbox));
+        if (((_b = vec == null ? void 0 : vec.semantic) == null ? void 0 : _b.role) === "table_border") {
+          const nearbyTexts = page.content.map((id) => ir.objects[id]).filter((obj) => (obj == null ? void 0 : obj.bbox) && isNear(vec.bbox, obj.bbox));
           const hasHeader = nearbyTexts.some(
-            (t) => t.raw?.fontSize > 12 || t.semantic?.role === "heading"
+            (t) => {
+              var _a2, _b2;
+              return ((_a2 = t.raw) == null ? void 0 : _a2.fontSize) > 12 || ((_b2 = t.semantic) == null ? void 0 : _b2.role) === "heading";
+            }
           );
           if (!hasHeader) {
             issues.push({
@@ -3349,7 +3415,7 @@ ${p.text}`).join("\n\n")
         }
       }
       if (page.content.length > 5) {
-        const sorted = [...page.content].map((id) => ir.objects[id]).filter((obj) => obj?.bbox).sort((a, b) => a.bbox[1] - b.bbox[1]);
+        const sorted = [...page.content].map((id) => ir.objects[id]).filter((obj) => obj == null ? void 0 : obj.bbox).sort((a, b) => a.bbox[1] - b.bbox[1]);
         for (let i = 1; i < sorted.length; i++) {
           const prev = sorted[i - 1];
           const curr = sorted[i];
@@ -3368,10 +3434,10 @@ ${p.text}`).join("\n\n")
       }
       for (const objId of page.content) {
         const obj = ir.objects[objId];
-        if (obj?.type === "text" && obj.raw?.color) {
+        if ((obj == null ? void 0 : obj.type) === "text" && ((_c = obj.raw) == null ? void 0 : _c.color)) {
         }
       }
-      if (!ir.document.metadata?.language) {
+      if (!((_d = ir.document.metadata) == null ? void 0 : _d.language)) {
         issues.push({
           type: "missing_language",
           page: 1,
@@ -3381,7 +3447,7 @@ ${p.text}`).join("\n\n")
         });
         score -= 3;
       }
-      if (!ir.document.metadata?.title) {
+      if (!((_e = ir.document.metadata) == null ? void 0 : _e.title)) {
         issues.push({
           type: "missing_title",
           page: 1,
@@ -3403,6 +3469,7 @@ ${p.text}`).join("\n\n")
     };
   }
   function generateAccessibilityTree(ir) {
+    var _a, _b, _c, _d;
     const tree = { type: "Document", children: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
@@ -3412,14 +3479,14 @@ ${p.text}`).join("\n\n")
         const obj = ir.objects[objId];
         if (!obj) continue;
         const node = {
-          type: obj.accessibility?.role || mapRole(obj.semantic?.role),
+          type: ((_a = obj.accessibility) == null ? void 0 : _a.role) || mapRole((_b = obj.semantic) == null ? void 0 : _b.role),
           properties: {},
           children: []
         };
-        if (obj.semantic?.text) {
+        if ((_c = obj.semantic) == null ? void 0 : _c.text) {
           node.children.push({ type: "Text", content: obj.semantic.text });
         }
-        if (obj.semantic?.role === "heading") {
+        if (((_d = obj.semantic) == null ? void 0 : _d.role) === "heading") {
           node.properties.level = obj.semantic.level || 1;
         }
         pageNode.children.push(node);
@@ -3449,6 +3516,7 @@ ${p.text}`).join("\n\n")
     return Math.sqrt(Math.pow(cx1 - cx2, 2) + Math.pow(cy1 - cy2, 2)) < threshold;
   }
   function exportHTML(ir, options = {}) {
+    var _a, _b, _c;
     const {
       mode = "visual",
       // 'visual' | 'accessible' | 'intelligent' | 'selectable'
@@ -3458,10 +3526,10 @@ ${p.text}`).join("\n\n")
     } = options;
     const ragPayload = buildRAGPayload(ir);
     const viewer = generateViewerChrome(ragPayload);
-    let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || "en") + '">\n<head>\n';
+    let html = '<!DOCTYPE html>\n<html lang="' + (((_a = ir.document.metadata) == null ? void 0 : _a.language) || "en") + '">\n<head>\n';
     html += '<meta charset="UTF-8">\n';
     html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
-    html += "<title>" + escapeHTML2(ir.document.metadata?.title || "Document") + "</title>\n";
+    html += "<title>" + escapeHTML2(((_b = ir.document.metadata) == null ? void 0 : _b.title) || "Document") + "</title>\n";
     html += generateVisualStyles(ir);
     html += generateAccessibleStyles();
     html += viewer.styles;
@@ -3479,7 +3547,7 @@ ${p.text}`).join("\n\n")
       const page = ir.pages[pageId];
       if (!page) continue;
       const attrs = includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "";
-      const pageLabel = page.labels?.print || `Page ${page.num}`;
+      const pageLabel = ((_c = page.labels) == null ? void 0 : _c.print) || `Page ${page.num}`;
       html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML2(pageLabel)}" role="region">
 `;
       if (page.background) {
@@ -3510,14 +3578,15 @@ ${p.text}`).join("\n\n")
     return html;
   }
   function renderPageImages(page, ir, attrs) {
+    var _a, _b, _c;
     let html = "";
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj || obj.type !== "image") continue;
-      const src = obj.raw?.src;
+      const src = (_a = obj.raw) == null ? void 0 : _a.src;
       if (!src) continue;
       const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
-      const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
+      const alt = escapeHTML2(((_b = obj.accessibility) == null ? void 0 : _b.alt) || ((_c = obj.semantic) == null ? void 0 : _c.caption) || "Image");
       html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
       html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
 `;
@@ -3528,6 +3597,7 @@ ${p.text}`).join("\n\n")
     return buildRAGContext(ir, null);
   }
   function renderPageVisual(page, ir, attrs) {
+    var _a, _b, _c, _d, _e, _f, _g;
     let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + "px;height:" + (page.height || 0) + 'px;">\n';
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
@@ -3540,13 +3610,13 @@ ${p.text}`).join("\n\n")
       if (obj.type === "text") {
         const bbox = obj.bbox || [];
         const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic?.text || "")}</div>
+        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${((_a = obj.raw) == null ? void 0 : _a.fontSize) || 12}px;${style}">${escapeHTML2(((_b = obj.semantic) == null ? void 0 : _b.text) || "")}</div>
 `;
       } else if (obj.type === "image") {
         const bbox = obj.bbox || [];
-        const src = obj.raw?.src || "";
+        const src = ((_c = obj.raw) == null ? void 0 : _c.src) || "";
         if (src) {
-          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(obj.accessibility?.alt || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(((_d = obj.accessibility) == null ? void 0 : _d.alt) || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
         } else {
           html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
@@ -3554,8 +3624,8 @@ ${p.text}`).join("\n\n")
         }
       } else if (obj.type === "link") {
         const bbox = obj.bbox || [];
-        const href = escapeHTML2(obj.raw?.href || "#");
-        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
+        const href = escapeHTML2(((_e = obj.raw) == null ? void 0 : _e.href) || "#");
+        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(((_f = obj.semantic) == null ? void 0 : _f.text) || ((_g = obj.raw) == null ? void 0 : _g.url) || "link")}</a>
 `;
       }
     }
@@ -3563,26 +3633,27 @@ ${p.text}`).join("\n\n")
     return html;
   }
   function renderPagePositionedText(page, ir, attrs) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj) continue;
       const dataAttr = includeDataAttributes(objId, attrs);
       const bbox = obj.bbox || [];
-      if (obj.type === "text" && obj.semantic?.text) {
+      if (obj.type === "text" && ((_a = obj.semantic) == null ? void 0 : _a.text)) {
         const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
+        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${((_b = obj.raw) == null ? void 0 : _b.fontSize) || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
 `;
       } else if (obj.type === "image") {
-        const src = obj.raw?.src || "";
-        const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
+        const src = ((_c = obj.raw) == null ? void 0 : _c.src) || "";
+        const alt = escapeHTML2(((_d = obj.accessibility) == null ? void 0 : _d.alt) || ((_e = obj.semantic) == null ? void 0 : _e.caption) || "Image");
         if (src) {
           html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
         }
       } else if (obj.type === "link") {
-        const href = escapeHTML2(obj.raw?.href || "#");
-        const text = escapeHTML2(obj.semantic?.text || obj.raw?.url || "link");
+        const href = escapeHTML2(((_f = obj.raw) == null ? void 0 : _f.href) || "#");
+        const text = escapeHTML2(((_g = obj.semantic) == null ? void 0 : _g.text) || ((_h = obj.raw) == null ? void 0 : _h.url) || "link");
         html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>
 `;
       }
@@ -3591,34 +3662,35 @@ ${p.text}`).join("\n\n")
     return html;
   }
   function renderPageAccessible(page, ir, attrs, mode) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj) continue;
       const dataAttr = includeDataAttributes(objId, attrs);
-      const role = obj.semantic?.role || "paragraph";
+      const role = ((_a = obj.semantic) == null ? void 0 : _a.role) || "paragraph";
       if (obj.type === "image") {
-        const alt = obj.accessibility?.alt || obj.semantic?.caption || (mode === "intelligent" ? "AI-generated description" : "Image");
-        const src = obj.raw?.src || "";
+        const alt = ((_b = obj.accessibility) == null ? void 0 : _b.alt) || ((_c = obj.semantic) == null ? void 0 : _c.caption) || (mode === "intelligent" ? "AI-generated description" : "Image");
+        const src = ((_d = obj.raw) == null ? void 0 : _d.src) || "";
         html += `<figure${dataAttr}>
 `;
         if (src) html += `<img src="${escapeHTML2(src)}" alt="${escapeHTML2(alt)}" loading="lazy">
 `;
-        if (obj.semantic?.caption) html += `<figcaption>${escapeHTML2(obj.semantic.caption)}</figcaption>
+        if ((_e = obj.semantic) == null ? void 0 : _e.caption) html += `<figcaption>${escapeHTML2(obj.semantic.caption)}</figcaption>
 `;
-        if (mode === "intelligent" && obj.provenance?.method === "vision") {
+        if (mode === "intelligent" && ((_f = obj.provenance) == null ? void 0 : _f.method) === "vision") {
           html += `<small class="ai-generated">AI-generated description</small>
 `;
         }
         html += "</figure>\n";
       } else if (role === "heading") {
-        const level = obj.semantic?.level || 2;
-        html += `<h${level}${dataAttr}>${escapeHTML2(obj.semantic?.text || "")}</h${level}>
+        const level = ((_g = obj.semantic) == null ? void 0 : _g.level) || 2;
+        html += `<h${level}${dataAttr}>${escapeHTML2(((_h = obj.semantic) == null ? void 0 : _h.text) || "")}</h${level}>
 `;
       } else if (role === "table") {
         html += `<table${dataAttr}>
 `;
-        html += `<caption>${escapeHTML2(obj.semantic?.caption || "Table")}</caption>
+        html += `<caption>${escapeHTML2(((_i = obj.semantic) == null ? void 0 : _i.caption) || "Table")}</caption>
 `;
         html += "</table>\n";
       } else if (role === "list") {
@@ -3626,10 +3698,10 @@ ${p.text}`).join("\n\n")
 `;
         html += "</ul>\n";
       } else if (obj.type === "link") {
-        const href = escapeHTML2(obj.raw?.href || "#");
-        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
+        const href = escapeHTML2(((_j = obj.raw) == null ? void 0 : _j.href) || "#");
+        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML2(((_k = obj.semantic) == null ? void 0 : _k.text) || ((_l = obj.raw) == null ? void 0 : _l.url) || "link")}</a>
 `;
-      } else if (obj.type === "text" && obj.semantic?.text) {
+      } else if (obj.type === "text" && ((_m = obj.semantic) == null ? void 0 : _m.text)) {
         const style = textRunStyle(obj);
         html += `<p${dataAttr}${style ? ' style="' + style + '"' : ""}>${escapeHTML2(obj.semantic.text)}</p>
 `;
@@ -3638,7 +3710,7 @@ ${p.text}`).join("\n\n")
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
       if (!vec) continue;
-      if (vec.semantic?.role === "separator") {
+      if (((_n = vec.semantic) == null ? void 0 : _n.role) === "separator") {
         html += `<hr${attrs} data-pdf-vector="${vecId}">
 `;
       }
@@ -3647,12 +3719,13 @@ ${p.text}`).join("\n\n")
     return html;
   }
   function textRunStyle(obj) {
+    var _a, _b;
     let style = "";
-    const font = obj.raw?.font;
+    const font = (_a = obj.raw) == null ? void 0 : _a.font;
     if (font) {
       style += `font-family:${sanitizeFontName(font)}, system-ui, sans-serif;`;
     }
-    const color = obj.raw?.color;
+    const color = (_b = obj.raw) == null ? void 0 : _b.color;
     if (color) {
       style += `color:${escapeCSSColor(color)};`;
     }
@@ -3665,15 +3738,16 @@ ${p.text}`).join("\n\n")
     return String(color).replace(/[^0-9A-Za-z#.,()% ]/g, "");
   }
   function renderVectorVisual(vec, attrs) {
+    var _a, _b, _c, _d, _e, _f;
     if (!vec.bbox) return "";
     if (vec.type === "rect") {
       const style = `position:absolute;left:${vec.bbox[0]}px;top:${vec.bbox[1]}px;width:${vec.bbox[2]}px;height:${vec.bbox[3]}px;`;
-      const stroke = vec.graphicsState?.stroke ? `border:1px solid ${vec.graphicsState.stroke};` : "";
-      const fill = vec.graphicsState?.fill ? `background:${vec.graphicsState.fill};` : "";
+      const stroke = ((_a = vec.graphicsState) == null ? void 0 : _a.stroke) ? `border:1px solid ${vec.graphicsState.stroke};` : "";
+      const fill = ((_b = vec.graphicsState) == null ? void 0 : _b.fill) ? `background:${vec.graphicsState.fill};` : "";
       return `<div class="pdf-rect"${attrs} data-pdf-vector="${vec.id}" style="${style}${stroke}${fill}"></div>
 `;
     }
-    if (vec.type === "path" && vec.points?.length > 0) {
+    if (vec.type === "path" && ((_c = vec.points) == null ? void 0 : _c.length) > 0) {
       let d = "";
       for (const pt of vec.points) {
         if (pt.op === "moveTo") d += `M${pt.x},${pt.y}`;
@@ -3681,9 +3755,9 @@ ${p.text}`).join("\n\n")
         else if (pt.op === "curveTo") d += `C${pt.x1},${pt.y1} ${pt.x2},${pt.y2} ${pt.x3},${pt.y3}`;
         else if (pt.op === "closePath") d += "Z";
       }
-      const stroke = vec.graphicsState?.stroke || "#000";
-      const fill = vec.graphicsState?.fill || "none";
-      return `<svg class="pdf-path"${attrs} data-pdf-vector="${vec.id}" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;"><path d="${d}" stroke="${stroke}" fill="${fill}" stroke-width="${vec.graphicsState?.lineWidth || 1}"/></svg>
+      const stroke = ((_d = vec.graphicsState) == null ? void 0 : _d.stroke) || "#000";
+      const fill = ((_e = vec.graphicsState) == null ? void 0 : _e.fill) || "none";
+      return `<svg class="pdf-path"${attrs} data-pdf-vector="${vec.id}" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;"><path d="${d}" stroke="${stroke}" fill="${fill}" stroke-width="${((_f = vec.graphicsState) == null ? void 0 : _f.lineWidth) || 1}"/></svg>
 `;
     }
     return "";
@@ -3837,6 +3911,7 @@ ${p.text}`).join("\n\n")
     return typeMap[subtype] || subtype || "unknown";
   }
   function detectReadingOrder(ir, pageNum) {
+    var _a, _b;
     const pageId = `page_${pageNum}`;
     const page = ir.pages[pageId];
     if (!page) return [];
@@ -3848,7 +3923,7 @@ ${p.text}`).join("\n\n")
           id: objId,
           type: obj.type,
           bbox: obj.bbox,
-          text: obj.semantic?.text || "",
+          text: ((_a = obj.semantic) == null ? void 0 : _a.text) || "",
           // Calculate center point for sorting
           centerX: obj.bbox[0] + obj.bbox[2] / 2,
           centerY: obj.bbox[1] + obj.bbox[3] / 2
@@ -3857,7 +3932,7 @@ ${p.text}`).join("\n\n")
     }
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
-      if (vec && vec.bbox && vec.semantic?.role) {
+      if (vec && vec.bbox && ((_b = vec.semantic) == null ? void 0 : _b.role)) {
         objects.push({
           id: vecId,
           type: "vector",
@@ -3892,12 +3967,12 @@ ${p.text}`).join("\n\n")
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  // packages/core/src/extended.js
+  // src/extended.js
   async function extractDocumentMetadata(pdf) {
     try {
       const metadata = await pdf.getMetadata();
-      const info = metadata?.info || {};
-      const metadataObj = metadata?.metadata || null;
+      const info = (metadata == null ? void 0 : metadata.info) || {};
+      const metadataObj = (metadata == null ? void 0 : metadata.metadata) || null;
       let xmp = null;
       if (metadataObj) {
         try {
@@ -3906,15 +3981,15 @@ ${p.text}`).join("\n\n")
         }
       }
       return {
-        title: info.Title || xmp?.title || null,
-        author: info.Author || xmp?.author || null,
-        subject: info.Subject || xmp?.subject || null,
-        keywords: info.Keywords ? info.Keywords.split(/[,;]+/).map((k) => k.trim()) : xmp?.keywords || [],
-        creator: info.Creator || xmp?.creator || null,
-        producer: info.Producer || xmp?.producer || null,
-        creationDate: info.CreationDate || xmp?.creationDate || null,
-        modificationDate: info.ModDate || xmp?.modificationDate || null,
-        language: info.Language || xmp?.language || null,
+        title: info.Title || (xmp == null ? void 0 : xmp.title) || null,
+        author: info.Author || (xmp == null ? void 0 : xmp.author) || null,
+        subject: info.Subject || (xmp == null ? void 0 : xmp.subject) || null,
+        keywords: info.Keywords ? info.Keywords.split(/[,;]+/).map((k) => k.trim()) : (xmp == null ? void 0 : xmp.keywords) || [],
+        creator: info.Creator || (xmp == null ? void 0 : xmp.creator) || null,
+        producer: info.Producer || (xmp == null ? void 0 : xmp.producer) || null,
+        creationDate: info.CreationDate || (xmp == null ? void 0 : xmp.creationDate) || null,
+        modificationDate: info.ModDate || (xmp == null ? void 0 : xmp.modificationDate) || null,
+        language: info.Language || (xmp == null ? void 0 : xmp.language) || null,
         trapped: info.Trapped || null,
         custom: xmp || {}
       };
@@ -4233,17 +4308,19 @@ ${p.text}`).join("\n\n")
     return "Decorative image";
   }
   function inferHeadingStructure(ir) {
+    var _a;
     const headings = [];
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (obj.semantic?.role === "heading") {
+      if (((_a = obj.semantic) == null ? void 0 : _a.role) === "heading") {
         headings.push({ id, level: obj.semantic.level, text: obj.semantic.text });
       }
     }
     return headings;
   }
   function inferDocumentTitle(ir) {
+    var _a;
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (obj.semantic?.role === "heading" && obj.semantic.level === 1) {
+      if (((_a = obj.semantic) == null ? void 0 : _a.role) === "heading" && obj.semantic.level === 1) {
         return obj.semantic.text;
       }
     }
@@ -4262,7 +4339,7 @@ ${p.text}`).join("\n\n")
     }).map((obj) => obj.id);
   }
 
-  // packages/core/src/graphics.js
+  // src/graphics.js
   var ColorSpaceTypes = {
     DEVICE_RGB: "DeviceRGB",
     DEVICE_CMYK: "DeviceCMYK",
@@ -4467,6 +4544,7 @@ ${p.text}`).join("\n\n")
     return null;
   }
   function extractGraphicsState(opList) {
+    var _a, _b, _c;
     const states = [];
     let currentState = createGraphicsState();
     const stateStack = [];
@@ -4498,31 +4576,31 @@ ${p.text}`).join("\n\n")
         currentState.lineWidth = args ? args[0] : 1;
       } else if (fn === OPS.setLineCap || fn === 23) {
         const caps = ["butt", "round", "square"];
-        currentState.lineCap = caps[args?.[0]] || "butt";
+        currentState.lineCap = caps[args == null ? void 0 : args[0]] || "butt";
       } else if (fn === OPS.setLineJoin || fn === 24) {
         const joins = ["miter", "round", "bevel"];
-        currentState.lineJoin = joins[args?.[0]] || "miter";
+        currentState.lineJoin = joins[args == null ? void 0 : args[0]] || "miter";
       } else if (fn === OPS.setMiterLimit || fn === 25) {
-        currentState.miterLimit = args?.[0] || 10;
+        currentState.miterLimit = (args == null ? void 0 : args[0]) || 10;
       } else if (fn === OPS.setDash || fn === 26) {
-        currentState.dash = args?.[0] || [];
-        currentState.dashPhase = args?.[1] || 0;
+        currentState.dash = (args == null ? void 0 : args[0]) || [];
+        currentState.dashPhase = (args == null ? void 0 : args[1]) || 0;
       } else if (fn === OPS.clip || fn === 28 || fn === OPS.eoClip || fn === 29) {
         currentState.clip = {
           path: [...currentState.clipPath],
           rule: fn === OPS.eoClip || fn === 29 ? "even-odd" : "winding"
         };
       } else if (fn === OPS.setFillAlpha || fn === 44) {
-        currentState.fillOpacity = args?.[0] ?? 1;
+        currentState.fillOpacity = (_a = args == null ? void 0 : args[0]) != null ? _a : 1;
       } else if (fn === OPS.setStrokeAlpha || fn === 45) {
-        currentState.strokeOpacity = args?.[0] ?? 1;
+        currentState.strokeOpacity = (_b = args == null ? void 0 : args[0]) != null ? _b : 1;
       } else if (fn === OPS.setGState || fn === 57) {
       } else if (fn === OPS.setBlendMode || fn === 58) {
-        currentState.blendMode = parseBlendMode(args?.[0]);
+        currentState.blendMode = parseBlendMode(args == null ? void 0 : args[0]);
       } else if (fn === OPS.setRenderingIntent || fn === 59) {
-        currentState.renderingIntent = args?.[0] || "RelativeColorimetric";
+        currentState.renderingIntent = (args == null ? void 0 : args[0]) || "RelativeColorimetric";
       } else if (fn === OPS.setOverprint || fn === 60) {
-        currentState.overprint = args?.[0] ?? false;
+        currentState.overprint = (_c = args == null ? void 0 : args[0]) != null ? _c : false;
       }
       states.push({
         index: i,
@@ -4562,7 +4640,7 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/pdfcreator.js
+  // src/pdfcreator.js
   var PDFCreator = class {
     constructor() {
       this.objects = [];
@@ -4577,6 +4655,7 @@ ${p.text}`).join("\n\n")
      * @returns {Promise<Uint8Array>} PDF bytes
      */
     async create(ir, options = {}) {
+      var _a, _b;
       const {
         level = 2,
         // 1=content, 2=semantic, 3=visual
@@ -4606,7 +4685,7 @@ ${p.text}`).join("\n\n")
         count: 0
       };
       pdf.body[catalogId].pages = pagesId;
-      if (includeMetadata && ir.document?.metadata) {
+      if (includeMetadata && ((_a = ir.document) == null ? void 0 : _a.metadata)) {
         const metaId = this.nextObjectId();
         pdf.body[metaId] = {
           type: "metadata",
@@ -4646,7 +4725,7 @@ ${p.text}`).join("\n\n")
             pageObj.annotations.push(annId);
           }
         }
-        if (includeStructure && ir.structure?.[pageId] && level >= 2) {
+        if (includeStructure && ((_b = ir.structure) == null ? void 0 : _b[pageId]) && level >= 2) {
           const structId = this.nextObjectId();
           pdf.body[structId] = {
             type: "struct_tree",
@@ -4670,6 +4749,7 @@ ${p.text}`).join("\n\n")
      * Build page resources dictionary.
      */
     buildPageResources(pageData, ir) {
+      var _a;
       const resources = {
         font: {},
         xObject: {},
@@ -4678,9 +4758,12 @@ ${p.text}`).join("\n\n")
         extGState: {}
       };
       const fonts = /* @__PURE__ */ new Set();
-      const pageObjects2 = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean);
+      const pageObjects2 = (pageData.content || []).map((id) => {
+        var _a2;
+        return (_a2 = ir.objects) == null ? void 0 : _a2[id];
+      }).filter(Boolean);
       for (const obj of pageObjects2) {
-        if (obj.raw?.font) {
+        if ((_a = obj.raw) == null ? void 0 : _a.font) {
           fonts.add(obj.raw.font);
         }
       }
@@ -4699,15 +4782,19 @@ ${p.text}`).join("\n\n")
      * Build content stream for a page.
      */
     buildContentStream(pageData, ir, level) {
+      var _a, _b, _c, _d, _e;
       const commands = [];
-      const objects = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean);
+      const objects = (pageData.content || []).map((id) => {
+        var _a2;
+        return (_a2 = ir.objects) == null ? void 0 : _a2[id];
+      }).filter(Boolean);
       const sortedObjects = level >= 2 ? this.sortByReadingOrder(objects, pageData) : objects;
       for (const obj of sortedObjects) {
-        if (obj.type === "text" && obj.raw?.text) {
+        if (obj.type === "text" && ((_a = obj.raw) == null ? void 0 : _a.text)) {
           const text = obj.raw.text;
           const fontSize = obj.raw.fontSize || 12;
-          const x = obj.bbox?.[0] || 0;
-          const y = obj.bbox?.[1] || 0;
+          const x = ((_b = obj.bbox) == null ? void 0 : _b[0]) || 0;
+          const y = ((_c = obj.bbox) == null ? void 0 : _c[1]) || 0;
           const fontRef = this.findFontRef(obj.raw.font, pageData, ir);
           commands.push(`q`);
           if (level >= 3 && obj.raw.transform) {
@@ -4715,7 +4802,7 @@ ${p.text}`).join("\n\n")
             commands.push(`${t[0]} ${t[1]} ${t[2]} ${t[3]} ${t[4]} ${t[5]} cm`);
           }
           commands.push(`/${fontRef} ${fontSize} Tf`);
-          if (obj.semantic?.color) {
+          if ((_d = obj.semantic) == null ? void 0 : _d.color) {
             const c = obj.semantic.color;
             commands.push(`${c[0]} ${c[1]} ${c[2]} rg`);
           }
@@ -4726,7 +4813,7 @@ ${p.text}`).join("\n\n")
       }
       if (level >= 3) {
         for (const vecId of pageData.vectors || []) {
-          const vec = ir.vectors?.[vecId];
+          const vec = (_e = ir.vectors) == null ? void 0 : _e[vecId];
           if (vec) {
             this.addVectorCommands(commands, vec);
           }
@@ -4739,10 +4826,11 @@ ${p.text}`).join("\n\n")
      */
     sortByReadingOrder(objects, pageData) {
       return [...objects].sort((a, b) => {
-        const ay = a.bbox?.[1] || 0;
-        const by = b.bbox?.[1] || 0;
+        var _a, _b, _c, _d;
+        const ay = ((_a = a.bbox) == null ? void 0 : _a[1]) || 0;
+        const by = ((_b = b.bbox) == null ? void 0 : _b[1]) || 0;
         if (Math.abs(ay - by) > 10) return ay - by;
-        return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
+        return (((_c = a.bbox) == null ? void 0 : _c[0]) || 0) - (((_d = b.bbox) == null ? void 0 : _d[0]) || 0);
       });
     }
     /**
@@ -4755,17 +4843,18 @@ ${p.text}`).join("\n\n")
      * Add vector drawing commands.
      */
     addVectorCommands(commands, vec) {
+      var _a, _b, _c, _d, _e;
       if (!vec.points || vec.points.length === 0) return;
       commands.push("q");
-      if (vec.graphicsState?.stroke?.color) {
+      if ((_b = (_a = vec.graphicsState) == null ? void 0 : _a.stroke) == null ? void 0 : _b.color) {
         const c = vec.graphicsState.stroke.color;
         commands.push(`${c[0]} ${c[1]} ${c[2]} RG`);
       }
-      if (vec.graphicsState?.fill?.color) {
+      if ((_d = (_c = vec.graphicsState) == null ? void 0 : _c.fill) == null ? void 0 : _d.color) {
         const c = vec.graphicsState.fill.color;
         commands.push(`${c[0]} ${c[1]} ${c[2]} rg`);
       }
-      if (vec.graphicsState?.lineWidth) {
+      if ((_e = vec.graphicsState) == null ? void 0 : _e.lineWidth) {
         commands.push(`${vec.graphicsState.lineWidth} w`);
       }
       const firstPoint = vec.points[0];
@@ -4839,6 +4928,7 @@ ${p.text}`).join("\n\n")
      * Serialize a single PDF object.
      */
     serializeObject(id, obj) {
+      var _a, _b;
       let str = `${id} 0 obj
 `;
       switch (obj.type) {
@@ -4854,10 +4944,10 @@ ${p.text}`).join("\n\n")
           str += `<< /Type /Page /Parent ${obj.parent} 0 R`;
           str += ` /MediaBox [${(obj.mediaBox || [0, 0, 612, 792]).join(" ")}]`;
           if (obj.rotate) str += ` /Rotate ${obj.rotate}`;
-          if (obj.contents?.length) {
+          if ((_a = obj.contents) == null ? void 0 : _a.length) {
             str += ` /Contents [${obj.contents.map((c) => `${c} 0 R`).join(" ")}]`;
           }
-          if (obj.annotations?.length) {
+          if ((_b = obj.annotations) == null ? void 0 : _b.length) {
             str += ` /Annots [${obj.annotations.map((a) => `${a} 0 R`).join(" ")}]`;
           }
           str += " >>\n";
@@ -4953,7 +5043,7 @@ ${p.text}`).join("\n\n")
     return createPDF(ir, options);
   }
 
-  // packages/core/src/advanced.js
+  // src/advanced.js
   var SignatureSubFilter = {
     ADOBE_PKCS7_S4: "adbe.pkcs7.sha1",
     ADOBE_PKCS7_DETACHED: "adbe.pkcs7.detached",
@@ -5011,7 +5101,10 @@ ${p.text}`).join("\n\n")
       count: signatures.length,
       hasSignatures: signatures.length > 0,
       signed: signatures.filter((s) => s.subFilter === SignatureSubFilter.ADOBE_PKCS7_DETACHED).length,
-      certifications: signatures.filter((s) => s.reason?.toLowerCase().includes("certified")).length,
+      certifications: signatures.filter((s) => {
+        var _a;
+        return (_a = s.reason) == null ? void 0 : _a.toLowerCase().includes("certified");
+      }).length,
       algorithms: [...new Set(signatures.map((s) => s.hashAlgorithm))],
       signers: signatures.map((s) => ({
         name: s.signerName || s.fieldName,
@@ -5021,9 +5114,10 @@ ${p.text}`).join("\n\n")
     };
   }
   async function extractOCGs(doc) {
+    var _a, _b, _c;
     const ocgs = [];
     try {
-      const docObj = await doc._pdf?.catalog?.objRef?.fetch();
+      const docObj = await ((_c = (_b = (_a = doc._pdf) == null ? void 0 : _a.catalog) == null ? void 0 : _b.objRef) == null ? void 0 : _c.fetch());
       if (!docObj) return ocgs;
       const ocProps = await docObj.get("OCProperties");
       if (!ocProps) return ocgs;
@@ -5042,8 +5136,8 @@ ${p.text}`).join("\n\n")
           const usage = await ocgDict.get("Usage");
           ocgs.push({
             id: ref.toString(),
-            name: name?.value || "Unnamed OCG",
-            intent: intent?.value || "View",
+            name: (name == null ? void 0 : name.value) || "Unnamed OCG",
+            intent: (intent == null ? void 0 : intent.value) || "View",
             usage: usage ? {
               print: await extractOCGUsage(usage, "Print"),
               view: await extractOCGUsage(usage, "View"),
@@ -5076,8 +5170,8 @@ ${p.text}`).join("\n\n")
       const outputIntents = await dict.get("OutputIntents");
       const category = await dict.get("Category");
       return {
-        category: category?.value || null,
-        outputIntents: outputIntents?.value || []
+        category: (category == null ? void 0 : category.value) || null,
+        outputIntents: (outputIntents == null ? void 0 : outputIntents.value) || []
       };
     } catch {
       return null;
@@ -5089,14 +5183,21 @@ ${p.text}`).join("\n\n")
       hasLayers: ocgs.length > 0,
       layerNames: ocgs.map((o) => o.name),
       intents: [...new Set(ocgs.map((o) => o.intent))],
-      printableLayers: ocgs.filter((o) => o.usage?.print?.category !== "OFF").length,
-      viewableLayers: ocgs.filter((o) => o.usage?.view?.category !== "OFF").length
+      printableLayers: ocgs.filter((o) => {
+        var _a, _b;
+        return ((_b = (_a = o.usage) == null ? void 0 : _a.print) == null ? void 0 : _b.category) !== "OFF";
+      }).length,
+      viewableLayers: ocgs.filter((o) => {
+        var _a, _b;
+        return ((_b = (_a = o.usage) == null ? void 0 : _a.view) == null ? void 0 : _b.category) !== "OFF";
+      }).length
     };
   }
   async function extractEmbeddedFiles(doc) {
+    var _a, _b, _c;
     const files = [];
     try {
-      const docObj = await doc._pdf?.catalog?.objRef?.fetch();
+      const docObj = await ((_c = (_b = (_a = doc._pdf) == null ? void 0 : _a.catalog) == null ? void 0 : _b.objRef) == null ? void 0 : _c.fetch());
       if (!docObj) return files;
       const names = await docObj.get("Names");
       if (!names) return files;
@@ -5127,12 +5228,12 @@ ${p.text}`).join("\n\n")
             const modDate = await efDict2.get("ModDate");
             files.push({
               id: efRef.toString(),
-              name: fileName?.value || `file_${files.length}`,
-              description: description?.value || null,
-              mimeType: mimeType?.value || "application/octet-stream",
-              size: size?.value || 0,
-              creationDate: creationDate?.value || null,
-              modDate: modDate?.value || null,
+              name: (fileName == null ? void 0 : fileName.value) || `file_${files.length}`,
+              description: (description == null ? void 0 : description.value) || null,
+              mimeType: (mimeType == null ? void 0 : mimeType.value) || "application/octet-stream",
+              size: (size == null ? void 0 : size.value) || 0,
+              creationDate: (creationDate == null ? void 0 : creationDate.value) || null,
+              modDate: (modDate == null ? void 0 : modDate.value) || null,
               // Raw data not extracted by default (could be large)
               hasData: true
             });
@@ -5174,9 +5275,10 @@ ${p.text}`).join("\n\n")
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   }
   async function extractActions(doc) {
+    var _a, _b, _c;
     const actions = [];
     try {
-      const docObj = await doc._pdf?.catalog?.objRef?.fetch();
+      const docObj = await ((_c = (_b = (_a = doc._pdf) == null ? void 0 : _a.catalog) == null ? void 0 : _b.objRef) == null ? void 0 : _c.fetch());
       if (!docObj) return actions;
       const openAction = await docObj.get("OpenAction");
       if (openAction) {
@@ -5198,6 +5300,7 @@ ${p.text}`).join("\n\n")
     return actions;
   }
   async function extractPageActions(pagesDict, actions, depth) {
+    var _a;
     if (depth > 10) return;
     try {
       const kids = await pagesDict.get("Kids");
@@ -5209,7 +5312,7 @@ ${p.text}`).join("\n\n")
           const kid = await kidRef.fetch();
           if (!kid) continue;
           const type = await kid.get("Type");
-          const typeName = type?.value;
+          const typeName = type == null ? void 0 : type.value;
           if (typeName === "Pages") {
             await extractPageActions(kid, actions, depth + 1);
           } else if (typeName === "Page") {
@@ -5240,7 +5343,7 @@ ${p.text}`).join("\n\n")
                     actions.push({
                       type: "Annotation",
                       page: pageNum,
-                      fieldName: (await annot.get("T"))?.value,
+                      fieldName: (_a = await annot.get("T")) == null ? void 0 : _a.value,
                       trigger: "click",
                       action: await parseAction(a)
                     });
@@ -5257,58 +5360,59 @@ ${p.text}`).join("\n\n")
     }
   }
   async function parseAction(actionRef) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     if (!actionRef) return null;
     try {
-      const actionDict = await actionRef.fetch?.() || actionRef;
+      const actionDict = await ((_a = actionRef.fetch) == null ? void 0 : _a.call(actionRef)) || actionRef;
       if (!actionDict) return null;
       const s = await actionDict.get("S");
-      const actionType = s?.value || "Unknown";
+      const actionType = (s == null ? void 0 : s.value) || "Unknown";
       const result = {
         type: actionType
       };
       switch (actionType) {
         case "GoTo":
           const dest = await actionDict.get("D");
-          result.destination = dest?.value || dest;
+          result.destination = (dest == null ? void 0 : dest.value) || dest;
           break;
         case "GoToR":
-          result.file = (await actionDict.get("F"))?.value;
-          result.destination = (await actionDict.get("D"))?.value;
+          result.file = (_b = await actionDict.get("F")) == null ? void 0 : _b.value;
+          result.destination = (_c = await actionDict.get("D")) == null ? void 0 : _c.value;
           break;
         case "Launch":
-          result.file = (await actionDict.get("F"))?.value;
-          result.operation = (await actionDict.get("Win"))?.value;
+          result.file = (_d = await actionDict.get("F")) == null ? void 0 : _d.value;
+          result.operation = (_e = await actionDict.get("Win")) == null ? void 0 : _e.value;
           break;
         case "JavaScript":
-          result.script = (await actionDict.get("JS"))?.value;
+          result.script = (_f = await actionDict.get("JS")) == null ? void 0 : _f.value;
           break;
         case "Named":
-          result.name = (await actionDict.get("N"))?.value;
+          result.name = (_g = await actionDict.get("N")) == null ? void 0 : _g.value;
           break;
         case "SetOCGState":
           const state = await actionDict.get("State");
-          result.state = state?.value;
+          result.state = state == null ? void 0 : state.value;
           break;
         case "SubmitForm":
-          result.url = (await actionDict.get("F"))?.value;
-          result.fields = (await actionDict.get("Fields"))?.value;
+          result.url = (_h = await actionDict.get("F")) == null ? void 0 : _h.value;
+          result.fields = (_i = await actionDict.get("Fields")) == null ? void 0 : _i.value;
           break;
         case "ResetForm":
-          result.fields = (await actionDict.get("Fields"))?.value;
+          result.fields = (_j = await actionDict.get("Fields")) == null ? void 0 : _j.value;
           break;
         case "Hide":
-          result.targets = (await actionDict.get("T"))?.value;
-          result.hidden = (await actionDict.get("H"))?.value;
+          result.targets = (_k = await actionDict.get("T")) == null ? void 0 : _k.value;
+          result.hidden = (_l = await actionDict.get("H")) == null ? void 0 : _l.value;
           break;
         case "Sound":
         case "Movie":
-          result.sound = (await actionDict.get("S"))?.value;
+          result.sound = (_m = await actionDict.get("S")) == null ? void 0 : _m.value;
           break;
         case "Rendition":
-          result.action = (await actionDict.get("AN"))?.value;
+          result.action = (_n = await actionDict.get("AN")) == null ? void 0 : _n.value;
           break;
         case "Trans":
-          result.trans = (await actionDict.get("Trans"))?.value;
+          result.trans = (_o = await actionDict.get("Trans")) == null ? void 0 : _o.value;
           break;
       }
       return result;
@@ -5317,24 +5421,35 @@ ${p.text}`).join("\n\n")
     }
   }
   function buildActionsSummary(actions) {
+    var _a;
     const byType = {};
     for (const a of actions) {
-      const type = a.action?.type || "Unknown";
+      const type = ((_a = a.action) == null ? void 0 : _a.type) || "Unknown";
       byType[type] = (byType[type] || 0) + 1;
     }
     return {
       count: actions.length,
       hasActions: actions.length > 0,
       byType,
-      hasJavaScript: actions.some((a) => a.action?.type === "JavaScript"),
-      hasNavigation: actions.some((a) => ["GoTo", "GoToR", "GoToE"].includes(a.action?.type)),
-      hasFormActions: actions.some((a) => ["SubmitForm", "ResetForm", "ImportData"].includes(a.action?.type)),
+      hasJavaScript: actions.some((a) => {
+        var _a2;
+        return ((_a2 = a.action) == null ? void 0 : _a2.type) === "JavaScript";
+      }),
+      hasNavigation: actions.some((a) => {
+        var _a2;
+        return ["GoTo", "GoToR", "GoToE"].includes((_a2 = a.action) == null ? void 0 : _a2.type);
+      }),
+      hasFormActions: actions.some((a) => {
+        var _a2;
+        return ["SubmitForm", "ResetForm", "ImportData"].includes((_a2 = a.action) == null ? void 0 : _a2.type);
+      }),
       documentActions: actions.filter((a) => a.type === "Document"),
       pageActions: actions.filter((a) => a.type === "Page"),
       annotationActions: actions.filter((a) => a.type === "Annotation")
     };
   }
   async function extractAppearanceStreams(page) {
+    var _a, _b, _c, _d;
     const appearances = [];
     try {
       const annotations = await page.getAnnotations();
@@ -5345,11 +5460,11 @@ ${p.text}`).join("\n\n")
             fieldName: ann.fieldName,
             type: ann.subtype,
             appearances: {
-              normal: ann.appearance?.N ? await extractAppearanceDict(ann.appearance.N) : null,
-              rollover: ann.appearance?.R ? await extractAppearanceDict(ann.appearance.R) : null,
-              down: ann.appearance?.D ? await extractAppearanceDict(ann.appearance.D) : null
+              normal: ((_a = ann.appearance) == null ? void 0 : _a.N) ? await extractAppearanceDict(ann.appearance.N) : null,
+              rollover: ((_b = ann.appearance) == null ? void 0 : _b.R) ? await extractAppearanceDict(ann.appearance.R) : null,
+              down: ((_c = ann.appearance) == null ? void 0 : _c.D) ? await extractAppearanceDict(ann.appearance.D) : null
             },
-            currentAppearance: ann.appearance?.N ? "normal" : null
+            currentAppearance: ((_d = ann.appearance) == null ? void 0 : _d.N) ? "normal" : null
           };
           appearances.push(appearance);
         }
@@ -5360,14 +5475,15 @@ ${p.text}`).join("\n\n")
     return appearances;
   }
   async function extractAppearanceDict(appearRef) {
+    var _a, _b, _c;
     try {
-      const dict = await appearRef.fetch?.() || appearRef;
+      const dict = await ((_a = appearRef.fetch) == null ? void 0 : _a.call(appearRef)) || appearRef;
       if (!dict) return null;
       if (dict.getBytes) {
         return {
           type: "single",
           hasData: true,
-          size: dict.dict?.get("Length")?.value || 0
+          size: ((_c = (_b = dict.dict) == null ? void 0 : _b.get("Length")) == null ? void 0 : _c.value) || 0
         };
       }
       const result = {
@@ -5400,13 +5516,14 @@ ${p.text}`).join("\n\n")
     };
   }
   function trackXObjectReuse(ir) {
+    var _a, _b, _c, _d;
     const xobjects = {};
     const usageMap = {};
     for (const [pageId, pageData] of Object.entries(ir.pages)) {
       const pageNum = parseInt(pageId.replace("page_", ""));
       for (const vecId of pageData.vectors || []) {
-        const vec = ir.vectors?.[vecId];
-        if (vec?.raw?.xObject) {
+        const vec = (_a = ir.vectors) == null ? void 0 : _a[vecId];
+        if ((_b = vec == null ? void 0 : vec.raw) == null ? void 0 : _b.xObject) {
           const xobjId = vec.raw.xObject;
           if (!xobjects[xobjId]) {
             xobjects[xobjId] = {
@@ -5421,8 +5538,8 @@ ${p.text}`).join("\n\n")
         }
       }
       for (const textId of pageData.content || []) {
-        const text = ir.objects?.[textId];
-        if (text?.raw?.xObject) {
+        const text = (_c = ir.objects) == null ? void 0 : _c[textId];
+        if ((_d = text == null ? void 0 : text.raw) == null ? void 0 : _d.xObject) {
           const xobjId = text.raw.xObject;
           if (!xobjects[xobjId]) {
             xobjects[xobjId] = {
@@ -5477,7 +5594,7 @@ ${p.text}`).join("\n\n")
       const pdf = doc._pdf;
       if (!pdf) return revisions;
       const meta = await pdf.getMetadata();
-      const info = meta?.info || {};
+      const info = (meta == null ? void 0 : meta.info) || {};
       revisions.push({
         version: 1,
         type: "original",
@@ -5487,7 +5604,7 @@ ${p.text}`).join("\n\n")
         creator: info.Creator || null
       });
       const trailer = pdf.trailer;
-      if (trailer?.Prev) {
+      if (trailer == null ? void 0 : trailer.Prev) {
         revisions.push({
           version: 2,
           type: "incremental",
@@ -5514,13 +5631,14 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/quality.js
+  // src/quality.js
   function analyzeTextQuality(pageData, contentItems, pageSize) {
     const issues = [];
     let score = 1;
     const invisibleText = contentItems.filter((item) => {
-      const x = item.transform?.[4] || 0;
-      const y = item.transform?.[5] || 0;
+      var _a, _b;
+      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
       return x < 0 || x > pageSize.width || y < 0 || y > pageSize.height;
     });
     if (invisibleText.length > 0) {
@@ -5603,8 +5721,9 @@ ${p.text}`).join("\n\n")
       score -= 0.05;
     }
     const clippedText = contentItems.filter((item) => {
-      const x = item.transform?.[4] || 0;
-      const y = item.transform?.[5] || 0;
+      var _a, _b;
+      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
       const w = item.width || 0;
       const h = item.height || 0;
       return x + w > pageSize.width + 10 || y + h > pageSize.height + 10;
@@ -5684,15 +5803,19 @@ ${p.text}`).join("\n\n")
     return duplicates;
   }
   function compareVisualInternal(pageData, visualRegions, contentItems) {
+    var _a, _b;
     const discrepancies = [];
-    const internalTextRegions = contentItems.filter((item) => item.str && item.str.trim().length > 0).map((item) => ({
-      x: item.transform?.[4] || 0,
-      y: item.transform?.[5] || 0,
-      width: item.width || 0,
-      height: item.height || 0,
-      text: item.str
-    }));
-    const visualTextRegions = visualRegions?.textRegions || [];
+    const internalTextRegions = contentItems.filter((item) => item.str && item.str.trim().length > 0).map((item) => {
+      var _a2, _b2;
+      return {
+        x: ((_a2 = item.transform) == null ? void 0 : _a2[4]) || 0,
+        y: ((_b2 = item.transform) == null ? void 0 : _b2[5]) || 0,
+        width: item.width || 0,
+        height: item.height || 0,
+        text: item.str
+      };
+    });
+    const visualTextRegions = (visualRegions == null ? void 0 : visualRegions.textRegions) || [];
     for (const vRegion of visualTextRegions) {
       const matchingInternal = internalTextRegions.find(
         (iRegion) => Math.abs(iRegion.x - vRegion.x) < 10 && Math.abs(iRegion.y - vRegion.y) < 10
@@ -5720,8 +5843,8 @@ ${p.text}`).join("\n\n")
         });
       }
     }
-    const internalImageCount = pageData.images?.length || 0;
-    const visualImageCount = visualRegions?.imageRegions?.length || 0;
+    const internalImageCount = ((_a = pageData.images) == null ? void 0 : _a.length) || 0;
+    const visualImageCount = ((_b = visualRegions == null ? void 0 : visualRegions.imageRegions) == null ? void 0 : _b.length) || 0;
     if (Math.abs(internalImageCount - visualImageCount) > 0) {
       discrepancies.push({
         type: "image_count_mismatch",
@@ -5732,7 +5855,8 @@ ${p.text}`).join("\n\n")
       });
     }
     const hiddenText = contentItems.filter((item) => {
-      const fontSize = Math.abs(item.transform?.[0]) || 12;
+      var _a2;
+      const fontSize = Math.abs((_a2 = item.transform) == null ? void 0 : _a2[0]) || 12;
       return fontSize < 2 && item.str && item.str.trim().length > 0;
     });
     if (hiddenText.length > 0) {
@@ -5756,6 +5880,7 @@ ${p.text}`).join("\n\n")
     };
   }
   function detectRepeatedElements(pageResults2, allContentItems) {
+    var _a, _b, _c;
     const results = {
       watermarks: [],
       headers: [],
@@ -5766,10 +5891,10 @@ ${p.text}`).join("\n\n")
     const bottomElements = [];
     const centerElements = [];
     for (const [pageId, content] of Object.entries(allContentItems)) {
-      const pageHeight = pageResults2[pageId]?.pageSize?.height || 792;
+      const pageHeight = ((_b = (_a = pageResults2[pageId]) == null ? void 0 : _a.pageSize) == null ? void 0 : _b.height) || 792;
       for (const item of content) {
         if (!item.str || item.str.trim().length === 0) continue;
-        const y = item.transform?.[5] || 0;
+        const y = ((_c = item.transform) == null ? void 0 : _c[5]) || 0;
         const normalizedY = y / pageHeight;
         if (normalizedY > 0.9) {
           topElements.push({ text: item.str.trim(), page: pageId, y });
@@ -5842,8 +5967,9 @@ ${p.text}`).join("\n\n")
         const [r, g, b] = vec.fillColor;
         if (r < 0.1 && g < 0.1 && b < 0.1) {
           const coveredText = contentItems.filter((item) => {
-            const x = item.transform?.[4] || 0;
-            const y = item.transform?.[5] || 0;
+            var _a, _b;
+            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
             return x >= vec.bbox[0] && x <= vec.bbox[2] && y >= vec.bbox[1] && y <= vec.bbox[3];
           });
           if (coveredText.length > 0) {
@@ -5860,6 +5986,7 @@ ${p.text}`).join("\n\n")
     return redactions;
   }
   function validateTags(pageData, structureTree, contentItems) {
+    var _a;
     const issues = [];
     if (!structureTree) {
       issues.push({
@@ -5875,7 +6002,7 @@ ${p.text}`).join("\n\n")
         (item) => item.str && item.str.includes(heading.text)
       );
       if (matchingText) {
-        const fontSize = Math.abs(matchingText.transform?.[0]) || 12;
+        const fontSize = Math.abs((_a = matchingText.transform) == null ? void 0 : _a[0]) || 12;
         if (fontSize < 14) {
           issues.push({
             type: "fake_heading",
@@ -5961,12 +6088,19 @@ ${p.text}`).join("\n\n")
     return broken;
   }
   function calculateRAGReadiness(pageResults2, textQuality, visualComparison, repeatedElements) {
+    var _a, _b, _c;
     let score = 1;
     const factors = [];
-    const avgTextQuality = pageResults2.reduce((sum, p) => sum + (p.textQuality?.score || 1), 0) / pageResults2.length;
+    const avgTextQuality = pageResults2.reduce((sum, p) => {
+      var _a2;
+      return sum + (((_a2 = p.textQuality) == null ? void 0 : _a2.score) || 1);
+    }, 0) / pageResults2.length;
     score *= avgTextQuality;
     factors.push({ factor: "text_quality", impact: avgTextQuality });
-    const avgVisualAgreement = pageResults2.reduce((sum, p) => sum + (p.visualComparison?.score || 1), 0) / pageResults2.length;
+    const avgVisualAgreement = pageResults2.reduce((sum, p) => {
+      var _a2;
+      return sum + (((_a2 = p.visualComparison) == null ? void 0 : _a2.score) || 1);
+    }, 0) / pageResults2.length;
     score *= avgVisualAgreement;
     factors.push({ factor: "visual_agreement", impact: avgVisualAgreement });
     const pagesWithStructure = pageResults2.filter((p) => p.hasStructureTree).length;
@@ -5977,16 +6111,19 @@ ${p.text}`).join("\n\n")
     const readingOrderRatio = pagesWithReadingOrder / pageResults2.length;
     score *= 0.5 + readingOrderRatio * 0.5;
     factors.push({ factor: "reading_order", impact: readingOrderRatio });
-    const headerFooterCount = (repeatedElements.headers?.length || 0) + (repeatedElements.footers?.length || 0);
+    const headerFooterCount = (((_a = repeatedElements.headers) == null ? void 0 : _a.length) || 0) + (((_b = repeatedElements.footers) == null ? void 0 : _b.length) || 0);
     if (headerFooterCount > 0) {
       score *= 0.9;
       factors.push({ factor: "header_footer_pollution", impact: 0.9 });
     }
-    if (repeatedElements.watermarks?.length > 0) {
+    if (((_c = repeatedElements.watermarks) == null ? void 0 : _c.length) > 0) {
       score *= 0.95;
       factors.push({ factor: "watermarks", impact: 0.95 });
     }
-    const totalDuplicates = pageResults2.reduce((sum, p) => sum + (p.textQuality?.summary?.duplicates || 0), 0);
+    const totalDuplicates = pageResults2.reduce((sum, p) => {
+      var _a2, _b2;
+      return sum + (((_b2 = (_a2 = p.textQuality) == null ? void 0 : _a2.summary) == null ? void 0 : _b2.duplicates) || 0);
+    }, 0);
     if (totalDuplicates > 0) {
       score *= 0.95;
       factors.push({ factor: "duplicate_text", impact: 0.95 });
@@ -6085,8 +6222,9 @@ ${p.text}`).join("\n\n")
           y2: rows[r + 1]
         };
         const cellText = textItems.filter((item) => {
-          const x = item.transform?.[4] || 0;
-          const y = item.transform?.[5] || 0;
+          var _a, _b;
+          const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+          const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
           return x >= cellBbox.x1 && x <= cellBbox.x2 && y >= cellBbox.y1 && y <= cellBbox.y2;
         });
         table.cells.push({
@@ -6119,6 +6257,7 @@ ${p.text}`).join("\n\n")
     return table;
   }
   function diagnoseDocument(pageResults2, graph) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
     const ir = graph.getIR();
     const issues = {
       scannedPages: 0,
@@ -6145,26 +6284,26 @@ ${p.text}`).join("\n\n")
       if (page.readingOrder === 0 && page.contentBlocks > 3) {
         issues.readingOrderProblems++;
       }
-      issues.duplicateText += page.textQuality?.summary?.duplicates || 0;
-      if (page.structures?.tables && !page.hasStructureTree) {
+      issues.duplicateText += ((_b = (_a = page.textQuality) == null ? void 0 : _a.summary) == null ? void 0 : _b.duplicates) || 0;
+      if (((_c = page.structures) == null ? void 0 : _c.tables) && !page.hasStructureTree) {
         issues.untaggedTables += page.structures.tables;
       }
-      issues.unrecognizedImages += page.visual?.imageRegions?.length || 0;
+      issues.unrecognizedImages += ((_e = (_d = page.visual) == null ? void 0 : _d.imageRegions) == null ? void 0 : _e.length) || 0;
       if (page.source === "ocr" && page.confidence && page.confidence < 70) {
         issues.suspiciousOCR++;
       }
-      issues.accessibilityFailures += page.markedContent?.filter((m) => m.isArtifact)?.length || 0;
-      issues.invisibleText += page.textQuality?.summary?.invisibleText || 0;
-      issues.clippedText += page.textQuality?.summary?.clippedText || 0;
-      totalScore += page.textQuality?.score || 1;
+      issues.accessibilityFailures += ((_g = (_f = page.markedContent) == null ? void 0 : _f.filter((m) => m.isArtifact)) == null ? void 0 : _g.length) || 0;
+      issues.invisibleText += ((_i = (_h = page.textQuality) == null ? void 0 : _h.summary) == null ? void 0 : _i.invisibleText) || 0;
+      issues.clippedText += ((_k = (_j = page.textQuality) == null ? void 0 : _j.summary) == null ? void 0 : _k.clippedText) || 0;
+      totalScore += ((_l = page.textQuality) == null ? void 0 : _l.score) || 1;
     }
-    issues.watermarks = pageResults2[0]?.repeatedElements?.watermarks?.length || 0;
+    issues.watermarks = ((_o = (_n = (_m = pageResults2[0]) == null ? void 0 : _m.repeatedElements) == null ? void 0 : _n.watermarks) == null ? void 0 : _o.length) || 0;
     const avgScore = totalScore / pageResults2.length;
     const ragReadiness = calculateRAGReadiness(
       pageResults2,
       null,
       null,
-      pageResults2[0]?.repeatedElements || {}
+      ((_p = pageResults2[0]) == null ? void 0 : _p.repeatedElements) || {}
     );
     return {
       score: Math.round(avgScore * 100),
@@ -6181,6 +6320,7 @@ ${p.text}`).join("\n\n")
     };
   }
   function normalizeDocument(graph, options = {}) {
+    var _a, _b, _c, _d, _e;
     const {
       readingOrder = true,
       ocr = "auto",
@@ -6197,8 +6337,8 @@ ${p.text}`).join("\n\n")
     if (fixHyphenation || fixLigatures) {
       for (const [pageId, pageData] of Object.entries(ir.pages)) {
         for (const textId of pageData.content || []) {
-          const textObj = ir.objects?.[textId];
-          if (textObj?.raw?.text) {
+          const textObj = (_a = ir.objects) == null ? void 0 : _a[textId];
+          if ((_b = textObj == null ? void 0 : textObj.raw) == null ? void 0 : _b.text) {
             const original = textObj.raw.text;
             textObj.raw.text = normalizeText(original);
             if (original !== textObj.raw.text) {
@@ -6217,8 +6357,8 @@ ${p.text}`).join("\n\n")
         const seen = /* @__PURE__ */ new Set();
         const uniqueContent = [];
         for (const textId of pageData.content || []) {
-          const textObj = ir.objects?.[textId];
-          const text = textObj?.raw?.text || "";
+          const textObj = (_c = ir.objects) == null ? void 0 : _c[textId];
+          const text = ((_d = textObj == null ? void 0 : textObj.raw) == null ? void 0 : _d.text) || "";
           const normalized = text.toLowerCase().trim();
           if (!seen.has(normalized) || normalized.length < 5) {
             seen.add(normalized);
@@ -6237,8 +6377,11 @@ ${p.text}`).join("\n\n")
     }
     if (tables) {
       for (const [pageId, pageData] of Object.entries(ir.pages)) {
-        if (pageData.vectors?.length > 0) {
-          const textItems = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean).map((obj) => obj.raw);
+        if (((_e = pageData.vectors) == null ? void 0 : _e.length) > 0) {
+          const textItems = (pageData.content || []).map((id) => {
+            var _a2;
+            return (_a2 = ir.objects) == null ? void 0 : _a2[id];
+          }).filter(Boolean).map((obj) => obj.raw);
           const reconstructed = reconstructTable(pageData.vectors, textItems, pageData);
           if (reconstructed.cells.length > 0) {
             pageData.reconstructedTable = reconstructed;
@@ -6259,7 +6402,7 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/edgecases.js
+  // src/edgecases.js
   function detectRotationSkew(pageData, contentItems, vectors) {
     const result = {
       rotation: pageData.rotation || 0,
@@ -6293,12 +6436,13 @@ ${p.text}`).join("\n\n")
     return result;
   }
   function detectSkewFromText(items) {
+    var _a, _b;
     if (items.length < 5) return { angle: 0, confidence: 0 };
     const baselines = [];
     for (const item of items) {
       if (!item.str || item.str.trim().length < 2) continue;
-      const y = item.transform?.[5] || 0;
-      const x = item.transform?.[4] || 0;
+      const y = ((_a = item.transform) == null ? void 0 : _a[5]) || 0;
+      const x = ((_b = item.transform) == null ? void 0 : _b[4]) || 0;
       baselines.push({ x, y });
     }
     if (baselines.length < 3) return { angle: 0, confidence: 0 };
@@ -6321,10 +6465,20 @@ ${p.text}`).join("\n\n")
     return { angle: avgAngle, confidence };
   }
   function detectTextDirection(items) {
+    var _a, _b, _c, _d;
     if (items.length < 3) return "horizontal";
-    const sortedByY = [...items].sort((a, b) => (b.transform?.[5] || 0) - (a.transform?.[5] || 0));
-    const yVariance = calculateVariance(sortedByY.map((i) => i.transform?.[5] || 0));
-    const xVariance = calculateVariance(sortedByY.map((i) => i.transform?.[4] || 0));
+    const sortedByY = [...items].sort((a, b) => {
+      var _a2, _b2;
+      return (((_a2 = b.transform) == null ? void 0 : _a2[5]) || 0) - (((_b2 = a.transform) == null ? void 0 : _b2[5]) || 0);
+    });
+    const yVariance = calculateVariance(sortedByY.map((i) => {
+      var _a2;
+      return ((_a2 = i.transform) == null ? void 0 : _a2[5]) || 0;
+    }));
+    const xVariance = calculateVariance(sortedByY.map((i) => {
+      var _a2;
+      return ((_a2 = i.transform) == null ? void 0 : _a2[4]) || 0;
+    }));
     if (yVariance > xVariance * 2) {
       return "vertical";
     }
@@ -6332,7 +6486,7 @@ ${p.text}`).join("\n\n")
     for (let i = 1; i < items.length; i++) {
       const prev = items[i - 1];
       const curr = items[i];
-      if ((curr.transform?.[4] || 0) > (prev.transform?.[4] || 0) && (curr.transform?.[5] || 0) < (prev.transform?.[5] || 0)) {
+      if ((((_a = curr.transform) == null ? void 0 : _a[4]) || 0) > (((_b = prev.transform) == null ? void 0 : _b[4]) || 0) && (((_c = curr.transform) == null ? void 0 : _c[5]) || 0) < (((_d = prev.transform) == null ? void 0 : _d[5]) || 0)) {
         upsideDownCount++;
       }
     }
@@ -6442,8 +6596,9 @@ ${p.text}`).join("\n\n")
         const aspectRatio = width / height;
         if (aspectRatio > 0.2 && aspectRatio < 5 && height > 5 && height < 100) {
           const overlappingText = contentItems.filter((item) => {
-            const x = item.transform?.[4] || 0;
-            const y = item.transform?.[5] || 0;
+            var _a, _b;
+            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
             return x >= bbox[0] - 5 && x <= bbox[2] + 5 && y >= bbox[1] - 5 && y <= bbox[3] + 5;
           });
           if (overlappingText.length === 0) {
@@ -6501,8 +6656,9 @@ ${p.text}`).join("\n\n")
         const height = bbox[3] - bbox[1];
         if (width > 50 && width < 400 && height > 10 && height < 50) {
           const nearbyText = contentItems.filter((item) => {
-            const x = item.transform?.[4] || 0;
-            const y = item.transform?.[5] || 0;
+            var _a, _b;
+            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
             return x < bbox[0] && Math.abs(y - bbox[1]) < height;
           });
           if (nearbyText.length > 0) {
@@ -6520,8 +6676,9 @@ ${p.text}`).join("\n\n")
   function recoverFormField(pattern, contentItems) {
     const bbox = pattern.bbox;
     const insideText = contentItems.filter((item) => {
-      const x = item.transform?.[4] || 0;
-      const y = item.transform?.[5] || 0;
+      var _a, _b;
+      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
       return x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3];
     });
     if (insideText.length > 0) {
@@ -6552,8 +6709,9 @@ ${p.text}`).join("\n\n")
         const height = bbox[3] - bbox[1];
         if (width > 8 && width < 30 && height > 8 && height < 30 && Math.abs(width - height) < 5) {
           const nearbyLabel = contentItems.filter((item) => {
-            const x = item.transform?.[4] || 0;
-            const y = item.transform?.[5] || 0;
+            var _a, _b;
+            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
             return x > bbox[2] && Math.abs(y - bbox[1]) < height * 2;
           });
           const isFilled = detectCheckmarkInArea(bbox, vectors);
@@ -6572,8 +6730,9 @@ ${p.text}`).join("\n\n")
         const diameter = bbox[2] - bbox[0];
         if (diameter > 8 && diameter < 30) {
           const nearbyLabel = contentItems.filter((item) => {
-            const x = item.transform?.[4] || 0;
-            const y = item.transform?.[5] || 0;
+            var _a, _b;
+            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
             return x > bbox[2] && Math.abs(y - bbox[1]) < diameter * 2;
           });
           const isFilled = detectCheckmarkInArea(bbox, vectors);
@@ -6668,14 +6827,16 @@ ${p.text}`).join("\n\n")
     for (const image of images) {
       const imageBbox = image.bbox;
       const captionsBelow = contentItems.filter((item) => {
-        const x = item.transform?.[4] || 0;
-        const y = item.transform?.[5] || 0;
+        var _a, _b;
+        const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+        const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
         const text = item.str || "";
         return y < imageBbox.y && y > imageBbox.y - 50 && Math.abs(x + (item.width || 0) / 2 - (imageBbox.x + imageBbox.width / 2)) < imageBbox.width && (text.startsWith("Figure") || text.startsWith("Image") || text.startsWith("Table") || text.startsWith("Fig.") || text.startsWith("Img.") || /^\d+\./.test(text));
       });
       const titlesAbove = contentItems.filter((item) => {
-        const x = item.transform?.[4] || 0;
-        const y = item.transform?.[5] || 0;
+        var _a, _b;
+        const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+        const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
         const text = item.str || "";
         return y > imageBbox.y + imageBbox.height && y < imageBbox.y + imageBbox.height + 30 && Math.abs(x + (item.width || 0) / 2 - (imageBbox.x + imageBbox.width / 2)) < imageBbox.width * 1.5 && text.length > 5;
       });
@@ -6694,27 +6855,28 @@ ${p.text}`).join("\n\n")
     return associations;
   }
   function detectFootnotes(contentItems, pageData) {
+    var _a, _b, _c, _d, _e, _f;
     const footnotes = [];
     const footnoteRefs = [];
     for (const item of contentItems) {
       const text = item.str || "";
-      const fontSize = Math.abs(item.transform?.[0]) || 12;
+      const fontSize = Math.abs((_a = item.transform) == null ? void 0 : _a[0]) || 12;
       if (/^\d{1,3}$/.test(text) && fontSize < 10) {
         footnoteRefs.push({
           text,
-          bbox: [item.transform?.[4] || 0, item.transform?.[5] || 0],
+          bbox: [((_b = item.transform) == null ? void 0 : _b[4]) || 0, ((_c = item.transform) == null ? void 0 : _c[5]) || 0],
           fontSize,
           type: "footnote_reference"
         });
       }
       if (/^\d{1,2}\.\s/.test(text) || /^[a-z]\.\s/.test(text)) {
-        const y = item.transform?.[5] || 0;
+        const y = ((_d = item.transform) == null ? void 0 : _d[5]) || 0;
         const pageHeight = pageData.height || 792;
         if (y < pageHeight * 0.2) {
           footnotes.push({
             text,
-            bbox: [item.transform?.[4] || 0, y],
-            marker: text.match(/^(\d{1,2}|[a-z])\./)?.[1],
+            bbox: [((_e = item.transform) == null ? void 0 : _e[4]) || 0, y],
+            marker: (_f = text.match(/^(\d{1,2}|[a-z])\./)) == null ? void 0 : _f[1],
             type: "footnote"
           });
         }
@@ -6782,7 +6944,7 @@ ${p.text}`).join("\n\n")
   }
   function detectMalformedPDF(pdf) {
     const hints = [];
-    if (!pdf?.catalog) {
+    if (!(pdf == null ? void 0 : pdf.catalog)) {
       hints.push({
         type: "missing_catalog",
         severity: "error",
@@ -6790,7 +6952,7 @@ ${p.text}`).join("\n\n")
         recovery: "Try opening with a repair-capable PDF library"
       });
     }
-    if (pdf?.xrefBroken) {
+    if (pdf == null ? void 0 : pdf.xrefBroken) {
       hints.push({
         type: "broken_xref",
         severity: "error",
@@ -6798,7 +6960,7 @@ ${p.text}`).join("\n\n")
         recovery: "Rebuild xref table using repair tools"
       });
     }
-    if (!pdf?.pages) {
+    if (!(pdf == null ? void 0 : pdf.pages)) {
       hints.push({
         type: "missing_pages",
         severity: "error",
@@ -6806,7 +6968,7 @@ ${p.text}`).join("\n\n")
         recovery: "Extract pages using alternative methods"
       });
     }
-    if (pdf?.encrypted && !pdf?.password) {
+    if ((pdf == null ? void 0 : pdf.encrypted) && !(pdf == null ? void 0 : pdf.password)) {
       hints.push({
         type: "encrypted_no_password",
         severity: "warning",
@@ -6814,7 +6976,7 @@ ${p.text}`).join("\n\n")
         recovery: "Provide password or use decryption tools"
       });
     }
-    if (pdf?.truncated) {
+    if (pdf == null ? void 0 : pdf.truncated) {
       hints.push({
         type: "truncated_file",
         severity: "error",
@@ -6829,7 +6991,7 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/expansion.js
+  // src/expansion.js
   var CONCEPT_SYNONYMS = {
     contract: ["agreement", "award", "deal", "pact", "compact", "accord", "arrangement", "understanding", "contractual"],
     money: ["funds", "payment", "amount", "cost", "price", "value", "expenditure", "expense", "budget", "appropriation", "disbursement", "compensation"],
@@ -7200,7 +7362,7 @@ ${p.text}`).join("\n\n")
     return results.slice(0, maxResults);
   }
 
-  // packages/core/src/concepts.js
+  // src/concepts.js
   var ConceptNode = class {
     constructor(id, type, text, options = {}) {
       this.id = id;
@@ -7402,6 +7564,7 @@ ${p.text}`).join("\n\n")
     }
   };
   function extractRelationships(contentGraph, conceptGraph) {
+    var _a, _b, _c;
     const relationships = [];
     const pageEntityMap = /* @__PURE__ */ new Map();
     for (const entity of contentGraph.allEntities) {
@@ -7566,17 +7729,20 @@ ${p.text}`).join("\n\n")
       }
     }
     for (const [page, pageHeadings] of headingsByPage) {
-      pageHeadings.sort((a, b) => (a.bbox?.[1] || 0) - (b.bbox?.[1] || 0));
+      pageHeadings.sort((a, b) => {
+        var _a2, _b2;
+        return (((_a2 = a.bbox) == null ? void 0 : _a2[1]) || 0) - (((_b2 = b.bbox) == null ? void 0 : _b2[1]) || 0);
+      });
       for (let i = 0; i < pageHeadings.length; i++) {
         const heading = pageHeadings[i];
-        const headingId = `heading:${heading.text?.substring(0, 50)}:${page}`;
+        const headingId = `heading:${(_a = heading.text) == null ? void 0 : _a.substring(0, 50)}:${page}`;
         conceptGraph.addNode(new ConceptNode(headingId, "heading", heading.text || "", {
           page,
           bbox: heading.bbox
         }));
-        const nextY = i < pageHeadings.length - 1 ? pageHeadings[i + 1].bbox?.[1] || Infinity : Infinity;
+        const nextY = i < pageHeadings.length - 1 ? ((_b = pageHeadings[i + 1].bbox) == null ? void 0 : _b[1]) || Infinity : Infinity;
         for (const entity of contentGraph.allEntities) {
-          if (entity.page === page && entity.bbox && entity.bbox[1] > (heading.bbox?.[1] || 0) && entity.bbox[1] < nextY) {
+          if (entity.page === page && entity.bbox && entity.bbox[1] > (((_c = heading.bbox) == null ? void 0 : _c[1]) || 0) && entity.bbox[1] < nextY) {
             const entityId = `${entity.type}:${entity.value}`;
             conceptGraph.addEdge(new ConceptEdge(headingId, entityId, "heading_section", {
               weight: 0.9,
@@ -7595,7 +7761,7 @@ ${p.text}`).join("\n\n")
         }
       }
     }
-    const definitionPages = (contentGraph?.pages || []).map((p) => ({
+    const definitionPages = ((contentGraph == null ? void 0 : contentGraph.pages) || []).map((p) => ({
       pageNum: p.page,
       text: (p.blocks || []).map((b) => b.text || "").join("\n")
     }));
@@ -7694,14 +7860,15 @@ ${p.text}`).join("\n\n")
      * Build fingerprint from a DocumentGraph.
      */
     static fromGraph(graph, ir) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
       const fp = new _CodbFingerprint();
-      fp.toc = (graph.layout?.getAllHeadings() || []).map((h) => ({
+      fp.toc = (((_a = graph.layout) == null ? void 0 : _a.getAllHeadings()) || []).map((h) => ({
         text: h.text,
         level: h.level,
         page: h.page,
         position: h.y
       }));
-      const entities = graph._contentGraph?.allEntities || [];
+      const entities = ((_b = graph._contentGraph) == null ? void 0 : _b.allEntities) || [];
       for (const entity of entities) {
         const key = `${entity.type}:${(entity.value || "").toLowerCase()}`;
         if (!fp.entityRegistry.has(key)) {
@@ -7718,17 +7885,17 @@ ${p.text}`).join("\n\n")
         }
         entry.count++;
       }
-      fp.layoutSignature.columnCounts = graph.layout?.pages?.map((p) => p.columns) || [];
+      fp.layoutSignature.columnCounts = ((_d = (_c = graph.layout) == null ? void 0 : _c.pages) == null ? void 0 : _d.map((p) => p.columns)) || [];
       const pageTypes = {};
       for (const c of graph.classifications || []) {
         pageTypes[c.type] = (pageTypes[c.type] || 0) + 1;
       }
       fp.layoutSignature.pageTypes = pageTypes;
-      fp.layoutSignature.flowPattern = graph.layout?.pages?.[0]?.flow || "unknown";
+      fp.layoutSignature.flowPattern = ((_g = (_f = (_e = graph.layout) == null ? void 0 : _e.pages) == null ? void 0 : _f[0]) == null ? void 0 : _g.flow) || "unknown";
       fp.structureProfile = {
-        tableCount: graph.structure?.tables?.length || 0,
-        formCount: graph.structure?.forms?.length || 0,
-        listCount: graph.structure?.lists?.length || 0,
+        tableCount: ((_i = (_h = graph.structure) == null ? void 0 : _h.tables) == null ? void 0 : _i.length) || 0,
+        formCount: ((_k = (_j = graph.structure) == null ? void 0 : _j.forms) == null ? void 0 : _k.length) || 0,
+        listCount: ((_m = (_l = graph.structure) == null ? void 0 : _l.lists) == null ? void 0 : _m.length) || 0,
         headingCount: fp.toc.length
       };
       fp.topicVector = buildTopicVector(graph);
@@ -7744,8 +7911,8 @@ ${p.text}`).join("\n\n")
       }
       fp.metadata = {
         pageCount: graph.pageCount,
-        wordCount: graph.text?.wordCount || 0,
-        documentType: graph._contentGraph?.documentType?.type || "unknown"
+        wordCount: ((_n = graph.text) == null ? void 0 : _n.wordCount) || 0,
+        documentType: ((_p = (_o = graph._contentGraph) == null ? void 0 : _o.documentType) == null ? void 0 : _p.type) || "unknown"
       };
       return fp;
     }
@@ -7854,6 +8021,7 @@ ${p.text}`).join("\n\n")
     return score;
   }
   function hybridSearch(graph, query, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g;
     const {
       maxResults = 20,
       minScore = 0.1,
@@ -7865,8 +8033,11 @@ ${p.text}`).join("\n\n")
     const contentGraph = graph._contentGraph;
     const fingerprint = graph._fingerprint;
     const conceptGr = graph._conceptGraph;
-    const pages = graph.text?.pages || [];
-    const avgDocLength = pages.reduce((s, p) => s + (p.text?.length || 0), 0) / (pages.length || 1);
+    const pages = ((_a = graph.text) == null ? void 0 : _a.pages) || [];
+    const avgDocLength = pages.reduce((s, p) => {
+      var _a2;
+      return s + (((_a2 = p.text) == null ? void 0 : _a2.length) || 0);
+    }, 0) / (pages.length || 1);
     const expandedTerms = useExpansion ? expandQuery(query, { includeSynonyms: true, includeStems: true }) : [{ term: query.toLowerCase(), weight: 1, sources: ["original"] }];
     const queryLower = query.toLowerCase();
     const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 1);
@@ -7903,10 +8074,10 @@ ${p.text}`).join("\n\n")
           signals.concept += expanded.weight;
         }
       }
-      const pageEntities = contentGraph?.allEntities?.filter((e) => e.page === pageNum) || [];
+      const pageEntities = ((_b = contentGraph == null ? void 0 : contentGraph.allEntities) == null ? void 0 : _b.filter((e) => e.page === pageNum)) || [];
       signals.entity = entityScore(query, pageEntities);
-      const pageBlocks = contentGraph?.allBlocks?.filter((b) => b.page === pageNum) || [];
-      const headings = graph.layout?.getHeadings(pageNum) || [];
+      const pageBlocks = ((_c = contentGraph == null ? void 0 : contentGraph.allBlocks) == null ? void 0 : _c.filter((b) => b.page === pageNum)) || [];
+      const headings = ((_d = graph.layout) == null ? void 0 : _d.getHeadings(pageNum)) || [];
       signals.structure = structureScore(query, pageBlocks, headings);
       signals.relationship = 0;
       if (conceptGr) {
@@ -7932,12 +8103,12 @@ ${p.text}`).join("\n\n")
       }
       signals.context = 0;
       for (const heading of headings) {
-        if (heading.text?.toLowerCase().includes(queryLower)) {
+        if ((_e = heading.text) == null ? void 0 : _e.toLowerCase().includes(queryLower)) {
           signals.context += 2;
         }
       }
-      const pageInfo = graph._pageResults?.[pageNum - 1];
-      if (pageInfo?.classification?.type) {
+      const pageInfo = (_f = graph._pageResults) == null ? void 0 : _f[pageNum - 1];
+      if ((_g = pageInfo == null ? void 0 : pageInfo.classification) == null ? void 0 : _g.type) {
         const classType = pageInfo.classification.type.toLowerCase();
         for (const term of queryTerms) {
           if (classType.includes(term)) signals.context += 1;
@@ -8026,11 +8197,12 @@ ${p.text}`).join("\n\n")
     const expandedText = expandedTerms.map((e) => e.term).join(" ");
     const candidates = results.slice(0, topK);
     const reranked = candidates.map((result) => {
+      var _a, _b, _c;
       let rerankScore = result.score;
       const bonuses = {};
       const activeSignals = Object.values(result.signals || {}).filter((s) => s > 0).length;
       bonuses.multiSignal = activeSignals >= 3 ? 0.15 : activeSignals >= 2 ? 0.08 : 0;
-      if (result.entities?.length > 0) {
+      if (((_a = result.entities) == null ? void 0 : _a.length) > 0) {
         for (const entity of result.entities) {
           const entityVal = (entity.value || "").toLowerCase();
           if (queryLower.includes(entityVal)) {
@@ -8039,10 +8211,10 @@ ${p.text}`).join("\n\n")
           }
         }
       }
-      if (result.signals?.concept > 1) {
+      if (((_b = result.signals) == null ? void 0 : _b.concept) > 1) {
         bonuses.conceptAgreement = 0.1;
       }
-      if (result.signals?.structure > 2) {
+      if (((_c = result.signals) == null ? void 0 : _c.structure) > 2) {
         bonuses.structuralRelevance = 0.1;
       }
       if ((result.text || "").length < 50) {
@@ -8227,6 +8399,7 @@ ${p.text}`).join("\n\n")
     const intent = detectIntent(query);
     const queryLower = query.toLowerCase();
     return results.map((result) => {
+      var _a, _b, _c;
       const explanation = [];
       const reasons = [];
       if (result.contributions) {
@@ -8242,20 +8415,23 @@ ${p.text}`).join("\n\n")
           }
         }
       }
-      if (intent.type === QueryIntent.ENTITY_SEARCH && result.entities?.length > 0) {
+      if (intent.type === QueryIntent.ENTITY_SEARCH && ((_a = result.entities) == null ? void 0 : _a.length) > 0) {
         const matchingEntities = result.entities.filter(
-          (e) => e.value?.toLowerCase().includes(queryLower)
+          (e) => {
+            var _a2;
+            return (_a2 = e.value) == null ? void 0 : _a2.toLowerCase().includes(queryLower);
+          }
         );
         if (matchingEntities.length > 0) {
           reasons.push({ signal: "exact_entity_match", value: matchingEntities[0].value, contribution: 0.25 });
           explanation.push(`Exact ${intent.entityType || "entity"} match: ${matchingEntities[0].value}`);
         }
       }
-      if (intent.type === QueryIntent.TABLE_QUERY && result.signals?.structure > 0) {
+      if (intent.type === QueryIntent.TABLE_QUERY && ((_b = result.signals) == null ? void 0 : _b.structure) > 0) {
         reasons.push({ signal: "table_structure", contribution: 0.15 });
         explanation.push("Contains table structure");
       }
-      if (intent.type === QueryIntent.RELATIONSHIP_LOOKUP && result.signals?.relationship > 0) {
+      if (intent.type === QueryIntent.RELATIONSHIP_LOOKUP && ((_c = result.signals) == null ? void 0 : _c.relationship) > 0) {
         reasons.push({ signal: "relationship_evidence", contribution: 0.2 });
         explanation.push("Contains relationship evidence");
       }
@@ -8269,12 +8445,13 @@ ${p.text}`).join("\n\n")
     });
   }
   function operatorCount(graph, criteria) {
+    var _a, _b, _c, _d;
     const { entityType, blockType, page, textContains } = criteria;
     let items = [];
     if (entityType) {
-      items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+      items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     } else if (blockType) {
-      items = graph._contentGraph?.allBlocks?.filter((b) => b.type === blockType) || [];
+      items = ((_d = (_c = graph._contentGraph) == null ? void 0 : _c.allBlocks) == null ? void 0 : _d.filter((b) => b.type === blockType)) || [];
     }
     if (page) {
       items = items.filter((i) => i.page === page);
@@ -8293,8 +8470,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorSum(graph, criteria) {
+    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     if (page) {
       items = items.filter((i) => i.page === page);
     }
@@ -8318,8 +8496,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorMax(graph, criteria) {
+    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     if (page) items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
@@ -8345,8 +8524,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorMin(graph, criteria) {
+    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     if (page) items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
@@ -8372,8 +8552,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorAvg(graph, criteria) {
+    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     if (page) items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
@@ -8401,8 +8582,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorBefore(graph, criteria) {
+    var _a, _b;
     const { entityType = "date", referenceDate, page } = criteria;
-    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     if (page) items = items.filter((i) => i.page <= page);
     if (referenceDate) {
       const refTime = new Date(referenceDate).getTime();
@@ -8419,8 +8601,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorAfter(graph, criteria) {
+    var _a, _b;
     const { entityType = "date", referenceDate, page } = criteria;
-    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     if (page) items = items.filter((i) => i.page >= page);
     if (referenceDate) {
       const refTime = new Date(referenceDate).getTime();
@@ -8437,8 +8620,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorBetween(graph, criteria) {
+    var _a, _b;
     const { entityType = "currency", low, high, page } = criteria;
-    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
+    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
     if (page) items = items.filter((i) => i.page === page);
     items = items.filter((i) => {
       const numVal = parseFloat((i.value || "").replace(/[$,]/g, ""));
@@ -8461,8 +8645,9 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorGroupBy(graph, criteria) {
+    var _a;
     const { entityType, groupBy = "page" } = criteria;
-    let items = graph._contentGraph?.allEntities || [];
+    let items = ((_a = graph._contentGraph) == null ? void 0 : _a.allEntities) || [];
     if (entityType) {
       items = items.filter((i) => i.type === entityType);
     }
@@ -8501,6 +8686,7 @@ ${p.text}`).join("\n\n")
     };
   }
   function executeReasoning(graph, query) {
+    var _a;
     const lower = query.toLowerCase();
     const intent = detectIntent(query);
     if (intent.type === QueryIntent.COUNT) {
@@ -8550,7 +8736,7 @@ ${p.text}`).join("\n\n")
       return {
         answer: result.itemCount > 0 ? `The average is ${result.formattedResult} (from ${result.itemCount} value(s)).` : "No monetary values found matching this query.",
         confidence: 0.85,
-        evidence: result.items?.slice(0, 5).map((i) => ({ text: i.value, page: i.page })) || [],
+        evidence: ((_a = result.items) == null ? void 0 : _a.slice(0, 5).map((i) => ({ text: i.value, page: i.page }))) || [],
         reasoning: { intent: QueryIntent.AGGREGATION, operator: "AVG", criteria, result: result.result }
       };
     }
@@ -8665,22 +8851,23 @@ ${p.text}`).join("\n\n")
     return similarity / fields.length;
   }
   function buildTopicVector(graph) {
+    var _a, _b, _c;
     const vector = {};
-    const headings = graph.layout?.getAllHeadings() || [];
+    const headings = ((_a = graph.layout) == null ? void 0 : _a.getAllHeadings()) || [];
     for (const heading of headings) {
       const words = heading.text.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
       for (const word of words) {
         vector[word] = (vector[word] || 0) + 2;
       }
     }
-    const entities = graph._contentGraph?.allEntities || [];
+    const entities = ((_b = graph._contentGraph) == null ? void 0 : _b.allEntities) || [];
     for (const entity of entities) {
       const words = (entity.value || "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
       for (const word of words) {
         vector[word] = (vector[word] || 0) + 1;
       }
     }
-    const blocks = graph._contentGraph?.allBlocks || [];
+    const blocks = ((_c = graph._contentGraph) == null ? void 0 : _c.allBlocks) || [];
     for (const block of blocks.slice(0, 50)) {
       const words = (block.text || "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
       for (const word of words) {
@@ -8702,14 +8889,18 @@ ${p.text}`).join("\n\n")
     return dist < threshold;
   }
   function groupEntitiesByRow(entities) {
+    var _a, _b;
     if (entities.length === 0) return [];
-    const sorted = [...entities].sort((a, b) => (a.bbox?.[1] || 0) - (b.bbox?.[1] || 0));
+    const sorted = [...entities].sort((a, b) => {
+      var _a2, _b2;
+      return (((_a2 = a.bbox) == null ? void 0 : _a2[1]) || 0) - (((_b2 = b.bbox) == null ? void 0 : _b2[1]) || 0);
+    });
     const rows = [];
     let currentRow = [sorted[0]];
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const curr = sorted[i];
-      if (Math.abs((curr.bbox?.[1] || 0) - (prev.bbox?.[1] || 0)) < 15) {
+      if (Math.abs((((_a = curr.bbox) == null ? void 0 : _a[1]) || 0) - (((_b = prev.bbox) == null ? void 0 : _b[1]) || 0)) < 15) {
         currentRow.push(curr);
       } else {
         rows.push(currentRow);
@@ -8720,6 +8911,7 @@ ${p.text}`).join("\n\n")
     return rows;
   }
   function buildTableObjects(contentGraph, conceptGraph) {
+    var _a, _b;
     const tables = [];
     const tableBlocks = contentGraph.allBlocks.filter((b) => b.type === "table");
     for (const block of tableBlocks) {
@@ -8736,7 +8928,7 @@ ${p.text}`).join("\n\n")
       for (let i = 1; i < cellTexts.length; i++) {
         const prev = cellTexts[i - 1];
         const curr = cellTexts[i];
-        if (Math.abs((curr.bbox?.[1] || 0) - (prev.bbox?.[1] || 0)) < 10) {
+        if (Math.abs((((_a = curr.bbox) == null ? void 0 : _a[1]) || 0) - (((_b = prev.bbox) == null ? void 0 : _b[1]) || 0)) < 10) {
           currentRow.push(curr);
         } else {
           cellRows.push(currentRow);
@@ -8828,12 +9020,13 @@ ${p.text}`).join("\n\n")
     return results;
   }
 
-  // packages/core/src/docaccess.js
+  // src/docaccess.js
   function escapeHTML3(str) {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function wcagAudit(ir) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
     const issues = [];
     let score = 100;
     const criteria = {};
@@ -8846,7 +9039,7 @@ ${p.text}`).join("\n\n")
         const obj = ir.objects[objId];
         if (!obj) continue;
         if (obj.type === "image") {
-          if (!obj.accessibility?.alt && obj.accessibility?.alt !== "") {
+          if (!((_a = obj.accessibility) == null ? void 0 : _a.alt) && ((_b = obj.accessibility) == null ? void 0 : _b.alt) !== "") {
             criteria["1.1.1"].status = "fail";
             criteria["1.1.1"].issues.push(objId);
             issues.push({
@@ -8868,7 +9061,10 @@ ${p.text}`).join("\n\n")
       const page = ir.pages[pageId];
       if (!page) continue;
       const pageNum = parseInt(pageId.split("_")[1]);
-      const headings = (page.content || []).map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading");
+      const headings = (page.content || []).map((id) => ir.objects[id]).filter((obj) => {
+        var _a2;
+        return ((_a2 = obj == null ? void 0 : obj.semantic) == null ? void 0 : _a2.role) === "heading";
+      });
       let prevLevel = 0;
       for (const heading of headings) {
         const level2 = heading.semantic.level || 1;
@@ -8890,8 +9086,8 @@ ${p.text}`).join("\n\n")
       }
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
-        if (obj?.semantic?.role === "table") {
-          if (!obj.semantic?.caption && !obj.accessibility?.summary) {
+        if (((_c = obj == null ? void 0 : obj.semantic) == null ? void 0 : _c.role) === "table") {
+          if (!((_d = obj.semantic) == null ? void 0 : _d.caption) && !((_e = obj.accessibility) == null ? void 0 : _e.summary)) {
             criteria["1.3.1"].status = "fail";
             criteria["1.3.1"].issues.push(objId);
             issues.push({
@@ -8906,8 +9102,8 @@ ${p.text}`).join("\n\n")
             score -= 2;
           }
         }
-        if (obj?.semantic?.role === "list") {
-          const items = obj.semantic?.items || [];
+        if (((_f = obj == null ? void 0 : obj.semantic) == null ? void 0 : _f.role) === "list") {
+          const items = ((_g = obj.semantic) == null ? void 0 : _g.items) || [];
           if (items.length === 0) {
             criteria["1.3.1"].status = "fail";
             issues.push({
@@ -8930,7 +9126,7 @@ ${p.text}`).join("\n\n")
       if (!page) continue;
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
-        if (obj?.type === "text" && obj.raw?.color && obj.raw?.bgColor) {
+        if ((obj == null ? void 0 : obj.type) === "text" && ((_h = obj.raw) == null ? void 0 : _h.color) && ((_i = obj.raw) == null ? void 0 : _i.bgColor)) {
           const ratio = computeContrastRatio(obj.raw.color, obj.raw.bgColor);
           if (ratio < 4.5) {
             criteria["1.4.3"].status = "fail";
@@ -8952,8 +9148,8 @@ ${p.text}`).join("\n\n")
     criteria["1.4.11"] = { name: "Non-text Contrast", status: "pass", issues: [] };
     criteria["2.1.1"] = { name: "Keyboard", status: "pass", issues: [] };
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (obj?.semantic?.role === "form_field" || obj?.semantic?.role === "link") {
-        if (obj.accessibility?.tabindex === -1) {
+      if (((_j = obj == null ? void 0 : obj.semantic) == null ? void 0 : _j.role) === "form_field" || ((_k = obj == null ? void 0 : obj.semantic) == null ? void 0 : _k.role) === "link") {
+        if (((_l = obj.accessibility) == null ? void 0 : _l.tabindex) === -1) {
           criteria["2.1.1"].status = "fail";
           issues.push({
             type: "keyboard_trap",
@@ -8969,7 +9165,7 @@ ${p.text}`).join("\n\n")
     }
     criteria["2.4.1"] = { name: "Bypass Blocks", status: "pass", issues: [] };
     criteria["2.4.2"] = { name: "Page Titled", status: "pass", issues: [] };
-    if (!ir.document.metadata?.title) {
+    if (!((_m = ir.document.metadata) == null ? void 0 : _m.title)) {
       criteria["2.4.2"].status = "fail";
       issues.push({
         type: "missing_title",
@@ -8986,7 +9182,7 @@ ${p.text}`).join("\n\n")
       if (!page) continue;
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
-        if (obj?.semantic?.role === "heading" && (!obj.semantic?.text || obj.semantic.text.trim() === "")) {
+        if (((_n = obj == null ? void 0 : obj.semantic) == null ? void 0 : _n.role) === "heading" && (!((_o = obj.semantic) == null ? void 0 : _o.text) || obj.semantic.text.trim() === "")) {
           criteria["2.4.6"].status = "fail";
           issues.push({
             type: "empty_heading",
@@ -9002,7 +9198,7 @@ ${p.text}`).join("\n\n")
       }
     }
     criteria["3.1.1"] = { name: "Language of Page", status: "pass", issues: [] };
-    if (!ir.document.metadata?.language) {
+    if (!((_p = ir.document.metadata) == null ? void 0 : _p.language)) {
       criteria["3.1.1"].status = "fail";
       issues.push({
         type: "missing_language",
@@ -9016,8 +9212,8 @@ ${p.text}`).join("\n\n")
     criteria["3.1.2"] = { name: "Language of Parts", status: "pass", issues: [] };
     criteria["4.1.2"] = { name: "Name, Role, Value", status: "pass", issues: [] };
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (obj?.semantic?.role === "form_field") {
-        if (!obj.accessibility?.label && !obj.accessibility?.labelledby) {
+      if (((_q = obj == null ? void 0 : obj.semantic) == null ? void 0 : _q.role) === "form_field") {
+        if (!((_r = obj.accessibility) == null ? void 0 : _r.label) && !((_s = obj.accessibility) == null ? void 0 : _s.labelledby)) {
           criteria["4.1.2"].status = "fail";
           issues.push({
             type: "form_no_label",
@@ -9091,6 +9287,7 @@ ${p.text}`).join("\n\n")
     return (lighter + 0.05) / (darker + 0.05);
   }
   function exportAccessibleHTML(ir, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g;
     const {
       mode = "accessible",
       includeSkipNav = true,
@@ -9104,9 +9301,9 @@ ${p.text}`).join("\n\n")
       customStyles = "",
       lang
     } = options;
-    const docLang = lang || ir.document.metadata?.language || "en";
-    const title = ir.document.metadata?.title || "Document";
-    const author = ir.document.metadata?.author || "";
+    const docLang = lang || ((_a = ir.document.metadata) == null ? void 0 : _a.language) || "en";
+    const title = ((_b = ir.document.metadata) == null ? void 0 : _b.title) || "Document";
+    const author = ((_c = ir.document.metadata) == null ? void 0 : _c.author) || "";
     let html = "<!DOCTYPE html>\n";
     html += `<html lang="${escapeHTML3(docLang)}">
 `;
@@ -9140,7 +9337,7 @@ ${customStyles}
         html += `  <p class="doc-author">By ${escapeHTML3(author)}</p>
 `;
       }
-      const date = ir.document.metadata?.creationDate || ir.document.metadata?.modDate;
+      const date = ((_d = ir.document.metadata) == null ? void 0 : _d.creationDate) || ((_e = ir.document.metadata) == null ? void 0 : _e.modDate);
       if (date) {
         html += `  <p class="doc-date"><time datetime="${escapeHTML3(date)}">${escapeHTML3(date)}</time></p>
 `;
@@ -9158,7 +9355,7 @@ ${customStyles}
       for (const pageId of ir.document.pages) {
         const page = ir.pages[pageId];
         if (!page) continue;
-        const label = page.labels?.print || `Page ${page.num}`;
+        const label = ((_f = page.labels) == null ? void 0 : _f.print) || `Page ${page.num}`;
         html += `      <li><a href="#${pageId}" aria-label="Go to ${escapeHTML3(label)}">${escapeHTML3(label)}</a></li>
 `;
       }
@@ -9170,7 +9367,7 @@ ${customStyles}
       const page = ir.pages[pageId];
       if (!page) continue;
       const pageNum = parseInt(pageId.split("_")[1]);
-      const pageLabel = page.labels?.print || `Page ${pageNum}`;
+      const pageLabel = ((_g = page.labels) == null ? void 0 : _g.print) || `Page ${pageNum}`;
       const dataAttr = includeDataAttributes2 ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}"` : "";
       html += `
   <section id="${pageId}" class="pdf-page"${dataAttr} aria-label="${escapeHTML3(pageLabel)}">
@@ -9214,6 +9411,7 @@ ${customStyles}
     return buildRAGContext(ir, null);
   }
   function generateSkipNav(ir) {
+    var _a;
     let html = "<!-- Skip Navigation -->\n";
     html += '<a href="#main-content" class="skip-link" id="skip-to-main">Skip to main content</a>\n';
     if (ir.document.pages.length > 5) {
@@ -9222,7 +9420,7 @@ ${customStyles}
       for (const pageId of ir.document.pages) {
         const page = ir.pages[pageId];
         if (!page) continue;
-        const label = page.labels?.print || `Page ${page.num}`;
+        const label = ((_a = page.labels) == null ? void 0 : _a.print) || `Page ${page.num}`;
         html += `    <li><a href="#${pageId}" class="skip-link">${escapeHTML3(label)}</a></li>
 `;
       }
@@ -9232,6 +9430,7 @@ ${customStyles}
     return html;
   }
   function renderAccessiblePage(page, ir, opts) {
+    var _a, _b;
     let html = "";
     const { pageNum, includeDataAttributes: includeDataAttributes2, enforceHeadingHierarchy, headingTracker, wrapImagesInFigures, mode } = opts;
     const objects = (page.content || []).map((id) => ir.objects[id]).filter((obj) => obj && obj.bbox).sort((a, b) => {
@@ -9241,7 +9440,7 @@ ${customStyles}
     });
     for (const obj of objects) {
       const dataAttr = includeDataAttributes2 ? ` data-pdf-object="${obj.id}"` : "";
-      switch (obj.semantic?.role) {
+      switch ((_a = obj.semantic) == null ? void 0 : _a.role) {
         case "heading":
           html += renderAccessibleHeading(obj, { dataAttr, headingTracker, enforceHeadingHierarchy });
           break;
@@ -9273,7 +9472,7 @@ ${customStyles}
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
       if (!vec) continue;
-      if (vec.semantic?.role === "separator") {
+      if (((_b = vec.semantic) == null ? void 0 : _b.role) === "separator") {
         const dataAttr = includeDataAttributes2 ? ` data-pdf-vector="${vec.id}"` : "";
         html += `    <hr${dataAttr} aria-hidden="true">
 `;
@@ -9282,28 +9481,30 @@ ${customStyles}
     return html;
   }
   function renderAccessibleHeading(obj, opts) {
+    var _a, _b, _c, _d;
     const { dataAttr, headingTracker, enforceHeadingHierarchy } = opts;
-    let level = obj.semantic?.level || 2;
+    let level = ((_a = obj.semantic) == null ? void 0 : _a.level) || 2;
     if (enforceHeadingHierarchy) {
       if (level > headingTracker.current + 1 && headingTracker.current > 0) {
         level = headingTracker.current + 1;
       }
       headingTracker.current = level;
     }
-    const text = escapeHTML3(obj.semantic?.text || "");
+    const text = escapeHTML3(((_b = obj.semantic) == null ? void 0 : _b.text) || "");
     if (!text) return "";
-    const id = obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`;
+    const id = obj.id || `heading-${(_c = obj.bbox) == null ? void 0 : _c[0]}-${(_d = obj.bbox) == null ? void 0 : _d[1]}`;
     return `    <h${level} id="${id}"${dataAttr}>${text}</h${level}>
 `;
   }
   function renderAccessibleTable(obj, ir, opts) {
+    var _a, _b, _c, _d;
     const { dataAttr, pageNum } = opts;
     let html = "";
     const tableId = obj.id || `table-${pageNum}`;
-    const caption = obj.semantic?.caption || "";
-    const summary = obj.accessibility?.summary || "";
-    const rows = obj.semantic?.rows || [];
-    const cols = obj.semantic?.cols || [];
+    const caption = ((_a = obj.semantic) == null ? void 0 : _a.caption) || "";
+    const summary = ((_b = obj.accessibility) == null ? void 0 : _b.summary) || "";
+    const rows = ((_c = obj.semantic) == null ? void 0 : _c.rows) || [];
+    const cols = ((_d = obj.semantic) == null ? void 0 : _d.cols) || [];
     html += `    <table id="${tableId}"${dataAttr}`;
     if (summary) html += ` aria-label="${escapeHTML3(summary)}"`;
     html += ">\n";
@@ -9320,7 +9521,7 @@ ${customStyles}
       const headerRow = rows[0] || [];
       for (let c = 0; c < headerRow.length; c++) {
         const cell = headerRow[c];
-        html += `          <th scope="col">${escapeHTML3(cell?.text || "")}</th>
+        html += `          <th scope="col">${escapeHTML3((cell == null ? void 0 : cell.text) || "")}</th>
 `;
       }
       html += "        </tr>\n";
@@ -9332,7 +9533,7 @@ ${customStyles}
           const row = rows[r] || [];
           for (let c = 0; c < row.length; c++) {
             const cell = row[c];
-            html += `          <td>${escapeHTML3(cell?.text || "")}</td>
+            html += `          <td>${escapeHTML3((cell == null ? void 0 : cell.text) || "")}</td>
 `;
           }
           html += "        </tr>\n";
@@ -9367,13 +9568,14 @@ ${customStyles}
     return html;
   }
   function renderTableFromNearbyText(obj, ir, pageNum) {
+    var _a, _b;
     let html = "";
     if (!obj.bbox) return html;
     const pageId = `page_${pageNum}`;
     const page = ir.pages[pageId];
     if (!page) return html;
     const cells = (page.content || []).map((id) => ir.objects[id]).filter(
-      (o) => o?.bbox && o.type === "text" && o.bbox[0] >= obj.bbox[0] - 5 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[0] + (o.bbox[2] || 0) <= obj.bbox[0] + obj.bbox[2] + 5 && o.bbox[1] + (o.bbox[3] || 0) <= obj.bbox[1] + obj.bbox[3] + 5
+      (o) => (o == null ? void 0 : o.bbox) && o.type === "text" && o.bbox[0] >= obj.bbox[0] - 5 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[0] + (o.bbox[2] || 0) <= obj.bbox[0] + obj.bbox[2] + 5 && o.bbox[1] + (o.bbox[3] || 0) <= obj.bbox[1] + obj.bbox[3] + 5
     ).sort((a, b) => {
       const yDiff = (a.bbox[1] || 0) - (b.bbox[1] || 0);
       if (Math.abs(yDiff) > 5) return yDiff;
@@ -9396,7 +9598,7 @@ ${customStyles}
     if (rows.length === 0) return html;
     html += "      <thead>\n        <tr>\n";
     for (const cell of rows[0]) {
-      html += `          <th scope="col">${escapeHTML3(cell.semantic?.text || "")}</th>
+      html += `          <th scope="col">${escapeHTML3(((_a = cell.semantic) == null ? void 0 : _a.text) || "")}</th>
 `;
     }
     html += "        </tr>\n      </thead>\n";
@@ -9405,7 +9607,7 @@ ${customStyles}
       for (let r = 1; r < rows.length; r++) {
         html += "        <tr>\n";
         for (const cell of rows[r]) {
-          html += `          <td>${escapeHTML3(cell.semantic?.text || "")}</td>
+          html += `          <td>${escapeHTML3(((_b = cell.semantic) == null ? void 0 : _b.text) || "")}</td>
 `;
         }
         html += "        </tr>\n";
@@ -9415,15 +9617,16 @@ ${customStyles}
     return html;
   }
   function renderAccessibleList(obj, ir, opts) {
+    var _a, _b;
     const { dataAttr } = opts;
-    const items = obj.semantic?.items || [];
-    const ordered = obj.semantic?.ordered || false;
+    const items = ((_a = obj.semantic) == null ? void 0 : _a.items) || [];
+    const ordered = ((_b = obj.semantic) == null ? void 0 : _b.ordered) || false;
     const tag = ordered ? "ol" : "ul";
     let html = `    <${tag}${dataAttr} role="list">
 `;
     if (items.length > 0) {
       for (const item of items) {
-        const text = typeof item === "string" ? item : item?.text || "";
+        const text = typeof item === "string" ? item : (item == null ? void 0 : item.text) || "";
         html += `      <li>${escapeHTML3(text)}</li>
 `;
       }
@@ -9439,27 +9642,29 @@ ${customStyles}
     return html;
   }
   function findNearbyListItems(obj, ir) {
+    var _a, _b;
     if (!obj.bbox) return [];
     const items = [];
     for (const [id, o] of Object.entries(ir.objects)) {
-      if (o?.type === "text" && o.bbox && o.semantic?.role !== "heading") {
+      if ((o == null ? void 0 : o.type) === "text" && o.bbox && ((_a = o.semantic) == null ? void 0 : _a.role) !== "heading") {
         if (Math.abs((o.bbox[0] || 0) - (obj.bbox[0] || 0)) < 50 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[1] <= obj.bbox[1] + obj.bbox[3] + 5) {
-          if (o.semantic?.text) items.push(o.semantic.text);
+          if ((_b = o.semantic) == null ? void 0 : _b.text) items.push(o.semantic.text);
         }
       }
     }
     return items;
   }
   function renderAccessibleFormField(obj, ir, opts) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
     const { dataAttr } = opts;
-    const fieldType = obj.semantic?.fieldType || "text";
-    const fieldName = obj.semantic?.fieldName || obj.accessibility?.label || "";
+    const fieldType = ((_a = obj.semantic) == null ? void 0 : _a.fieldType) || "text";
+    const fieldName = ((_b = obj.semantic) == null ? void 0 : _b.fieldName) || ((_c = obj.accessibility) == null ? void 0 : _c.label) || "";
     const fieldId = obj.id || `field-${fieldName}`;
-    const label = obj.accessibility?.label || fieldName;
-    const value = obj.semantic?.value || "";
-    const required = obj.accessibility?.required || false;
-    const description = obj.accessibility?.description || "";
-    const error = obj.accessibility?.error || "";
+    const label = ((_d = obj.accessibility) == null ? void 0 : _d.label) || fieldName;
+    const value = ((_e = obj.semantic) == null ? void 0 : _e.value) || "";
+    const required = ((_f = obj.accessibility) == null ? void 0 : _f.required) || false;
+    const description = ((_g = obj.accessibility) == null ? void 0 : _g.description) || "";
+    const error = ((_h = obj.accessibility) == null ? void 0 : _h.error) || "";
     let html = `    <div class="form-field"${dataAttr}>
 `;
     if (label) {
@@ -9486,10 +9691,10 @@ ${customStyles}
       case "dropdown":
         html += `      <select id="${fieldId}" name="${escapeHTML3(fieldName)}"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
 `;
-        const options = obj.semantic?.options || [];
+        const options = ((_i = obj.semantic) == null ? void 0 : _i.options) || [];
         for (const opt of options) {
-          const optVal = typeof opt === "string" ? opt : opt?.value || "";
-          const optLabel = typeof opt === "string" ? opt : opt?.label || optVal;
+          const optVal = typeof opt === "string" ? opt : (opt == null ? void 0 : opt.value) || "";
+          const optLabel = typeof opt === "string" ? opt : (opt == null ? void 0 : opt.label) || optVal;
           html += `        <option value="${escapeHTML3(optVal)}"${optVal === value ? " selected" : ""}>${escapeHTML3(optLabel)}</option>
 `;
         }
@@ -9512,11 +9717,12 @@ ${customStyles}
     return html;
   }
   function renderAccessibleLink(obj, opts) {
+    var _a, _b, _c, _d, _e, _f, _g;
     const { dataAttr } = opts;
-    const href = obj.accessibility?.href || obj.semantic?.url || obj.raw?.href || obj.raw?.url || "#";
-    const text = escapeHTML3(obj.semantic?.text || "");
-    const target = obj.accessibility?.target || "";
-    const ariaLabel = obj.accessibility?.ariaLabel || "";
+    const href = ((_a = obj.accessibility) == null ? void 0 : _a.href) || ((_b = obj.semantic) == null ? void 0 : _b.url) || ((_c = obj.raw) == null ? void 0 : _c.href) || ((_d = obj.raw) == null ? void 0 : _d.url) || "#";
+    const text = escapeHTML3(((_e = obj.semantic) == null ? void 0 : _e.text) || "");
+    const target = ((_f = obj.accessibility) == null ? void 0 : _f.target) || "";
+    const ariaLabel = ((_g = obj.accessibility) == null ? void 0 : _g.ariaLabel) || "";
     let attrs = dataAttr;
     if (ariaLabel) attrs += ` aria-label="${escapeHTML3(ariaLabel)}"`;
     if (target === "_blank") attrs += ' target="_blank" rel="noopener noreferrer"';
@@ -9525,12 +9731,13 @@ ${customStyles}
 `;
   }
   function renderAccessibleImage(obj, opts) {
+    var _a, _b, _c, _d, _e, _f;
     const { dataAttr, wrapImagesInFigures, mode } = opts;
-    const src = obj.raw?.src || "";
-    const alt = obj.accessibility?.alt || "";
-    const caption = obj.semantic?.caption || "";
-    const isDecorative = obj.accessibility?.decorative || !alt && !caption;
-    const role = obj.accessibility?.role || obj.semantic?.role || "";
+    const src = ((_a = obj.raw) == null ? void 0 : _a.src) || "";
+    const alt = ((_b = obj.accessibility) == null ? void 0 : _b.alt) || "";
+    const caption = ((_c = obj.semantic) == null ? void 0 : _c.caption) || "";
+    const isDecorative = ((_d = obj.accessibility) == null ? void 0 : _d.decorative) || !alt && !caption;
+    const role = ((_e = obj.accessibility) == null ? void 0 : _e.role) || ((_f = obj.semantic) == null ? void 0 : _f.role) || "";
     const altAttr = isDecorative ? ' alt="" role="presentation"' : ` alt="${escapeHTML3(alt || caption || "Image")}"`;
     let html = "";
     if (wrapImagesInFigures) {
@@ -9554,8 +9761,9 @@ ${customStyles}
     return html;
   }
   function renderAccessibleText(obj, opts) {
+    var _a;
     const { dataAttr } = opts;
-    const text = escapeHTML3(obj.semantic?.text || "");
+    const text = escapeHTML3(((_a = obj.semantic) == null ? void 0 : _a.text) || "");
     if (!text) return "";
     return `    <p${dataAttr}>${text}</p>
 `;
@@ -9825,6 +10033,7 @@ ${customStyles}
 `;
   }
   function remediateAccessibility(ir, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const {
       fixAltText = true,
       fixHeadingHierarchy = true,
@@ -9835,14 +10044,14 @@ ${customStyles}
       defaultLanguage = "en"
     } = options;
     const report = { fixes: [], summary: {} };
-    if (fixLanguage && !ir.document.metadata?.language) {
+    if (fixLanguage && !((_a = ir.document.metadata) == null ? void 0 : _a.language)) {
       ir.document.metadata.language = defaultLanguage;
       report.fixes.push({ type: "language", action: `Set document language to "${defaultLanguage}"` });
     }
-    if (fixTitle && !ir.document.metadata?.title) {
+    if (fixTitle && !((_b = ir.document.metadata) == null ? void 0 : _b.title)) {
       let inferredTitle = "";
       for (const [id, obj] of Object.entries(ir.objects)) {
-        if (obj?.semantic?.role === "heading" && obj.semantic?.level === 1 && obj.semantic?.text) {
+        if (((_c = obj == null ? void 0 : obj.semantic) == null ? void 0 : _c.role) === "heading" && ((_d = obj.semantic) == null ? void 0 : _d.level) === 1 && ((_e = obj.semantic) == null ? void 0 : _e.text)) {
           inferredTitle = obj.semantic.text;
           break;
         }
@@ -9853,17 +10062,17 @@ ${customStyles}
     }
     if (fixAltText) {
       for (const [id, obj] of Object.entries(ir.objects)) {
-        if (obj?.type === "image" && !obj.accessibility) {
+        if ((obj == null ? void 0 : obj.type) === "image" && !obj.accessibility) {
           obj.accessibility = {};
         }
-        if (obj?.type === "image" && !obj.accessibility?.alt && obj.accessibility?.alt !== "") {
+        if ((obj == null ? void 0 : obj.type) === "image" && !((_f = obj.accessibility) == null ? void 0 : _f.alt) && ((_g = obj.accessibility) == null ? void 0 : _g.alt) !== "") {
           if (markDecorativeImages) {
             obj.accessibility.alt = "";
             obj.accessibility.decorative = true;
             report.fixes.push({ type: "alt_text", element: id, action: "Marked as decorative image" });
           } else {
-            const caption = obj.semantic?.caption || "";
-            const role = obj.semantic?.role || "";
+            const caption = ((_h = obj.semantic) == null ? void 0 : _h.caption) || "";
+            const role = ((_i = obj.semantic) == null ? void 0 : _i.role) || "";
             obj.accessibility.alt = caption || (role ? `${role} image` : "Image");
             report.fixes.push({ type: "alt_text", element: id, action: `Added alt text: "${obj.accessibility.alt}"` });
           }
@@ -9877,7 +10086,7 @@ ${customStyles}
         if (!page) continue;
         for (const objId of page.content || []) {
           const obj = ir.objects[objId];
-          if (obj?.semantic?.role === "heading") {
+          if (((_j = obj == null ? void 0 : obj.semantic) == null ? void 0 : _j.role) === "heading") {
             let level = obj.semantic.level || 1;
             if (level > currentLevel + 1 && currentLevel > 0) {
               const oldLevel = level;
@@ -9896,10 +10105,10 @@ ${customStyles}
     }
     if (fixFormLabels) {
       for (const [id, obj] of Object.entries(ir.objects)) {
-        if (obj?.semantic?.role === "form_field") {
+        if (((_k = obj == null ? void 0 : obj.semantic) == null ? void 0 : _k.role) === "form_field") {
           if (!obj.accessibility) obj.accessibility = {};
           if (!obj.accessibility.label && !obj.accessibility.labelledby) {
-            const name = obj.semantic?.fieldName || id;
+            const name = ((_l = obj.semantic) == null ? void 0 : _l.fieldName) || id;
             obj.accessibility.label = name.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
             report.fixes.push({
               type: "form_label",
@@ -9992,7 +10201,7 @@ ${customStyles}
     return { html, text, audit, remediations };
   }
 
-  // packages/core/src/workspace.js
+  // src/workspace.js
   function createWorkspace(options = {}) {
     const { name = "Workspace", description = "" } = options;
     const workspace = {
@@ -10004,22 +10213,23 @@ ${customStyles}
       terminology: { aliases: {}, acronyms: {}, definitions: {} }
     };
     workspace.add = async function(docOrGraph, options2 = {}) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
       let doc, graph, docId;
       if (docOrGraph._contentGraph) {
         graph = docOrGraph;
-        docId = graph._ir?.document?.id || `doc_${this.documents.size + 1}`;
+        docId = ((_b = (_a = graph._ir) == null ? void 0 : _a.document) == null ? void 0 : _b.id) || `doc_${this.documents.size + 1}`;
       } else {
         doc = docOrGraph;
         graph = await doc.analyze({ ocr: false, ...options2 });
-        docId = graph._ir?.document?.id || `doc_${this.documents.size + 1}`;
+        docId = ((_d = (_c = graph._ir) == null ? void 0 : _c.document) == null ? void 0 : _d.id) || `doc_${this.documents.size + 1}`;
       }
       this.documents.set(docId, {
         doc,
         graph,
         fingerprint: graph._fingerprint || null,
         conceptGraph: graph._conceptGraph || null,
-        metadata: graph._ir?.document?.metadata || {},
-        pageCount: graph._ir?.document?.pages?.length || 0
+        metadata: ((_f = (_e = graph._ir) == null ? void 0 : _e.document) == null ? void 0 : _f.metadata) || {},
+        pageCount: ((_i = (_h = (_g = graph._ir) == null ? void 0 : _g.document) == null ? void 0 : _h.pages) == null ? void 0 : _i.length) || 0
       });
       this._buildCrossDocRelationships();
       this._learnTerminology();
@@ -10034,7 +10244,7 @@ ${customStyles}
       const allResults = [];
       for (const [docId, entry] of this.documents) {
         const graph = entry.graph;
-        if (!graph?.hybridSearch) continue;
+        if (!(graph == null ? void 0 : graph.hybridSearch)) continue;
         const results = graph.hybridSearch(query, {
           maxResults: perDocLimit,
           rerank: false,
@@ -10075,7 +10285,7 @@ ${customStyles}
       const reasoningResults = [];
       for (const [docId, entry] of this.documents) {
         const graph = entry.graph;
-        if (!graph?.executeReasoning) continue;
+        if (!(graph == null ? void 0 : graph.executeReasoning)) continue;
         const reasoning = graph.executeReasoning(question);
         if (reasoning) {
           reasoningResults.push({ ...reasoning, docId, metadata: entry.metadata });
@@ -10089,14 +10299,15 @@ ${customStyles}
       };
     };
     workspace.getSummary = function() {
+      var _a, _b, _c, _d;
       let totalWords = 0;
       let totalPages = 0;
       const allEntityTypes = /* @__PURE__ */ new Map();
       for (const [, entry] of this.documents) {
-        const summary = entry.graph?.getSummary?.() || {};
+        const summary = ((_b = (_a = entry.graph) == null ? void 0 : _a.getSummary) == null ? void 0 : _b.call(_a)) || {};
         totalWords += summary.wordCount || 0;
         totalPages += entry.pageCount || 0;
-        const entities = entry.graph?._contentGraph?.allEntities || [];
+        const entities = ((_d = (_c = entry.graph) == null ? void 0 : _c._contentGraph) == null ? void 0 : _d.allEntities) || [];
         for (const e of entities) {
           allEntityTypes.set(e.type, (allEntityTypes.get(e.type) || 0) + 1);
         }
@@ -10123,18 +10334,19 @@ ${customStyles}
       };
     };
     workspace._buildCrossDocRelationships = function() {
+      var _a, _b, _c, _d, _e, _f;
       this.crossDocRelationships = [];
       const docEntries = Array.from(this.documents.entries());
       for (let i = 0; i < docEntries.length; i++) {
         for (let j = i + 1; j < docEntries.length; j++) {
           const [, entry1] = docEntries[i];
           const [, entry2] = docEntries[j];
-          const entities1 = entry1.graph?._contentGraph?.allEntities || [];
-          const entities2 = entry2.graph?._contentGraph?.allEntities || [];
+          const entities1 = ((_b = (_a = entry1.graph) == null ? void 0 : _a._contentGraph) == null ? void 0 : _b.allEntities) || [];
+          const entities2 = ((_d = (_c = entry2.graph) == null ? void 0 : _c._contentGraph) == null ? void 0 : _d.allEntities) || [];
           const shared = [];
           for (const e1 of entities1) {
             for (const e2 of entities2) {
-              if (e1.type === e2.type && e1.value?.toLowerCase() === e2.value?.toLowerCase()) {
+              if (e1.type === e2.type && ((_e = e1.value) == null ? void 0 : _e.toLowerCase()) === ((_f = e2.value) == null ? void 0 : _f.toLowerCase())) {
                 shared.push({ type: e1.type, value: e1.value });
               }
             }
@@ -10151,9 +10363,10 @@ ${customStyles}
       }
     };
     workspace._learnTerminology = function() {
+      var _a, _b;
       const allPages = [];
       for (const [, entry] of this.documents) {
-        const pages = entry.graph?.text?.pages || [];
+        const pages = ((_b = (_a = entry.graph) == null ? void 0 : _a.text) == null ? void 0 : _b.pages) || [];
         allPages.push(...pages);
       }
       this.terminology = learnTerminology(allPages);
@@ -10161,7 +10374,7 @@ ${customStyles}
     return workspace;
   }
 
-  // packages/core/src/persistence.js
+  // src/persistence.js
   var DB_NAME = "codbdocs";
   var DB_VERSION = 1;
   var STORE_NAME = "documents";
@@ -10284,7 +10497,7 @@ ${customStyles}
     }
   }
 
-  // packages/core/src/guards.js
+  // src/guards.js
   function normalizeIR(ir) {
     if (!ir || typeof ir !== "object") {
       throw new TypeError("codbdocs: an IR object is required (received " + (ir === null ? "null" : typeof ir) + ")");
@@ -10295,8 +10508,9 @@ ${customStyles}
     if (!ir.document.metadata || typeof ir.document.metadata !== "object") ir.document.metadata = {};
     if (!Array.isArray(ir.document.pages)) {
       ir.document.pages = Object.keys(ir.pages).sort((a, b) => {
-        const na = ir.pages[a]?.num ?? 0;
-        const nb = ir.pages[b]?.num ?? 0;
+        var _a, _b, _c, _d;
+        const na = (_b = (_a = ir.pages[a]) == null ? void 0 : _a.num) != null ? _b : 0;
+        const nb = (_d = (_c = ir.pages[b]) == null ? void 0 : _c.num) != null ? _d : 0;
         return na - nb;
       });
     }
@@ -10309,30 +10523,48 @@ ${customStyles}
     return ir;
   }
   function hydrateGraph(json) {
+    var _a;
     if (!json || typeof json !== "object") {
       throw new TypeError("codbdocs: a document graph (or graph.toJSON() output) is required");
     }
     if (typeof json.getSummary === "function") return json;
     const pages = Array.isArray(json.pages) ? json.pages : [];
-    const pageOf = (n) => pages.find((p) => (p.num ?? p.pageNum) === n) || null;
+    const pageOf = (n) => pages.find((p) => {
+      var _a2;
+      return ((_a2 = p.num) != null ? _a2 : p.pageNum) === n;
+    }) || null;
     const listOf = (n, key) => {
+      var _a2;
       if (n == null) return pages.flatMap((p) => p[key] || []);
-      return pageOf(n)?.[key] || [];
+      return ((_a2 = pageOf(n)) == null ? void 0 : _a2[key]) || [];
     };
     const metaOf = (n, key) => {
-      if (n == null) return pages.flatMap((p) => p.metadata?.[key] || []);
-      return pageOf(n)?.metadata?.[key] || [];
+      var _a2, _b;
+      if (n == null) return pages.flatMap((p) => {
+        var _a3;
+        return ((_a3 = p.metadata) == null ? void 0 : _a3[key]) || [];
+      });
+      return ((_b = (_a2 = pageOf(n)) == null ? void 0 : _a2.metadata) == null ? void 0 : _b[key]) || [];
     };
-    const pageCount = json.pageCount ?? pages.length;
+    const pageCount = (_a = json.pageCount) != null ? _a : pages.length;
     const summary = json.summary || {
       pageCount,
       wordCount: pages.reduce((acc, p) => acc + String(p.text || "").split(/\s+/).filter(Boolean).length, 0),
       pageTypes: {},
       metadata: {},
       headings: pages.flatMap((p) => (p.headings || []).map((h) => h.text)),
-      tableCount: pages.reduce((acc, p) => acc + (p.tables?.length || 0), 0),
-      formCount: pages.reduce((acc, p) => acc + (p.forms?.length || 0), 0),
-      listCount: pages.reduce((acc, p) => acc + (p.lists?.length || 0), 0)
+      tableCount: pages.reduce((acc, p) => {
+        var _a2;
+        return acc + (((_a2 = p.tables) == null ? void 0 : _a2.length) || 0);
+      }, 0),
+      formCount: pages.reduce((acc, p) => {
+        var _a2;
+        return acc + (((_a2 = p.forms) == null ? void 0 : _a2.length) || 0);
+      }, 0),
+      listCount: pages.reduce((acc, p) => {
+        var _a2;
+        return acc + (((_a2 = p.lists) == null ? void 0 : _a2.length) || 0);
+      }, 0)
     };
     if (summary.pageCount == null) summary.pageCount = pageCount;
     return {
@@ -10342,8 +10574,14 @@ ${customStyles}
       getDocumentType: () => json.documentType || null,
       classifications: json.classifications || pages.map((p) => p.classification || null),
       text: {
-        pages: pages.map((p) => ({ pageNum: p.num ?? p.pageNum, text: p.text || "", source: p.source })),
-        getPageText: (n) => pageOf(n)?.text || ""
+        pages: pages.map((p) => {
+          var _a2;
+          return { pageNum: (_a2 = p.num) != null ? _a2 : p.pageNum, text: p.text || "", source: p.source };
+        }),
+        getPageText: (n) => {
+          var _a2;
+          return ((_a2 = pageOf(n)) == null ? void 0 : _a2.text) || "";
+        }
       },
       layout: {
         getHeadings: (n) => listOf(n, "headings"),
@@ -10368,7 +10606,7 @@ ${customStyles}
     };
   }
 
-  // packages/core/src/fidelity.js
+  // src/fidelity.js
   var esc = (v) => String(v != null ? v : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   var num = (v, fallback = 0) => {
     const n = Number(v);
@@ -10399,8 +10637,39 @@ ${customStyles}
     if (/courier|mono/.test(lower)) return "'Courier New', Courier, monospace";
     return "Helvetica, Arial, 'Segoe UI', system-ui, sans-serif";
   }
+  function inferHeadingLevels(ir) {
+    var _a, _b, _c, _d, _e;
+    const sizes = [];
+    const candidates = [];
+    const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
+    for (const pid of pages) {
+      const page = (_c = ir.pages) == null ? void 0 : _c[pid];
+      if (!page) continue;
+      for (const o of pageObjects(ir, page)) {
+        if (o.type !== "text" && o.type !== void 0) continue;
+        if (((_d = o.semantic) == null ? void 0 : _d.role) && o.semantic.role !== "paragraph") continue;
+        const text = objText(o).trim();
+        if (!text) continue;
+        const size = num((_e = o.raw) == null ? void 0 : _e.fontSize, 0);
+        if (!size) continue;
+        sizes.push(size);
+        if (text.length <= 120 && !/[.;]$/.test(text)) candidates.push({ id: o.id, size, text });
+      }
+    }
+    const levels = /* @__PURE__ */ new Map();
+    if (!sizes.length) return levels;
+    const sorted = [...sizes].sort((a, b) => a - b);
+    const body = sorted[Math.floor(sorted.length / 2)];
+    const heads = candidates.filter((c) => c.size >= body * 1.25);
+    const scale = [...new Set(heads.map((h) => Math.round(h.size * 10) / 10))].sort((a, b) => b - a);
+    for (const h of heads) {
+      const rank = scale.indexOf(Math.round(h.size * 10) / 10);
+      levels.set(h.id, Math.min(6, Math.max(1, rank + 1)));
+    }
+    return levels;
+  }
   function newDocCtx() {
-    return { outline: [], index: [], h: 0 };
+    return { outline: [], index: [], h: 0, inferred: /* @__PURE__ */ new Map() };
   }
   function renderTextLayer(ir, page, ctx, pageNum) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
@@ -10434,8 +10703,10 @@ ${customStyles}
       const left = num(bbox[0]);
       const top = cssTop(pageHeight, bbox, fontSize);
       const width = num(bbox[2]);
-      const role = ((_i = o.semantic) == null ? void 0 : _i.role) || "paragraph";
-      const level = Math.min(6, Math.max(1, num((_j = o.semantic) == null ? void 0 : _j.level, 2)));
+      const inferredLevel = ctx.inferred.get(o.id);
+      const declared = (_i = o.semantic) == null ? void 0 : _i.role;
+      const role = inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
+      const level = Math.min(6, Math.max(1, num((_j = o.semantic) == null ? void 0 : _j.level, inferredLevel != null ? inferredLevel : 2)));
       const tag = role === "heading" ? `h${level}` : "span";
       const style = `left:${left}px;top:${top}px;font-size:${fontSize}px;font-family:${fontFamily(o)};` + (width ? `--fx-w:${width}px;` : "");
       let idAttr = "";
@@ -10449,13 +10720,15 @@ ${customStyles}
     }
     return html;
   }
-  function renderReflow(ir, page, headingIds) {
+  function renderReflow(ir, page, headingIds, ctx) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     let html = "";
     let openList = false;
     let hCursor = 0;
     for (const o of pageObjects(ir, page)) {
-      const role = ((_a = o.semantic) == null ? void 0 : _a.role) || (o.type === "image" ? "image" : "paragraph");
+      const inferredLevel = ctx.inferred.get(o.id);
+      const declared = (_a = o.semantic) == null ? void 0 : _a.role;
+      const role = o.type === "image" ? "image" : inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
       const text = objText(o);
       if (role === "list-item") {
         if (!openList) {
@@ -10478,7 +10751,7 @@ ${customStyles}
       }
       if (!text.trim()) continue;
       if (role === "heading") {
-        const level = Math.min(6, Math.max(1, num((_h = o.semantic) == null ? void 0 : _h.level, 2)));
+        const level = Math.min(6, Math.max(1, num((_h = o.semantic) == null ? void 0 : _h.level, inferredLevel != null ? inferredLevel : 2)));
         const hid = headingIds[hCursor++];
         html += `<h${level}${hid ? ` id="fx-rh-${hid}"` : ""}>${esc(text)}</h${level}>`;
       } else if (o.type === "link") {
@@ -10514,6 +10787,7 @@ ${customStyles}
     <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
   </section>`;
   }
+  var PDFJS_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
   var CONFORMANCE = [
     "WCAG 2.1 Level A",
     "WCAG 2.1 Level AA",
@@ -10584,6 +10858,7 @@ ${customStyles}
     const showThumbs = options.thumbnails !== false;
     const initialView = options.view === "reflow" ? "reflow" : "fidelity";
     const ctx = newDocCtx();
+    if (options.inferHeadings !== false) ctx.inferred = inferHeadingLevels(ir);
     let thumbs = "";
     let body = "";
     let nav = "";
@@ -10600,7 +10875,7 @@ ${customStyles}
       }
       body += `
     <section class="fx-page" id="fx-page-${index + 1}" role="region" aria-label="${esc(label)}"
-      data-page="${index + 1}" style="--pw:${w}px;--ph:${h}px">
+      data-page="${index + 1}" data-raster="${page.background ? "1" : "0"}" style="--pw:${w}px;--ph:${h}px">
       <div class="fx-canvas">
         ${page.background ? `<img class="fx-raster" src="${esc(page.background)}" alt="" aria-hidden="true" width="${w}" height="${h}">` : ""}
         <div class="fx-textlayer" aria-label="${esc(label)} text">${renderTextLayer(ir, page, ctx, index + 1)}</div>
@@ -10608,7 +10883,8 @@ ${customStyles}
       <div class="fx-reflow">${renderReflow(
         ir,
         page,
-        ctx.outline.filter((e) => e.page === index + 1).map((e) => e.i)
+        ctx.outline.filter((e) => e.page === index + 1).map((e) => e.i),
+        ctx
       )}</div>
       <p class="fx-pagefoot" aria-hidden="true">${esc(label)}</p>
     </section>`;
@@ -10624,6 +10900,8 @@ ${customStyles}
       title,
       lang,
       qaEndpoint: options.qaEndpoint || null,
+      aiEndpoint: options.aiEndpoint === void 0 ? "https://itavtools.lovable.app/api/public/docaccess/ask" : options.aiEndpoint || null,
+      knowledge: options.knowledge || options.documentContext || options.siteContext || null,
       feedbackEndpoint: options.feedbackEndpoint || null,
       feedbackEmail: options.feedbackEmail || null,
       originalUrl: options.originalUrl || null,
@@ -10639,86 +10917,124 @@ ${customStyles}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <style>
-:root{--chrome:#323639;--chrome-2:#3d4245;--stage:#525659;--ink:#f1f3f4;--accent:#2f7ac9;--zoom:1}
+:root{--chrome:#1f2124;--chrome-2:#2b2e33;--chrome-3:#383c42;--stage:#f2f3f5;--ink:#eceff3;
+  --muted:#a7aeb8;--accent:#d0021b;--accent-2:#1473e6;--line:#3a3e45;--zoom:1;--radius:10px}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
-body{background:var(--stage);color:#111;font-family:'Segoe UI',system-ui,sans-serif}
-.fx-skip{position:absolute;left:-9999px;top:0;z-index:50;background:#ffed4a;color:#000;padding:.6rem 1rem;font-weight:700}
+body{background:var(--stage);color:#16181a;
+  font-family:'Segoe UI Variable Text','Segoe UI',Inter,system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.fx-skip{position:absolute;left:-9999px;top:0;z-index:80;background:#ffed4a;color:#000;padding:.6rem 1rem;font-weight:700;border-radius:6px}
 .fx-skip:focus{left:.5rem;top:.5rem}
-header.fx-bar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;
-  background:var(--chrome);color:var(--ink);padding:.45rem .75rem;border-bottom:1px solid #000}
-.fx-bar h1{font-size:.95rem;font-weight:600;margin:0 1rem 0 0;max-width:26rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fx-bar button,.fx-bar select,.fx-bar input{background:var(--chrome-2);color:var(--ink);border:1px solid #1c1f21;
-  border-radius:4px;padding:.3rem .6rem;font-size:.82rem;cursor:pointer}
-.fx-bar input{cursor:text;min-width:11rem}
-.fx-bar button:hover{background:#4b5155}
-.fx-bar button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+header.fx-bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;
+  background:linear-gradient(180deg,#26292e,#1f2124);color:var(--ink);padding:.5rem .8rem;
+  border-bottom:1px solid #101215;box-shadow:0 1px 0 rgba(255,255,255,.04),0 6px 18px rgba(0,0,0,.18)}
+.fx-brand{display:flex;align-items:center;gap:.55rem;margin-right:.9rem;min-width:0}
+.fx-brand-mark{width:26px;height:26px;border-radius:7px;background:var(--accent);color:#fff;flex:none;
+  display:grid;place-items:center;font-weight:800;font-size:.72rem;letter-spacing:.02em}
+.fx-bar h1{font-size:.9rem;font-weight:600;margin:0;max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fx-group{display:flex;align-items:center;gap:.2rem;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.06);border-radius:999px;padding:.15rem .25rem}
+.fx-bar button,.fx-bar select,.fx-bar input{background:transparent;color:var(--ink);border:0;
+  border-radius:999px;padding:.34rem .7rem;font-size:.82rem;cursor:pointer;font:inherit;font-size:.82rem;line-height:1.2}
+.fx-bar select{background:var(--chrome-3);padding:.3rem .5rem;border-radius:8px}
+.fx-bar input{cursor:text;min-width:13rem;background:rgba(255,255,255,.08);border-radius:999px;padding:.4rem .85rem}
+.fx-bar input::placeholder{color:var(--muted)}
+.fx-bar button:hover{background:rgba(255,255,255,.12)}
+.fx-bar button[aria-pressed=true]{background:var(--accent-2);color:#fff}
+.fx-bar .fx-primary-btn{background:var(--accent);color:#fff;font-weight:600}
+.fx-bar .fx-primary-btn:hover{background:#b70117}
+.fx-bar-link{display:inline-flex}
+.fx-spacer{flex:1 1 auto}
+#fx-zoom-label{min-width:3.2rem;text-align:center;font-size:.78rem;color:var(--muted)}
+#fx-search-count{font-size:.76rem;color:var(--muted);white-space:nowrap;padding:0 .55rem 0 .2rem}
+.fx-bar .fx-primary-btn{margin-left:.4rem}
 .fx-bar :focus-visible,.fx-thumb:focus-visible,.fx-textlayer :focus-visible{outline:3px solid #ffd400;outline-offset:2px}
-.fx-shell{display:flex;min-height:calc(100vh - 3rem)}
-.fx-rail{width:11rem;flex:none;background:#2b2f31;overflow:auto;max-height:calc(100vh - 3rem);position:sticky;top:3rem}
-.fx-rail ul{list-style:none;margin:0;padding:.6rem;display:grid;gap:.6rem}
-.fx-thumb{width:100%;background:none;border:2px solid transparent;padding:0;cursor:pointer;display:block}
-.fx-thumb img{width:100%;display:block;background:#fff}
-.fx-thumb-blank{display:block;width:100%;padding-top:129%;background:#fff}
-.fx-thumb-num{display:block;color:#c9ced1;font-size:.72rem;padding:.15rem 0}
-.fx-thumb[aria-current=true]{border-color:var(--accent)}
-main.fx-stage{flex:1;padding:1.5rem;display:grid;justify-items:center;gap:1.5rem}
+.fx-shell{display:flex;min-height:calc(100vh - 3.1rem)}
+.fx-rail{width:12rem;flex:none;background:#e7e9ec;border-right:1px solid #d3d7dc;overflow:auto;
+  max-height:calc(100vh - 3.1rem);position:sticky;top:3.1rem}
+.fx-rail ul{list-style:none;margin:0;padding:.7rem;display:grid;gap:.7rem}
+.fx-thumb{width:100%;background:none;border:0;padding:0;cursor:pointer;display:block}
+.fx-thumb img{width:100%;display:block;background:#fff;border:1px solid #cfd4da;border-radius:6px;
+  box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.fx-thumb-blank{display:block;width:100%;padding-top:129%;background:#fff;border:1px solid #cfd4da;border-radius:6px}
+.fx-thumb-num{display:block;color:#5a6068;font-size:.72rem;padding:.2rem 0;text-align:center}
+.fx-thumb[aria-current=true] img,.fx-thumb[aria-current=true] .fx-thumb-blank{border-color:var(--accent-2);
+  box-shadow:0 0 0 2px rgba(20,115,230,.35)}
+main.fx-stage{flex:1;padding:1.75rem;display:grid;justify-items:center;gap:1.75rem;background:var(--stage)}
 .fx-page{width:calc(var(--pw) * var(--zoom));}
-.fx-canvas{position:relative;width:var(--pw);height:var(--ph);background:#fff;
-  box-shadow:0 1px 4px rgba(0,0,0,.55),0 10px 24px rgba(0,0,0,.35);
+.fx-canvas{position:relative;width:var(--pw);height:var(--ph);background:#fff;border-radius:2px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.08),0 12px 28px rgba(15,20,30,.16);
   transform:scale(var(--zoom));transform-origin:top left;overflow:hidden}
 .fx-page{height:calc(var(--ph) * var(--zoom))}
 .fx-raster{position:absolute;inset:0;width:100%;height:100%;display:block}
 .fx-textlayer{position:absolute;inset:0}
 .fx-text{position:absolute;margin:0;white-space:pre;transform-origin:left top;color:transparent;
   line-height:1;font-weight:400;cursor:text}
-.fx-text::selection{background:rgba(47,122,201,.4)}
+.fx-text::selection{background:rgba(20,115,230,.35)}
+
+/* No rasterised background available (text-only extraction): show the text layer
+   itself so the fidelity view is never a blank page. */
+.fx-page[data-raster="0"] .fx-text{color:#111}
+.fx-page[data-raster="0"] .fx-link{color:#0b4f9e;border-bottom-color:currentColor}
 .fx-img{position:absolute;object-fit:contain}
 .fx-link{position:absolute;display:block;color:transparent;overflow:hidden;border-bottom:1px solid transparent}
-.fx-link:hover,.fx-link:focus{border-bottom-color:var(--accent);background:rgba(47,122,201,.12)}
+.fx-link:hover,.fx-link:focus{border-bottom-color:var(--accent-2);background:rgba(20,115,230,.12)}
 .fx-reflow{display:none}
-.fx-pagefoot{color:#c9ced1;font-size:.75rem;text-align:center;margin:.4rem 0 0}
+.fx-pagefoot{color:#6b727b;font-size:.75rem;text-align:center;margin:.45rem 0 0}
 html[data-view=reflow] .fx-canvas{display:none}
 html[data-view=reflow] .fx-page{width:min(52rem,100%);height:auto}
-html[data-view=reflow] .fx-reflow{display:block;background:#fff;padding:2.5rem 3rem;border-radius:4px;
-  box-shadow:0 6px 20px rgba(0,0,0,.35);line-height:1.65;font-size:1.02rem;color:#16181a}
-html[data-view=reflow] .fx-reflow h1,html[data-view=reflow] .fx-reflow h2,html[data-view=reflow] .fx-reflow h3{line-height:1.25}
+html[data-view=reflow] .fx-reflow{display:block;background:#fff;padding:2.75rem 3.25rem;border-radius:12px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 10px 30px rgba(15,20,30,.12);line-height:1.7;font-size:1.05rem;color:#16181a}
+html[data-view=reflow] .fx-reflow h1,html[data-view=reflow] .fx-reflow h2,html[data-view=reflow] .fx-reflow h3{line-height:1.25;letter-spacing:-.01em}
 html[data-view=reflow] .fx-reflow img{max-width:100%;height:auto}
-html.fx-contrast body,html.fx-contrast .fx-reflow{background:#000;color:#fff}
+html.fx-contrast body,html.fx-contrast .fx-reflow,html.fx-contrast main.fx-stage{background:#000;color:#fff}
 html.fx-contrast .fx-raster{filter:invert(1) hue-rotate(180deg)}
 html.fx-contrast .fx-reflow a{color:#ffd400}
-.fx-panel{background:#fff;border-radius:6px;padding:1.25rem 1.5rem;width:min(60rem,100%);color:#16181a}
+.fx-panel{background:#fff;border-radius:12px;padding:1.4rem 1.6rem;width:min(60rem,100%);color:#16181a;
+  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 6px 18px rgba(15,20,30,.08)}
 .fx-table{border-collapse:collapse;width:100%;font-size:.88rem}
 .fx-table caption{text-align:left;font-weight:600;padding-bottom:.4rem}
-.fx-table th,.fx-table td{border:1px solid #d5d9dd;padding:.4rem .55rem;text-align:left;vertical-align:top}
-.fx-table thead th{background:#eef1f4}
-.fx-pre{background:#f5f7f9;padding:1rem;overflow:auto;max-height:22rem;font-size:.8rem}
+.fx-table th,.fx-table td{border:1px solid #e2e6ea;padding:.45rem .6rem;text-align:left;vertical-align:top}
+.fx-table thead th{background:#f4f6f8}
+.fx-pre{background:#f5f7f9;padding:1rem;border-radius:8px;overflow:auto;max-height:22rem;font-size:.8rem}
 .fx-status{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-mark.fx-hit{background:#ffd400;color:#000}
+mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-dl{display:grid;gap:.5rem;margin:0}
 .fx-dl>div{display:grid;grid-template-columns:15rem 1fr;gap:.75rem}
 .fx-dl dt{font-weight:600;margin:0}
 .fx-dl dd{margin:0}
 .fx-cols{columns:2;gap:2rem;margin:.4rem 0 1rem;padding-left:1.2rem}
-.fx-note{font-size:.85rem;color:#444}
+.fx-note{font-size:.85rem;color:#5a6068}
 .fx-longdesc{margin-top:.4rem;font-size:.92rem}
 .fx-longdesc summary{cursor:pointer;font-weight:600}
-.fx-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:none}
+.fx-backdrop{position:fixed;inset:0;background:rgba(10,12,15,.55);backdrop-filter:blur(2px);z-index:60;display:none}
 .fx-backdrop[data-open=true]{display:block}
 .fx-dialog{position:fixed;z-index:61;top:50%;left:50%;transform:translate(-50%,-50%);width:min(46rem,94vw);
-  max-height:86vh;overflow:auto;background:#fff;color:#16181a;border-radius:8px;padding:1.25rem 1.5rem;
-  box-shadow:0 18px 50px rgba(0,0,0,.5);display:none}
+  max-height:86vh;overflow:auto;background:#fff;color:#16181a;border-radius:14px;padding:1.4rem 1.6rem;
+  box-shadow:0 24px 60px rgba(0,0,0,.4);display:none}
 .fx-dialog[data-open=true]{display:block}
-.fx-dialog h2{margin-top:0}
-.fx-dialog-close{position:absolute;top:.6rem;right:.6rem;background:#eef1f4;border:1px solid #ccd2d8;
-  border-radius:4px;padding:.25rem .6rem;cursor:pointer;font-size:1rem}
+.fx-dialog h2{margin-top:0;letter-spacing:-.01em}
+.fx-dialog-close{position:absolute;top:.7rem;right:.7rem;background:#f0f2f5;border:1px solid #dde1e6;
+  border-radius:999px;width:2rem;height:2rem;cursor:pointer;font-size:.95rem}
+.fx-switch{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:0 .25rem}
+.fx-switch input{appearance:none;-webkit-appearance:none;width:28px;height:15px;border-radius:999px;
+  background:#4b5563;position:relative;cursor:pointer;transition:background .15s;margin:0;flex:0 0 28px}
+.fx-switch input::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
+  background:#fff;transition:transform .15s}
+.fx-switch input:checked{background:var(--accent-2)}
+.fx-switch input:checked::after{transform:translateX(13px)}
+.fx-switch label{cursor:pointer;font-size:.76rem;white-space:nowrap}
+.fx-original{max-width:1100px;margin:0 auto 24px;padding:16px}
+.fx-original iframe{width:100%;height:82vh;border:0;background:#fff;border-radius:10px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.08),0 10px 30px rgba(15,20,30,.14)}
 .fx-outline{list-style:none;margin:0;padding:0}
 .fx-outline li{margin:0}
 .fx-ol-item{display:flex;width:100%;gap:.75rem;justify-content:space-between;align-items:baseline;
-  background:none;border:0;border-left:3px solid transparent;padding:.35rem .5rem;text-align:left;
-  cursor:pointer;font-size:.95rem;color:#16181a}
+  background:none;border:0;border-left:3px solid transparent;padding:.4rem .55rem;text-align:left;
+  cursor:pointer;font-size:.95rem;color:#16181a;border-radius:0 8px 8px 0}
 .fx-ol-item:hover{background:#eef4fb}
-.fx-ol-item[aria-current=true]{background:#e3eefb;border-left-color:var(--accent);font-weight:600}
+.fx-ol-item[aria-current=true]{background:#e3eefb;border-left-color:var(--accent-2);font-weight:600}
 .fx-ol-p{color:#5a6068;font-size:.8rem;flex:none}
 .fx-ol-l2 .fx-ol-item{padding-left:1.5rem}
 .fx-ol-l3 .fx-ol-item{padding-left:2.5rem}
@@ -10726,61 +11042,118 @@ mark.fx-hit{background:#ffd400;color:#000}
 .fx-ol-empty{padding:.5rem;color:#5a6068}
 .fx-field{display:grid;gap:.35rem;margin-bottom:.75rem}
 .fx-field label{font-weight:600}
-.fx-field input,.fx-field textarea,.fx-field select{padding:.5rem;border:1px solid #b9c0c7;border-radius:4px;
+.fx-field input,.fx-field textarea,.fx-field select{padding:.6rem .7rem;border:1px solid #ccd2d8;border-radius:8px;
   font:inherit;width:100%}
-.fx-primary{background:var(--accent);color:#fff;border:0;border-radius:4px;padding:.5rem 1rem;cursor:pointer;font:inherit}
-.fx-answer{background:#f5f7f9;border-left:3px solid var(--accent);padding:.75rem 1rem;margin-top:1rem;white-space:pre-wrap}
+.fx-primary{background:var(--accent-2);color:#fff;border:0;border-radius:8px;padding:.55rem 1.1rem;cursor:pointer;font:inherit;font-weight:600}
+.fx-primary:hover{background:#0f5fc4}
+.fx-answer{background:#f5f8fc;border-left:3px solid var(--accent-2);border-radius:0 8px 8px 0;
+  padding:.85rem 1.05rem;margin-top:1rem;white-space:pre-wrap;line-height:1.6}
 .fx-qa-cite{font-size:.82rem;color:#5a6068;margin-top:.5rem}
 .fx-lang-note{font-size:.82rem;color:#5a6068}
 #google_translate_element{margin-top:.5rem}
+/* ---- RAG search drawer ---- */
+.fx-drawer{position:fixed;top:var(--barh,3.1rem);right:0;bottom:0;width:min(27rem,92vw);background:#fff;z-index:25;
+  border-left:1px solid #d7dbe0;box-shadow:-12px 0 34px rgba(15,20,30,.14);display:none;
+  grid-template-rows:auto 1fr;overflow:hidden}
+.fx-drawer[data-open=true]{display:grid}
+.fx-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+  padding:.85rem 1rem;border-bottom:1px solid #e6e9ed}
+.fx-drawer-head h2{margin:0;font-size:1rem}
+.fx-drawer-body{overflow:auto;padding:.6rem .75rem 2rem}
+.fx-res{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
+.fx-res button{width:100%;text-align:left;background:#f7f9fb;border:1px solid #e3e7ec;border-radius:10px;
+  padding:.65rem .75rem;cursor:pointer;font:inherit;display:grid;gap:.25rem}
+.fx-res button:hover{background:#eef4fb;border-color:#c3d7f2}
+.fx-res-meta{display:flex;justify-content:space-between;font-size:.74rem;color:#5a6068;text-transform:uppercase;letter-spacing:.04em}
+.fx-res-text{font-size:.88rem;line-height:1.45;color:#22262b}
+.fx-res-empty{color:#5a6068;font-size:.9rem;padding:.5rem}
+.fx-ai-card{background:linear-gradient(180deg,#f2f7ff,#ffffff);border:1px solid #d5e3f7;border-radius:12px;
+  padding:.8rem .9rem;margin-bottom:.75rem}
+.fx-ai-card h3{margin:0 0 .35rem;font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:#1473e6}
+.fx-ai-text{font-size:.92rem;line-height:1.55;white-space:pre-wrap;margin:0}
+.fx-chip{display:inline-block;background:#e8f0fd;color:#0f5fc4;border-radius:999px;padding:.12rem .55rem;
+  font-size:.72rem;font-weight:600;margin:.3rem .3rem 0 0}
 @media print{
-  header.fx-bar,.fx-rail,.fx-panel{display:none!important}
+  header.fx-bar,.fx-rail,.fx-panel,.fx-drawer{display:none!important}
   body{background:#fff}
   .fx-canvas{box-shadow:none;transform:none}
   .fx-page{page-break-after:always;width:auto;height:auto}
   @page{margin:0}
 }
+@media (max-width:900px){.fx-rail{display:none}main.fx-stage{padding:1rem}}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
 </style>
 </head>
 <body>
 <a class="fx-skip" href="#fx-content">Skip to document content</a>
 <a class="fx-skip" href="#fx-a11y">Skip to accessibility report</a>
 <header class="fx-bar" role="banner">
-  <h1>${esc(title)}</h1>
-  <nav aria-label="Page navigation" style="display:contents">
-    <button type="button" id="fx-prev" aria-label="Previous page">&#8249; Prev</button>
+  <div class="fx-brand">
+    <span class="fx-brand-mark" aria-hidden="true">DA</span>
+    <h1>${esc(title)}</h1>
+  </div>
+  <nav class="fx-group" aria-label="Page navigation">
+    <button type="button" id="fx-prev" aria-label="Previous page">&#8249;</button>
     <label class="fx-status" for="fx-page-select">Jump to page</label>
     <select id="fx-page-select">${nav}</select>
-    <button type="button" id="fx-next" aria-label="Next page">Next &#8250;</button>
+    <button type="button" id="fx-next" aria-label="Next page">&#8250;</button>
   </nav>
-  <button type="button" id="fx-zoom-out" aria-label="Zoom out">&#8722;</button>
-  <span id="fx-zoom-label" aria-live="polite">100%</span>
-  <button type="button" id="fx-zoom-in" aria-label="Zoom in">+</button>
-  <button type="button" id="fx-fit">Fit width</button>
-  <button type="button" id="fx-view-fidelity" aria-pressed="${initialView === "fidelity"}">PDF view</button>
-  <button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow view</button>
-  <button type="button" id="fx-contrast" aria-pressed="false">High contrast</button>
-  <button type="button" id="fx-print">Print</button>
-  <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
-  <button type="button" id="fx-qa-open" aria-haspopup="dialog">Ask a question</button>
-  ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
-  <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
-  <button type="button" id="fx-fb-open" aria-haspopup="dialog">Report an issue</button>
-  ${options.airaUrl ? `<a class="fx-bar-link" href="${esc(options.airaUrl)}" target="_blank" rel="noopener"><button type="button">Live visual assistance</button></a>` : ""}
-  ${options.originalUrl ? `<a class="fx-bar-link" href="${esc(options.originalUrl)}" target="_blank" rel="noopener"><button type="button">Original document</button></a>` : ""}
-  <label class="fx-status" for="fx-search">Search document</label>
-  <input id="fx-search" type="search" placeholder="Search document\u2026">
-  <span id="fx-search-count" aria-live="polite"></span>
+  <div class="fx-group">
+    <button type="button" id="fx-zoom-out" aria-label="Zoom out">&#8722;</button>
+    <span id="fx-zoom-label" aria-live="polite">100%</span>
+    <button type="button" id="fx-zoom-in" aria-label="Zoom in">+</button>
+    <button type="button" id="fx-fit">Fit width</button>
+  </div>
+  <div class="fx-group">
+    <button type="button" id="fx-view-fidelity" aria-pressed="${initialView === "fidelity"}">PDF view</button>
+    <button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow</button>
+    <button type="button" id="fx-contrast" aria-pressed="false">Contrast</button>
+  </div>
+  ${options.originalPdfSrc ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle"><label for="fx-pdf-toggle">Original PDF</label></span>` : ""}
+  <div class="fx-group">
+    <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
+    <button type="button" id="fx-print">Print</button>
+    ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
+    <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
+    <button type="button" id="fx-fb-open" aria-haspopup="dialog">Report</button>
+    ${options.airaUrl ? `<a class="fx-bar-link" href="${esc(options.airaUrl)}" target="_blank" rel="noopener"><button type="button">Live help</button></a>` : ""}
+    ${options.originalUrl ? `<a class="fx-bar-link" href="${esc(options.originalUrl)}" target="_blank" rel="noopener"><button type="button">Original</button></a>` : ""}
+  </div>
+  <span class="fx-spacer"></span>
+  <div class="fx-group">
+    <label class="fx-status" for="fx-search">Search this document</label>
+    <input id="fx-search" type="search" placeholder="Search this document\u2026" aria-describedby="fx-search-count">
+    <span id="fx-search-count" aria-live="polite"></span>
+  </div>
+  <button type="button" class="fx-primary-btn" id="fx-qa-open" aria-haspopup="dialog">Ask AI</button>
 </header>
+<aside class="fx-drawer" id="fx-drawer" data-open="false" aria-label="Search results">
+  <div class="fx-drawer-head">
+    <h2 id="fx-drawer-h">Search results</h2>
+    <button type="button" id="fx-drawer-close" class="fx-dialog-close" style="position:static" aria-label="Close search results">&#10005;</button>
+  </div>
+  <div class="fx-drawer-body">
+    <div id="fx-ai-summary" hidden></div>
+    <ul class="fx-res" id="fx-res"></ul>
+  </div>
+</aside>
+
 <div class="fx-shell">
   ${showThumbs ? `<nav class="fx-rail" aria-label="Page thumbnails"><ul>${thumbs}</ul></nav>` : ""}
   <main class="fx-stage" id="fx-content" role="main" tabindex="-1">
+    ${options.originalPdfSrc ? `<section id="fx-original" class="fx-original" aria-label="Original PDF" hidden>
+      <p class="fx-status" id="fx-op-status" aria-live="polite">The original PDF is rendered here with pdf.js.</p>
+      <div id="fx-op-pages" role="group" aria-label="Original PDF pages"></div>
+      <p class="fx-note">This is the unmodified original PDF. Turn the \u201COriginal PDF\u201D switch off to return to the accessible version.</p>
+    </section>` : ""}
+    <div id="fx-accessible">
     ${body}
     ${infoPanel(options, pages.length, ctx.outline.length)}
     ${auditPanel(options.audit, options.remediations)}
     ${conformancePanel()}
     ${tagPanel(options.tags)}
+    </div>
   </main>
 </div>
 
@@ -10906,13 +11279,98 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     if(e.key==='+'||e.key==='='){ setZoom(zoom+.15); }
     if(e.key==='-'){ setZoom(zoom-.15); }
   });
+  // ---- retrieval index (RAG) ------------------------------------------
+  var passages=null;
+  function tokens(s){ return String(s||'').toLowerCase().split(/[^a-z0-9]+/).filter(function(w){
+    return w.length>2 && !/^(the|and|for|with|that|this|from|are|was|were|have|has|its|our|their|you|your)$/.test(w); }); }
+  function buildPassages(){
+    if(passages) return passages;
+    var out=[];
+    var chunks=(ragData&&(ragData.chunks||ragData.documents||ragData.passages))||[];
+    if(Array.isArray(chunks)) chunks.forEach(function(c,i){
+      var t=(typeof c==='string')?c:(c.text||c.content||c.pageContent||'');
+      if(!t||!String(t).trim()) return;
+      var meta=(c&&c.metadata)||c||{};
+      var pnum=Number(meta.page||meta.pageNumber||meta.pageIndex||0)||0;
+      if(!pnum){ var m=/page[_ -]?(\\d+)/i.exec(String((c&&c.id)||'')); if(m) pnum=Number(m[1]); }
+      out.push({id:'c'+i,p:pnum,t:String(t),src:'chunk'});
+    });
+    // Always add the finer-grained text index so results point at a paragraph,
+    // not just the page-sized chunk.
+    (index||[]).forEach(function(e,i){
+      if(!e||!e.t||e.t.length<(out.length?40:20)) return;
+      out.push({id:'i'+i,p:Number(e.p)||0,t:String(e.t),src:'text'}); });
+    // BM25-style field stats
+    var df={}, total=0;
+    out.forEach(function(pg){ pg.tok=tokens(pg.t); total+=pg.tok.length;
+      var seen={}; pg.tok.forEach(function(w){ if(!seen[w]){ seen[w]=1; df[w]=(df[w]||0)+1; } }); });
+    passages={items:out,df:df,avg:out.length?total/out.length:1,n:out.length||1};
+    return passages;
+  }
+  function retrieve(query,limit){
+    var ix=buildPassages(), qt=tokens(query); if(!qt.length||!ix.items.length) return [];
+    var k1=1.4,b=.72;
+    var scored=ix.items.map(function(pg){
+      var tf={}; pg.tok.forEach(function(w){ tf[w]=(tf[w]||0)+1; });
+      var s=0;
+      qt.forEach(function(w){
+        var f=tf[w]||0;
+        if(!f){ if(pg.t.toLowerCase().indexOf(w)>=0) s+=0.4; return; }
+        var idf=Math.log(1+(ix.n-(ix.df[w]||0)+.5)/((ix.df[w]||0)+.5));
+        s+=idf*(f*(k1+1))/(f+k1*(1-b+b*(pg.tok.length/(ix.avg||1))));
+      });
+      if(pg.t.toLowerCase().indexOf(query.toLowerCase())>=0) s+=2;
+      return {pg:pg,s:s}; }).filter(function(x){ return x.s>0; })
+      .sort(function(a,b2){ return b2.s-a.s; }).slice(0,limit||8);
+    return scored;
+  }
+  function snippet(text,query){
+    var t=String(text).replace(/\\s+/g,' ').trim();
+    var i=t.toLowerCase().indexOf(String(query).toLowerCase().split(/\\s+/)[0]||'');
+    if(i<0) i=0;
+    var start=Math.max(0,i-90);
+    return (start?'\u2026':'')+t.slice(start,start+260)+(t.length>start+260?'\u2026':'');
+  }
+
+  // ---- search UI --------------------------------------------------------
   var search=document.getElementById('fx-search'), count=document.getElementById('fx-search-count'), timer;
-  search.addEventListener('input',function(){ clearTimeout(timer); timer=setTimeout(run,220); });
+  var drawer=document.getElementById('fx-drawer'), resList=document.getElementById('fx-res');
+  var drawerClose=document.getElementById('fx-drawer-close');
+  if(drawerClose) drawerClose.onclick=function(){ drawer.setAttribute('data-open','false'); };
+  function syncBar(){ var h=document.querySelector('header.fx-bar');
+    if(h) root.style.setProperty('--barh',h.offsetHeight+'px'); }
+  syncBar(); window.addEventListener('resize',syncBar);
+  function openDrawer(){ syncBar(); if(drawer) drawer.setAttribute('data-open','true'); }
+  function jumpToText(page,text){
+    goto(page||1);
+    var needle=String(text||'').replace(/\\s+/g,' ').trim().slice(0,40).toLowerCase();
+    if(!needle) return;
+    var sels='.fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3';
+    var el=[].slice.call(document.querySelectorAll(sels)).filter(function(n){
+      return n.textContent.replace(/\\s+/g,' ').toLowerCase().indexOf(needle.slice(0,24))>=0; })[0];
+    if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  function renderResults(q,results){
+    if(!resList) return;
+    resList.innerHTML='';
+    if(!results.length){
+      var li=document.createElement('li'); li.className='fx-res-empty';
+      li.textContent='No passage in this document matched \u201C'+q+'\u201D.'; resList.appendChild(li); return; }
+    results.forEach(function(r){
+      var li=document.createElement('li'), b=document.createElement('button'); b.type='button';
+      var meta=document.createElement('span'); meta.className='fx-res-meta';
+      meta.innerHTML='<span>Page '+(r.pg.p||'\u2014')+'</span><span>relevance '+r.s.toFixed(1)+'</span>';
+      var txt=document.createElement('span'); txt.className='fx-res-text'; txt.textContent=snippet(r.pg.t,q);
+      b.appendChild(meta); b.appendChild(txt);
+      b.onclick=function(){ jumpToText(r.pg.p,r.pg.t); };
+      li.appendChild(b); resList.appendChild(li); });
+  }
+  if(search) search.addEventListener('input',function(){ clearTimeout(timer); timer=setTimeout(run,220); });
   function run(){
-    var q=search.value.trim().toLowerCase();
+    var raw=search.value.trim(), q=raw.toLowerCase();
     [].forEach.call(document.querySelectorAll('mark.fx-hit'),function(m){
       var p=m.parentNode; p.replaceChild(document.createTextNode(m.textContent),m); p.normalize(); });
-    if(!q){ count.textContent=''; return; }
+    if(!q){ count.textContent=''; if(drawer) drawer.setAttribute('data-open','false'); return; }
     var hits=0, first=null;
     [].forEach.call(document.querySelectorAll('.fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3'),function(el){
       var t=el.textContent; var i=t.toLowerCase().indexOf(q); if(i<0) return; hits++;
@@ -10920,9 +11378,13 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       el.textContent=''; el.appendChild(document.createTextNode(t.slice(0,i))); el.appendChild(mark);
       el.appendChild(document.createTextNode(t.slice(i+q.length)));
       if(!first) first=el; });
-    count.textContent=hits+' match'+(hits===1?'':'es'); say(hits+' matches for '+q);
+    var results=retrieve(raw,10);
+    renderResults(raw,results); openDrawer();
+    count.textContent=hits+' match'+(hits===1?'':'es');
+    say(hits+' matches and '+results.length+' relevant passages for '+raw);
     if(first) first.scrollIntoView({block:'center'});
   }
+
   if('IntersectionObserver' in window){
     var io=new IntersectionObserver(function(entries){
       entries.forEach(function(en){ if(en.isIntersecting){ current=Number(en.target.dataset.page)||current;
@@ -10942,6 +11404,59 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       el.style.transform='scaleX('+(target/actual).toFixed(4)+')';
     });
   });
+  // ---- original PDF switch -------------------------------------------
+  var pdfToggle=document.getElementById('fx-pdf-toggle');
+  if(pdfToggle){
+    var origPane=document.getElementById('fx-original'), accPane=document.getElementById('fx-accessible');
+    var pdfSrc=${JSON.stringify(options.originalPdfSrc || "")}, pdfJsUrl=${JSON.stringify(options.pdfJsUrl || PDFJS_URL)};
+    var pdfLoaded=false, pdfLoading=false;
+    function opStatus(m){ var s=document.getElementById('fx-op-status'); if(s) s.textContent=m; }
+    function toBytes(src){
+      var i=src.indexOf('base64,');
+      if(i<0) return null;
+      var bin=atob(src.slice(i+7)), out=new Uint8Array(bin.length);
+      for(var k=0;k<bin.length;k++) out[k]=bin.charCodeAt(k);
+      return out;
+    }
+    function renderOriginal(){
+      if(pdfLoaded||pdfLoading) return; pdfLoading=true;
+      opStatus('Rendering the original PDF\u2026');
+      import(pdfJsUrl).then(function(pdfjs){
+        pdfjs.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.mjs$/,'pdf.worker$1.mjs');
+        var bytes=toBytes(pdfSrc);
+        var task=bytes?pdfjs.getDocument({data:bytes}):pdfjs.getDocument(pdfSrc);
+        return task.promise;
+      }).then(function(doc){
+        var host=document.getElementById('fx-op-pages'); if(host) host.textContent='';
+        var chain=Promise.resolve();
+        for(var n=1;n<=doc.numPages;n++)(function(n){
+          chain=chain.then(function(){ return doc.getPage(n); }).then(function(page){
+            var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/page.getViewport({scale:1}).width);
+            var vp=page.getViewport({scale:scale*(window.devicePixelRatio||1)});
+            var wrap=document.createElement('div'); wrap.className='fx-op-page';
+            var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
+            var cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height;
+            cv.setAttribute('role','img'); cv.setAttribute('aria-label','Original PDF page '+n);
+            wrap.appendChild(lab); wrap.appendChild(cv); if(host) host.appendChild(wrap);
+            return page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+          });
+        })(n);
+        return chain.then(function(){ pdfLoaded=true; pdfLoading=false;
+          opStatus('Original PDF \u2014 '+doc.numPages+' page'+(doc.numPages===1?'':'s')+' rendered with pdf.js.'); });
+      }).catch(function(err){
+        pdfLoading=false;
+        opStatus('The original PDF could not be rendered here ('+(err&&err.message||err)+'). Use Download to open the file.');
+      });
+    }
+    pdfToggle.addEventListener('change',function(){
+      var on=pdfToggle.checked;
+      if(origPane) origPane.hidden=!on;
+      if(accPane) accPane.hidden=on;
+      if(on) renderOriginal();
+      say(on?'Showing the original PDF':'Showing the accessible version');
+    });
+  }
+
   // ---- embedded data -------------------------------------------------
   function readJson(id){ var el=document.getElementById(id); if(!el) return null;
     try{ return JSON.parse(el.textContent||'null'); }catch(e){ return null; } }
@@ -11020,40 +11535,61 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     };
   }
 
-  // ---- AI document Q&A -------------------------------------------------
+  // ---- AI document knowledge (RAG + assistant) --------------------------
   function docLanguage(){ return document.documentElement.lang||'en'; }
   function localAnswer(q){
-    var words=q.toLowerCase().split(/[^a-z0-9]+/).filter(function(w){ return w.length>3; });
-    if(!words.length) return null;
-    var scored=index.map(function(e){
-      var t=(e.t||'').toLowerCase(), s=0;
-      words.forEach(function(w){ if(t.indexOf(w)>=0) s++; });
-      return {e:e,s:s}; }).filter(function(x){ return x.s>0; })
-      .sort(function(a,b){ return b.s-a.s; }).slice(0,4);
-    if(!scored.length) return null;
-    return scored.map(function(x){ return 'Page '+x.e.p+': '+x.e.t; }).join('\\n\\n');
+    var r=retrieve(q,4);
+    if(!r.length) return null;
+    return r.map(function(x){ return 'Page '+(x.pg.p||'\u2014')+': '+snippet(x.pg.t,q); }).join('\\n\\n');
+  }
+  function showSources(container,results){
+    if(!results.length) return;
+    var p=document.createElement('p'); p.className='fx-qa-cite';
+    p.appendChild(document.createTextNode('Sources in this document: '));
+    var seen={};
+    results.filter(function(r){ var k=r.pg.p||0; if(seen[k]) return false; seen[k]=1; return true; }).forEach(function(r){
+      var b=document.createElement('button'); b.type='button'; b.className='fx-chip';
+      b.textContent='Page '+(r.pg.p||'\u2014');
+      b.onclick=function(){ jumpToText(r.pg.p,r.pg.t); closeDialog(); };
+      p.appendChild(b); });
+    container.appendChild(p);
   }
   var qaForm=document.getElementById('fx-qa-form'), qaOut=document.getElementById('fx-qa-answer');
   if(qaForm) qaForm.addEventListener('submit',function(e){
     e.preventDefault();
     var q=document.getElementById('fx-qa-input').value.trim(); if(!q) return;
-    qaOut.hidden=false; qaOut.textContent='Searching this document\u2026';
-    if(cfg.qaEndpoint){
-      fetch(cfg.qaEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({question:q,lang:docLanguage(),documentId:cfg.documentId,title:cfg.title})})
-        .then(function(r){ return r.json(); })
-        .then(function(d){ qaOut.textContent=d.answer||d.result||'No answer was returned.';
-          if(d.citations&&d.citations.length){ var c=document.createElement('p'); c.className='fx-qa-cite';
-            c.textContent='Sources: '+d.citations.join(', '); qaOut.appendChild(c); } })
-        .catch(function(){ var a=localAnswer(q);
-          qaOut.textContent=a?('The assistant is unavailable, so here are the closest passages:\\n\\n'+a)
-            :'The assistant is unavailable and no matching passage was found.'; });
-    } else {
+    qaOut.hidden=false; qaOut.textContent='Reading this document\u2026';
+    var top=retrieve(q,8);
+    var endpoint=cfg.qaEndpoint||cfg.aiEndpoint;
+    function fallback(prefix){
       var a=localAnswer(q);
-      qaOut.textContent=a?('Closest passages in this document:\\n\\n'+a)
-        :'No passage in this document matched that question.';
+      qaOut.textContent=a?(prefix+a):'No passage in this document matched that question.';
+      if(a) showSources(qaOut,top.slice(0,5));
+    }
+    if(endpoint){
+      // text/plain keeps this a simple request (no CORS preflight) so exported
+      // files work from disk, SharePoint or any other origin.
+      fetch(endpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},
+        body:JSON.stringify({question:q,lang:docLanguage(),documentId:cfg.documentId,title:cfg.title,
+          knowledge:cfg.knowledge||'',
+          passages:top.map(function(r){ return {page:r.pg.p,text:r.pg.t}; })})})
+        .then(function(r){ if(!r.ok) throw new Error('ai'); return r.json(); })
+        .then(function(d){
+          if(d&&d.error) throw new Error(d.error);
+          qaOut.textContent=d.answer||d.result||'No answer was returned.';
+          showSources(qaOut,top.slice(0,5));
+          if(resList){ renderResults(q,top); openDrawer();
+            var sum=document.getElementById('fx-ai-summary');
+            if(sum){ sum.hidden=false;
+              sum.innerHTML='<div class="fx-ai-card"><h3>AI answer</h3><p class="fx-ai-text"></p></div>';
+              sum.querySelector('.fx-ai-text').textContent=d.answer||''; } }
+        })
+        .catch(function(){ fallback('The AI assistant is unavailable, so here are the closest passages:\\n\\n'); });
+    } else {
+      fallback('Closest passages in this document:\\n\\n');
     }
   });
+
 
   // ---- downloadable accessible versions --------------------------------
   function download(name,text,type){
@@ -11107,7 +11643,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
 </html>`;
   }
 
-  // packages/core/src/large.js
+  // src/large.js
   function getPdfjs() {
     const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
     if (!lib) {
@@ -11118,6 +11654,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     return lib;
   }
   async function openStreaming(source, options = {}) {
+    var _a;
     const pdfjsLib2 = getPdfjs();
     const { rangeChunkSize = 262144, password } = options;
     let params;
@@ -11143,7 +11680,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       disableAutoFetch: true,
       disableStream: false,
       // Keep PDF.js internal caches small on huge files.
-      maxImageSize: options.maxImageSize ?? 16777216
+      maxImageSize: (_a = options.maxImageSize) != null ? _a : 16777216
     });
     const pdf = await task.promise;
     const release = async () => {
@@ -11298,7 +11835,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
         rasterQuality
       };
       for (let i = 0; i < numbers.length; i += batchSize) {
-        if (signal?.aborted) throw new Error("[codbdocs] aborted");
+        if (signal == null ? void 0 : signal.aborted) throw new Error("[codbdocs] aborted");
         const batch = numbers.slice(i, i + batchSize);
         const results = await Promise.all(batch.map((n) => extractPage(pdf, n, opts)));
         for (const result of results) {
@@ -11321,7 +11858,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
           await pdf.cleanup();
         } catch {
         }
-        onProgress?.({
+        onProgress == null ? void 0 : onProgress({
           page: Math.min(i + batchSize, numbers.length),
           total: numbers.length,
           percent: Math.round(Math.min(i + batchSize, numbers.length) / numbers.length * 100)
@@ -11361,9 +11898,10 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     return Array.from({ length: total }, (_, i) => i + 1);
   }
   function flattenOutline(items, depth = 0, out = []) {
+    var _a, _b;
     for (const item of items || []) {
-      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
-      if (item.items?.length) flattenOutline(item.items, depth + 1, out);
+      out.push({ title: item.title, level: depth, dest: (_a = item.dest) != null ? _a : null });
+      if ((_b = item.items) == null ? void 0 : _b.length) flattenOutline(item.items, depth + 1, out);
     }
     return out;
   }
@@ -11454,13 +11992,14 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       keepPages: true,
       onProgress,
       onPage: async (page) => {
+        var _a;
         if (page.image) {
           const ext = page.image.type.split("/")[1].replace("jpeg", "jpg");
           const file = `pages/page-${String(page.page).padStart(4, "0")}.${ext}`;
           entries.push({ name: file, data: page.image.bytes });
           pageFiles.push(file);
         }
-        await options.onPage?.(page);
+        await ((_a = options.onPage) == null ? void 0 : _a.call(options, page));
       }
     });
     const transcript = result.pages.map((p) => `--- Page ${p.page} ---
@@ -11516,12 +12055,13 @@ ${p.text}`).join("\n\n");
     return out;
   }
   function shouldStream(input, { maxBytes = 25 * 1024 * 1024, maxPages = 60 } = {}) {
-    const size = typeof input === "number" ? input : input?.size ?? 0;
-    const pages = typeof input === "object" ? input?.pageCount ?? 0 : 0;
+    var _a, _b;
+    const size = typeof input === "number" ? input : (_a = input == null ? void 0 : input.size) != null ? _a : 0;
+    const pages = typeof input === "object" ? (_b = input == null ? void 0 : input.pageCount) != null ? _b : 0 : 0;
     return size > maxBytes || pages > maxPages;
   }
 
-  // packages/core/src/serverless.js
+  // src/serverless.js
   function getPdfjs2() {
     const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
     if (!lib) {
@@ -11555,8 +12095,9 @@ ${p.text}`).join("\n\n");
     return btoa(bin);
   }
   async function extractPageVector(page, options = {}) {
+    var _a;
     const pdfjsLib2 = getPdfjs2();
-    const scale = options.scale ?? 1;
+    const scale = (_a = options.scale) != null ? _a : 1;
     const viewport = page.getViewport({ scale });
     const opList = await page.getOperatorList();
     if (typeof pdfjsLib2.SVGGraphics === "function") {
@@ -11567,13 +12108,14 @@ ${p.text}`).join("\n\n");
         if (typeof XMLSerializer !== "undefined") {
           return new XMLSerializer().serializeToString(element);
         }
-        if (element?.outerHTML) return element.outerHTML;
+        if (element == null ? void 0 : element.outerHTML) return element.outerHTML;
       } catch {
       }
     }
     return buildSvgFromOperators(opList, viewport, pdfjsLib2);
   }
   function buildSvgFromOperators(opList, viewport, pdfjsLib2) {
+    var _a;
     const OPS = pdfjsLib2.OPS || {};
     const parts = [];
     let current = [];
@@ -11588,7 +12130,7 @@ ${p.text}`).join("\n\n");
       const args = opList.argsArray[i] || [];
       if (fn === OPS.setFillRGBColor) fill = rgb(args);
       else if (fn === OPS.setStrokeRGBColor) stroke = rgb(args);
-      else if (fn === OPS.setLineWidth) lineWidth = args[0] ?? 1;
+      else if (fn === OPS.setLineWidth) lineWidth = (_a = args[0]) != null ? _a : 1;
       else if (fn === OPS.constructPath) {
         const ops = args[0] || [];
         const coords = args[1] || [];
@@ -11639,14 +12181,15 @@ ${p.text}`).join("\n\n");
     return `rgb(${to(r)},${to(g)},${to(b)})`;
   }
   async function renderPageImage(page, options = {}) {
-    const dpi = options.dpi ?? 150;
-    const scale = options.scale ?? dpi / 72;
-    const type = options.type ?? "image/png";
+    var _a, _b, _c, _d;
+    const dpi = (_a = options.dpi) != null ? _a : 150;
+    const scale = (_b = options.scale) != null ? _b : dpi / 72;
+    const type = (_c = options.type) != null ? _c : "image/png";
     const viewport = page.getViewport({ scale });
     const canvas = makeCanvas(viewport.width, viewport.height);
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    const dataUri = await canvasToDataUri(canvas, type, options.quality ?? 0.85);
+    const dataUri = await canvasToDataUri(canvas, type, (_d = options.quality) != null ? _d : 0.85);
     const width = canvas.width;
     const height = canvas.height;
     canvas.width = 0;
@@ -11787,16 +12330,18 @@ ${p.text}`).join("\n\n");
     ocrWorkerPromise = null;
   }
   async function ocrImage(image, options = {}) {
-    const worker = await getOcrWorker(options.language ?? "eng");
+    var _a, _b, _c, _d;
+    const worker = await getOcrWorker((_a = options.language) != null ? _a : "eng");
     const { data } = await worker.recognize(image);
     return {
-      text: (data?.text || "").trim(),
-      confidence: data?.confidence ?? null,
-      words: data?.words?.length ?? 0
+      text: ((data == null ? void 0 : data.text) || "").trim(),
+      confidence: (_b = data == null ? void 0 : data.confidence) != null ? _b : null,
+      words: (_d = (_c = data == null ? void 0 : data.words) == null ? void 0 : _c.length) != null ? _d : 0
     };
   }
   async function ocrPage(page, options = {}) {
-    const rendered = await renderPageImage(page, { dpi: options.dpi ?? 200 });
+    var _a;
+    const rendered = await renderPageImage(page, { dpi: (_a = options.dpi) != null ? _a : 200 });
     const result = await ocrImage(rendered.dataUri, options);
     return { ...result, image: options.keepImage ? rendered : null };
   }
@@ -11846,7 +12391,7 @@ ${p.text}`).join("\n\n");
     const headings = [];
     let ocrPages = 0;
     for (const num2 of numbers) {
-      if (signal?.aborted) throw new Error("[codbdocs] aborted");
+      if (signal == null ? void 0 : signal.aborted) throw new Error("[codbdocs] aborted");
       const page = await pdf.getPage(num2);
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
@@ -11935,7 +12480,7 @@ ${p.text}`).join("\n\n");
         page.cleanup();
       } catch {
       }
-      onProgress?.({
+      onProgress == null ? void 0 : onProgress({
         page: pages.length,
         total: numbers.length,
         percent: Math.round(pages.length / numbers.length * 100)
@@ -11943,7 +12488,10 @@ ${p.text}`).join("\n\n");
     }
     const transcript = pages.map((p) => `--- Page ${p.page_number} ---
 ${p.text}`).join("\n\n");
-    const outline = outlineRaw.length ? outlineRaw.map((o, i) => ({ text: o.title, level: o.level + 1, page: o.page ?? null, id: `o${i}` })) : headings;
+    const outline = outlineRaw.length ? outlineRaw.map((o, i) => {
+      var _a;
+      return { text: o.title, level: o.level + 1, page: (_a = o.page) != null ? _a : null, id: `o${i}` };
+    }) : headings;
     const payload = {
       document: {
         title,
@@ -11981,17 +12529,26 @@ ${p.text}`).join("\n\n");
     return payload;
   }
   async function packageDocumentFull(source, options = {}) {
+    var _a, _b, _c, _d;
     const data = await documentData(source, {
       ...options,
       includeLayout: true,
       includeVectors: options.includeVectors !== false,
-      includePageImages: false
+      includePageImages: options.pageBackgrounds !== false
     });
     const entries = [];
     const pageFiles = [];
     const vectorFiles = [];
     const bytes = await sourceBytes2(source);
-    if (options.html) entries.push({ name: "index.html", data: options.html });
+    const html = options.html || buildFidelityHtml(dataToIR(data, options), {
+      title: data.document.title,
+      lang: data.document.language || "en",
+      rag: { chunks: data.chunks },
+      originalName: data.document.source,
+      originalPdfSrc: options.includeOriginal !== false ? "original.pdf" : void 0,
+      ...(_a = options.htmlOptions) != null ? _a : {}
+    });
+    entries.push({ name: "index.html", data: html });
     entries.push({ name: "transcript.txt", data: data.transcript });
     entries.push({ name: "rag.json", data: JSON.stringify({ chunks: data.chunks }, null, 2) });
     entries.push({ name: "outline.json", data: JSON.stringify(data.outline, null, 2) });
@@ -12000,7 +12557,7 @@ ${p.text}`).join("\n\n");
       const pdf = await pdfjsLib2.getDocument({ data: bytes.slice(0) }).promise;
       for (const page of data.pages) {
         const p = await pdf.getPage(page.page_number);
-        const rendered = await renderPageImage(p, { dpi: options.dpi ?? 150 });
+        const rendered = await renderPageImage(p, { dpi: (_b = options.dpi) != null ? _b : 150 });
         const name = `pages/page-${String(page.page_number).padStart(4, "0")}.png`;
         entries.push({ name, data: dataUriToBytes(rendered.dataUri) });
         pageFiles.push(name);
@@ -12011,7 +12568,7 @@ ${p.text}`).join("\n\n");
       }
       await pdf.destroy();
     }
-    for (const page of data.layout?.pages ?? []) {
+    for (const page of (_d = (_c = data.layout) == null ? void 0 : _c.pages) != null ? _d : []) {
       if (!page.vector_svg) continue;
       const name = `vectors/page-${String(page.page_number).padStart(4, "0")}.svg`;
       entries.push({ name, data: page.vector_svg });
@@ -12070,9 +12627,10 @@ ${p.text}`).join("\n\n");
     return Array.from({ length: total }, (_, i) => i + 1);
   }
   function flattenOutline2(items, depth = 0, out = []) {
+    var _a, _b;
     for (const item of items || []) {
-      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
-      if (item.items?.length) flattenOutline2(item.items, depth + 1, out);
+      out.push({ title: item.title, level: depth, dest: (_a = item.dest) != null ? _a : null });
+      if ((_b = item.items) == null ? void 0 : _b.length) flattenOutline2(item.items, depth + 1, out);
     }
     return out;
   }
@@ -12092,6 +12650,88 @@ ${p.text}`).join("\n\n");
     }
     return null;
   }
+  function dataToIR(data, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    const objects = {};
+    const pages = {};
+    const pageIds = [];
+    const layout = (_b = (_a = data.layout) == null ? void 0 : _a.pages) != null ? _b : [];
+    const byNumber = new Map(layout.map((p) => [p.page_number, p]));
+    for (const page of data.pages) {
+      const pid = `page-${page.page_number}`;
+      pageIds.push(pid);
+      const lay = byNumber.get(page.page_number);
+      const content = [];
+      ((_c = lay == null ? void 0 : lay.spans) != null ? _c : []).forEach((run, i) => {
+        if (!run.text || !run.text.trim()) return;
+        const id = `${pid}-t${i}`;
+        const size = run.font_size || run.height || 11;
+        objects[id] = {
+          id,
+          type: "text",
+          bbox: [run.x, run.y, run.width, run.height || size],
+          raw: {
+            text: run.text,
+            font: run.font_family || "",
+            fontSize: size,
+            bbox: [run.x, run.y, run.width, run.height || size]
+          },
+          semantic: { text: run.text, role: "paragraph" }
+        };
+        content.push(id);
+      });
+      ((_d = lay == null ? void 0 : lay.images) != null ? _d : []).forEach((img, i) => {
+        if (!img.data_uri) return;
+        const id = `${pid}-img${i}`;
+        objects[id] = {
+          id,
+          type: "image",
+          bbox: [img.x, img.y, img.width, img.height],
+          raw: { src: img.data_uri, bbox: [img.x, img.y, img.width, img.height] },
+          semantic: { role: "figure", caption: `Image on page ${page.page_number}` },
+          accessibility: { alt: `Image on page ${page.page_number}` }
+        };
+        content.push(id);
+      });
+      pages[pid] = {
+        id: pid,
+        num: page.page_number,
+        width: page.width,
+        height: page.height,
+        background: (lay == null ? void 0 : lay.page_image) || "",
+        content
+      };
+    }
+    return {
+      document: {
+        title: options.title || ((_e = data.document) == null ? void 0 : _e.title) || "Document",
+        pages: pageIds,
+        metadata: { ...(_g = (_f = data.document) == null ? void 0 : _f.metadata) != null ? _g : {}, title: (_h = data.document) == null ? void 0 : _h.title, language: (_i = data.document) == null ? void 0 : _i.language }
+      },
+      pages,
+      objects
+    };
+  }
+  async function buildAccessibleHtml(source, options = {}) {
+    var _a, _b;
+    const data = await documentData(source, {
+      ...options,
+      includeLayout: true,
+      includeImages: options.includeImages !== false,
+      includePageImages: options.pageBackgrounds !== false,
+      includeVectors: options.includeVectors === true,
+      dpi: (_a = options.dpi) != null ? _a : 150
+    });
+    const ir = dataToIR(data, options);
+    const html = buildFidelityHtml(ir, {
+      title: data.document.title,
+      lang: data.document.language || "en",
+      rag: { chunks: data.chunks },
+      originalName: data.document.source,
+      ...(_b = options.html) != null ? _b : {}
+    });
+    return { html, data, ir };
+  }
   function serverlessCapabilities() {
     return {
       text: true,
@@ -12110,8 +12750,9 @@ ${p.text}`).join("\n\n");
     };
   }
 
-  // packages/core/src/index.js
+  // src/index.js
   function trackImageBboxes(pageOps) {
+    var _a, _b, _c;
     const imageBboxes = /* @__PURE__ */ new Map();
     const ctmStack = [];
     let ctm = [1, 0, 0, 1, 0, 0];
@@ -12120,12 +12761,12 @@ ${p.text}`).join("\n\n");
         ctmStack.push([...ctm]);
       } else if (op.fn === "restore") {
         ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
-      } else if (op.fn === "transform" && op.args?.length === 6) {
+      } else if (op.fn === "transform" && ((_a = op.args) == null ? void 0 : _a.length) === 6) {
         const [a, b, c, d, e, f] = op.args;
         ctm = multiplyMatrix(ctm, [a, b, c, d, e, f]);
-      } else if (op.fn === "concatMatrix" && op.args?.length === 6) {
+      } else if (op.fn === "concatMatrix" && ((_b = op.args) == null ? void 0 : _b.length) === 6) {
         ctm = [...op.args];
-      } else if (op.fn === "doXObject" && op.args?.[0]) {
+      } else if (op.fn === "doXObject" && ((_c = op.args) == null ? void 0 : _c[0])) {
         const name = op.args[0];
         imageBboxes.set(name, {
           bbox: applyMatrixToRect(ctm, [0, 0, 1, 1]),
@@ -12237,6 +12878,7 @@ ${p.text}`).join("\n\n");
      * Returns a DocumentGraph with spatial search, content graph, and ask().
      */
     async analyze(opts = {}) {
+      var _a, _b;
       const {
         ocr = true,
         visual = false,
@@ -12533,8 +13175,8 @@ ${p.text}`).join("\n\n");
                 addObject(ir, `page_${num2}`, {
                   type: "image",
                   raw: {
-                    src: img.dataUrl || img.thumbnail?.dataUrl || "",
-                    thumb: img.thumbnail?.dataUrl || null,
+                    src: img.dataUrl || ((_a = img.thumbnail) == null ? void 0 : _a.dataUrl) || "",
+                    thumb: ((_b = img.thumbnail) == null ? void 0 : _b.dataUrl) || null,
                     format: img.format,
                     width: img.width,
                     height: img.height
@@ -12622,7 +13264,7 @@ ${p.text}`).join("\n\n");
             spatial: !!spatial,
             structure: !!structures,
             metadata: !!metadata,
-            classification: classification?.type,
+            classification: classification == null ? void 0 : classification.type,
             contentBlocks: pageResult.contentBlocks,
             contentEntities: pageResult.contentEntities,
             vectors: pageResult.vectors
@@ -12670,8 +13312,9 @@ ${p.text}`).join("\n\n");
       graph.getAccessibilityTree = () => generateAccessibilityTree(ir);
       graph.toHTML = (options) => exportHTML(ir, options);
       graph.getVectors = (pageNum) => {
+        var _a2, _b2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.vectors?.map((id) => ir.vectors[id]) || [];
+        return ((_b2 = (_a2 = ir.pages[pageId]) == null ? void 0 : _a2.vectors) == null ? void 0 : _b2.map((id) => ir.vectors[id])) || [];
       };
       graph.getStructureTree = (pageNum) => {
         const pageId = `page_${pageNum}`;
@@ -12681,7 +13324,10 @@ ${p.text}`).join("\n\n");
         const pageId = `page_${pageNum}`;
         return ir.annotations[pageId] || [];
       };
-      graph.getFormFields = () => ir.forms?.fields || [];
+      graph.getFormFields = () => {
+        var _a2;
+        return ((_a2 = ir.forms) == null ? void 0 : _a2.fields) || [];
+      };
       graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
       graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
       graph.getImages = (pageNum) => {
@@ -12752,29 +13398,34 @@ ${p.text}`).join("\n\n");
       graph.getPageLabels = () => ir.document.navigation.labels || [];
       graph.getSecurity = () => ir.document.security;
       graph.getMarkedContent = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.markedContent || [];
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.markedContent) || [];
       };
       graph.getArtifacts = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.artifacts || [];
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.artifacts) || [];
       };
       graph.getGlyphs = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.glyphs || [];
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.glyphs) || [];
       };
       graph.getRemediations = () => {
         const audit = graph.auditAccessibility();
         return generateRemediations(audit, ir);
       };
       graph.getSignatures = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.signatures || [];
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.signatures) || [];
       };
       graph.getSignatureSummary = () => {
+        var _a2;
         const allSignatures = [];
         for (const pageId of Object.keys(ir.pages)) {
-          if (ir.pages[pageId]?.signatures) {
+          if ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.signatures) {
             allSignatures.push(...ir.pages[pageId].signatures);
           }
         }
@@ -12787,13 +13438,15 @@ ${p.text}`).join("\n\n");
       graph.getActions = () => ir.document.actions || [];
       graph.getActionsSummary = () => buildActionsSummary(ir.document.actions || []);
       graph.getAppearanceStreams = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.appearanceStreams || [];
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.appearanceStreams) || [];
       };
       graph.getAppearanceStreamsSummary = () => {
+        var _a2;
         const allAppearances = [];
         for (const pageId of Object.keys(ir.pages)) {
-          if (ir.pages[pageId]?.appearanceStreams) {
+          if ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.appearanceStreams) {
             allAppearances.push(...ir.pages[pageId].appearanceStreams);
           }
         }
@@ -12804,8 +13457,9 @@ ${p.text}`).join("\n\n");
       graph.getRevisions = () => ir.document.revisions || [];
       graph.getRevisionsSummary = () => buildRevisionsSummary(ir.document.revisions || []);
       graph.getGraphicsStateSummary = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        const states = ir.pages[pageId]?.graphicsStates || [];
+        const states = ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.graphicsStates) || [];
         return buildGraphicsStateSummary(states);
       };
       graph.wcagAudit = () => wcagAudit(ir);
@@ -12817,32 +13471,41 @@ ${p.text}`).join("\n\n");
       graph.getAccessibilityReport = () => generateAccessibilityReport(ir);
       graph.toPDF = (options) => createPDF(ir, options);
       graph.createTextPDF = (options) => createTextPDF(
-        Object.values(ir.pages).map((p) => p.content?.join("\n") || ""),
+        Object.values(ir.pages).map((p) => {
+          var _a2;
+          return ((_a2 = p.content) == null ? void 0 : _a2.join("\n")) || "";
+        }),
         options
       );
       graph.diagnose = () => diagnoseDocument(pageResults, graph);
       graph.normalize = (options) => normalizeDocument(graph, options);
       graph.getTextQuality = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.textQuality || null;
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.textQuality) || null;
       };
       graph.getVisualComparison = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.visualComparison || null;
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.visualComparison) || null;
       };
       graph.getRepeatedElements = () => {
-        return pageResults[0]?.repeatedElements || { watermarks: [], headers: [], footers: [], pageNumbers: [] };
+        var _a2;
+        return ((_a2 = pageResults[0]) == null ? void 0 : _a2.repeatedElements) || { watermarks: [], headers: [], footers: [], pageNumbers: [] };
       };
       graph.getRedactions = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.redactions || [];
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.redactions) || [];
       };
       graph.getTagValidation = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.tagValidation || { valid: false, issues: [] };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.tagValidation) || { valid: false, issues: [] };
       };
       graph.getRAGReadiness = () => {
-        const readiness = calculateRAGReadiness(pageResults, null, null, pageResults[0]?.repeatedElements || {});
+        var _a2;
+        const readiness = calculateRAGReadiness(pageResults, null, null, ((_a2 = pageResults[0]) == null ? void 0 : _a2.repeatedElements) || {});
         return {
           score: Math.round(readiness.score * 100),
           factors: readiness.factors,
@@ -12850,39 +13513,49 @@ ${p.text}`).join("\n\n");
         };
       };
       graph.getRotationSkew = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.rotationSkew || { rotation: 0, skewAngle: 0, isRotated: false, isSkewed: false };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.rotationSkew) || { rotation: 0, skewAngle: 0, isRotated: false, isSkewed: false };
       };
       graph.getGlyphIssues = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.glyphIssues || { issues: [], hasGlyphIssues: false };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.glyphIssues) || { issues: [], hasGlyphIssues: false };
       };
       graph.getOutlinedText = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.outlinedText || { hasOutlinedText: false, candidates: [], count: 0 };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.outlinedText) || { hasOutlinedText: false, candidates: [], count: 0 };
       };
       graph.getFlattenedForms = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.flattenedForms || { hasFlattenedForms: false, candidates: [], recoveredFields: [] };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.flattenedForms) || { hasFlattenedForms: false, candidates: [], recoveredFields: [] };
       };
       graph.getCheckboxes = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.checkboxes || { count: 0, checkboxes: [], checked: 0, unchecked: 0 };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.checkboxes) || { count: 0, checkboxes: [], checked: 0, unchecked: 0 };
       };
       graph.getFootnotes = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.footnotes || { footnotes: [], footnoteRefs: [], associations: [], count: 0 };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.footnotes) || { footnotes: [], footnoteRefs: [], associations: [], count: 0 };
       };
       graph.getLanguage = (pageNum) => {
+        var _a2;
         const pageId = `page_${pageNum}`;
-        return ir.pages[pageId]?.language || { language: "unknown", confidence: 0 };
+        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.language) || { language: "unknown", confidence: 0 };
       };
       graph.getCrossPageTables = () => detectCrossPageTables(pageResults, ir);
       graph.associateCaptions = (pageNum) => {
         const pageId = `page_${pageNum}`;
         const pageData = ir.pages[pageId];
-        const images = pageData?.images || [];
-        const contentItems = (pageData?.content || []).map((id) => ir.objects?.[id]).filter(Boolean).map((obj) => obj.raw);
+        const images = (pageData == null ? void 0 : pageData.images) || [];
+        const contentItems = ((pageData == null ? void 0 : pageData.content) || []).map((id) => {
+          var _a2;
+          return (_a2 = ir.objects) == null ? void 0 : _a2[id];
+        }).filter(Boolean).map((obj) => obj.raw);
         return associateCaptionsWithImages(pageData, contentItems, images);
       };
       graph.getConceptGraph = () => conceptGraph;
@@ -13023,21 +13696,24 @@ ${p.text}`).join("\n\n");
       };
       graph.expandQuery = (query, options) => expandQuery(query, options);
       graph.fuzzySearch = (query, options) => {
-        const pages = graph.text?.pages || [];
+        var _a2;
+        const pages = ((_a2 = graph.text) == null ? void 0 : _a2.pages) || [];
         return fuzzySearch(query, pages, options);
       };
       graph.getTerminology = () => graph._terminology || { aliases: {}, acronyms: {}, definitions: {} };
       graph.getAcronyms = () => {
+        var _a2;
         const allAcronyms = [];
-        for (const page of graph.text?.pages || []) {
+        for (const page of ((_a2 = graph.text) == null ? void 0 : _a2.pages) || []) {
           const text = page.text || "";
           allAcronyms.push(...detectAcronyms(text));
         }
         return allAcronyms;
       };
       graph.getDefinitions = () => {
+        var _a2;
         const allDefs = [];
-        for (const page of graph.text?.pages || []) {
+        for (const page of ((_a2 = graph.text) == null ? void 0 : _a2.pages) || []) {
           const text = page.text || "";
           allDefs.push(...detectDefinitions(text));
         }
@@ -13332,10 +14008,16 @@ ${p.text}`).join("\n\n")
       graph.auditAccessibility = () => auditAccessibility(ir);
       graph.getAccessibilityTree = () => generateAccessibilityTree(ir);
       graph.toHTML = (options) => exportHTML(ir, options);
-      graph.getVectors = (pageNum) => ir.pages[`page_${pageNum}`]?.vectors?.map((id) => ir.vectors[id]) || [];
+      graph.getVectors = (pageNum) => {
+        var _a, _b;
+        return ((_b = (_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.vectors) == null ? void 0 : _b.map((id) => ir.vectors[id])) || [];
+      };
       graph.getStructureTree = (pageNum) => ir.structure[`page_${pageNum}`] || null;
       graph.getAnnotations = (pageNum) => ir.annotations[`page_${pageNum}`] || [];
-      graph.getFormFields = () => ir.forms?.fields || [];
+      graph.getFormFields = () => {
+        var _a;
+        return ((_a = ir.forms) == null ? void 0 : _a.fields) || [];
+      };
       graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
       graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
       graph.getMetadata = () => ir.document.metadata;
@@ -13343,9 +14025,18 @@ ${p.text}`).join("\n\n")
       graph.getNamedDestinations = () => ir.document.navigation.destinations || {};
       graph.getPageLabels = () => ir.document.navigation.labels || [];
       graph.getSecurity = () => ir.document.security;
-      graph.getMarkedContent = (pageNum) => ir.pages[`page_${pageNum}`]?.markedContent || [];
-      graph.getArtifacts = (pageNum) => ir.pages[`page_${pageNum}`]?.artifacts || [];
-      graph.getGlyphs = (pageNum) => ir.pages[`page_${pageNum}`]?.glyphs || [];
+      graph.getMarkedContent = (pageNum) => {
+        var _a;
+        return ((_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.markedContent) || [];
+      };
+      graph.getArtifacts = (pageNum) => {
+        var _a;
+        return ((_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.artifacts) || [];
+      };
+      graph.getGlyphs = (pageNum) => {
+        var _a;
+        return ((_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.glyphs) || [];
+      };
       graph.getRemediations = () => generateRemediations(graph.auditAccessibility(), ir);
       graph.wcagAudit = () => wcagAudit(ir);
       graph.toAccessibleHTML = (options) => exportAccessibleHTML(ir, options);
@@ -13377,8 +14068,9 @@ ${p.text}`).join("\n\n")
     const nonPrintRatio = allText.length > 0 ? nonPrintable / allText.length : 0;
     if (nonPrintRatio > 0.3) score -= 0.3;
     const outsideBounds = contentItems.filter((item) => {
-      const x = item.transform?.[4] || 0;
-      const y = item.transform?.[5] || 0;
+      var _a, _b;
+      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
       return x < 0 || x > pageSize.width || y < 0 || y > pageSize.height;
     }).length;
     const outsideRatio = contentItems.length > 0 ? outsideBounds / contentItems.length : 0;
@@ -13416,7 +14108,8 @@ ${p.text}`).join("\n\n")
     }
     if (img.originalWidth < 50 && img.originalHeight < 50) return "icon";
     const nearbyText = contentItems.filter((item) => {
-      const y = item.transform?.[5] || 0;
+      var _a;
+      const y = ((_a = item.transform) == null ? void 0 : _a[5]) || 0;
       return Math.abs(y - imgY) < 100;
     }).map((item) => item.str || "").join(" ");
     if (/figure|fig\.|chart|graph|diagram|image|photo|picture/i.test(nearbyText)) return "figure";
@@ -13447,14 +14140,16 @@ ${p.text}`).join("\n\n")
     const imgLeft = img.bbox.x || 0;
     const imgRight = imgLeft + (img.bbox.width || 0);
     const candidates = contentItems.filter((item) => {
-      const y = item.transform?.[5] || 0;
-      const x = item.transform?.[4] || 0;
+      var _a, _b;
+      const y = ((_a = item.transform) == null ? void 0 : _a[5]) || 0;
+      const x = ((_b = item.transform) == null ? void 0 : _b[4]) || 0;
       const below = y < imgBottom && y > imgBottom - 100;
       const overlap = x >= imgLeft - 50 && x <= imgRight + 50;
       return below && overlap && item.str && item.str.trim().length > 5;
     }).sort((a, b) => {
-      const distA = imgBottom - (a.transform?.[5] || 0);
-      const distB = imgBottom - (b.transform?.[5] || 0);
+      var _a, _b;
+      const distA = imgBottom - (((_a = a.transform) == null ? void 0 : _a[5]) || 0);
+      const distB = imgBottom - (((_b = b.transform) == null ? void 0 : _b[5]) || 0);
       return distA - distB;
     });
     if (candidates.length === 0) return null;
@@ -13472,14 +14167,16 @@ ${p.text}`).join("\n\n")
     const imgH = img.bbox[3] || 0;
     const margin = 150;
     const nearby = contentItems.filter((item) => {
-      const x = item.transform?.[4] || 0;
-      const y = item.transform?.[5] || 0;
+      var _a, _b;
+      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
+      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
       const inX = x >= imgX - margin && x <= imgX + imgW + margin;
       const inY = y >= imgY - margin && y <= imgY + imgH + margin;
       return inX && inY && item.str && item.str.trim().length > 0;
     }).sort((a, b) => {
-      const aDist = Math.abs((a.transform?.[4] || 0) - imgX) + Math.abs((a.transform?.[5] || 0) - imgY);
-      const bDist = Math.abs((b.transform?.[4] || 0) - imgX) + Math.abs((b.transform?.[5] || 0) - imgY);
+      var _a, _b, _c, _d;
+      const aDist = Math.abs((((_a = a.transform) == null ? void 0 : _a[4]) || 0) - imgX) + Math.abs((((_b = a.transform) == null ? void 0 : _b[5]) || 0) - imgY);
+      const bDist = Math.abs((((_c = b.transform) == null ? void 0 : _c[4]) || 0) - imgX) + Math.abs((((_d = b.transform) == null ? void 0 : _d[5]) || 0) - imgY);
       return aDist - bDist;
     }).slice(0, 20).map((item) => item.str.trim()).join(" ");
     return nearby;
