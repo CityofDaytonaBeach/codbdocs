@@ -1,27 +1,22 @@
-const esc = (v) => String(v != null ? v : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const num = (v, fallback = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
 function pageObjects(ir, page) {
-  const ids = Array.isArray(page == null ? void 0 : page.content) ? page.content : [];
-  return ids.map((id) => {
-    var _a;
-    return typeof id === "string" ? (_a = ir.objects) == null ? void 0 : _a[id] : id;
-  }).filter(Boolean).map((o) => o);
+  const ids = Array.isArray(page?.content) ? page.content : [];
+  return ids.map((id) => typeof id === "string" ? ir.objects?.[id] : id).filter(Boolean).map((o) => o);
 }
 function objText(o) {
-  var _a, _b, _c, _d;
-  return String((_d = (_c = (_a = o == null ? void 0 : o.semantic) == null ? void 0 : _a.text) != null ? _c : (_b = o == null ? void 0 : o.raw) == null ? void 0 : _b.text) != null ? _d : "");
+  return String(o?.semantic?.text ?? o?.raw?.text ?? "");
 }
 function cssTop(pageHeight, bbox, fontSize) {
-  const y = num(bbox == null ? void 0 : bbox[1]);
-  const h = num(bbox == null ? void 0 : bbox[3]) || fontSize;
+  const y = num(bbox?.[1]);
+  const h = num(bbox?.[3]) || fontSize;
   return Math.max(0, pageHeight - y - h);
 }
 function fontFamily(o) {
-  var _a, _b;
-  const raw = String((_b = (_a = o == null ? void 0 : o.raw) == null ? void 0 : _a.font) != null ? _b : "");
+  const raw = String(o?.raw?.font ?? "");
   const name = raw.replace(/^[A-Z]{6}\+/, "").replace(/[^A-Za-z0-9 -]/g, "");
   const lower = name.toLowerCase();
   if (/times|serif|georgia|garamond|book/.test(lower)) return "'Times New Roman', Times, serif";
@@ -29,19 +24,18 @@ function fontFamily(o) {
   return "Helvetica, Arial, 'Segoe UI', system-ui, sans-serif";
 }
 function inferHeadingLevels(ir) {
-  var _a, _b, _c, _d, _e;
   const sizes = [];
   const candidates = [];
-  const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
+  const pages = Array.isArray(ir.document?.pages) ? ir.document.pages : Object.keys(ir.pages ?? {});
   for (const pid of pages) {
-    const page = (_c = ir.pages) == null ? void 0 : _c[pid];
+    const page = ir.pages?.[pid];
     if (!page) continue;
     for (const o of pageObjects(ir, page)) {
       if (o.type !== "text" && o.type !== void 0) continue;
-      if (((_d = o.semantic) == null ? void 0 : _d.role) && o.semantic.role !== "paragraph") continue;
+      if (o.semantic?.role && o.semantic.role !== "paragraph") continue;
       const text = objText(o).trim();
       if (!text) continue;
-      const size = num((_e = o.raw) == null ? void 0 : _e.fontSize, 0);
+      const size = num(o.raw?.fontSize, 0);
       if (!size) continue;
       sizes.push(size);
       if (text.length <= 120 && !/[.;]$/.test(text)) candidates.push({ id: o.id, size, text });
@@ -60,24 +54,31 @@ function inferHeadingLevels(ir) {
   return levels;
 }
 function newDocCtx() {
-  return { outline: [], index: [], h: 0, inferred: /* @__PURE__ */ new Map() };
+  return { outline: [], index: [], h: 0, inferred: /* @__PURE__ */ new Map(), figures: [], vectors: {} };
 }
 function renderTextLayer(ir, page, ctx, pageNum) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
   const pageHeight = num(page.height, 792);
   let html = "";
   for (const o of pageObjects(ir, page)) {
     if (o.type === "image") {
-      const src = (_a = o.raw) == null ? void 0 : _a.src;
-      const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
+      const src = o.raw?.src;
+      const [x = 0, y = 0, w = 0, h = 0] = o.bbox ?? [];
+      const alt = o.accessibility?.alt || o.semantic?.caption || "Image";
+      ctx.figures.push({
+        id: String(o.id ?? `fig-${ctx.figures.length + 1}`),
+        page: pageNum,
+        alt,
+        long: String(o.accessibility?.longDescription || o.accessibility?.summary || o.semantic?.summary || ""),
+        kind: String(o.semantic?.kind || o.raw?.kind || "image")
+      });
       if (src && w && h) {
-        html += `<img class="fx-img" src="${esc(src)}" alt="${esc(((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image")}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
+        html += `<img class="fx-img" src="${esc(src)}" alt="${esc(alt)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
       }
       continue;
     }
     if (o.type === "link") {
-      const href = ((_e = o.raw) == null ? void 0 : _e.href) || ((_f = o.raw) == null ? void 0 : _f.url);
-      const rect = (_g = o.raw) == null ? void 0 : _g.rect;
+      const href = o.raw?.href || o.raw?.url;
+      const rect = o.raw?.rect;
       if (href && Array.isArray(rect) && rect.length >= 4) {
         const x = Math.min(num(rect[0]), num(rect[2]));
         const y = Math.min(num(rect[1]), num(rect[3]));
@@ -90,14 +91,14 @@ function renderTextLayer(ir, page, ctx, pageNum) {
     const text = objText(o);
     if (!text.trim()) continue;
     const bbox = Array.isArray(o.bbox) ? o.bbox : [];
-    const fontSize = num((_h = o.raw) == null ? void 0 : _h.fontSize, 12) || 12;
+    const fontSize = num(o.raw?.fontSize, 12) || 12;
     const left = num(bbox[0]);
     const top = cssTop(pageHeight, bbox, fontSize);
     const width = num(bbox[2]);
     const inferredLevel = ctx.inferred.get(o.id);
-    const declared = (_i = o.semantic) == null ? void 0 : _i.role;
+    const declared = o.semantic?.role;
     const role = inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
-    const level = Math.min(6, Math.max(1, num((_j = o.semantic) == null ? void 0 : _j.level, inferredLevel != null ? inferredLevel : 2)));
+    const level = Math.min(6, Math.max(1, num(o.semantic?.level, inferredLevel ?? 2)));
     const tag = role === "heading" ? `h${level}` : "span";
     const style = `left:${left}px;top:${top}px;font-size:${fontSize}px;font-family:${fontFamily(o)};` + (width ? `--fx-w:${width}px;` : "");
     let idAttr = "";
@@ -107,18 +108,17 @@ function renderTextLayer(ir, page, ctx, pageNum) {
       idAttr = ` id="fx-h-${ctx.h}"`;
     }
     ctx.index.push({ p: pageNum, role, t: text });
-    html += `<${tag}${idAttr} class="fx-text" data-object="${esc((_k = o.id) != null ? _k : "")}" data-role="${esc(role)}" style="${style}">${esc(text)}</${tag}>`;
+    html += `<${tag}${idAttr} class="fx-text" data-object="${esc(o.id ?? "")}" data-role="${esc(role)}" style="${style}">${esc(text)}</${tag}>`;
   }
   return html;
 }
 function renderReflow(ir, page, headingIds, ctx) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
   let html = "";
   let openList = false;
   let hCursor = 0;
   for (const o of pageObjects(ir, page)) {
     const inferredLevel = ctx.inferred.get(o.id);
-    const declared = (_a = o.semantic) == null ? void 0 : _a.role;
+    const declared = o.semantic?.role;
     const role = o.type === "image" ? "image" : inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
     const text = objText(o);
     if (role === "list-item") {
@@ -134,19 +134,20 @@ function renderReflow(ir, page, headingIds, ctx) {
       openList = false;
     }
     if (o.type === "image") {
-      const src = (_b = o.raw) == null ? void 0 : _b.src;
-      const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
-      const long = ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || "";
-      html += `<figure>${src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption>` + (long ? `<details class="fx-longdesc"><summary>Detailed description of this image</summary><p>${esc(long)}</p></details>` : "") + `</figure>`;
+      const src = o.raw?.src;
+      const alt = o.accessibility?.alt || o.semantic?.caption || "Image";
+      const long = o.accessibility?.longDescription || o.accessibility?.summary || o.semantic?.summary || "";
+      const fid = esc(o.id ?? "");
+      html += `<figure data-fig="${fid}">${src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption>` + (long ? `<details class="fx-longdesc"><summary>Detailed description of this image</summary><p>${esc(long)}</p></details>` : `<button type="button" class="fx-desc-btn" data-fig="${fid}">Describe this image with AI</button><p class="fx-desc-out" data-fig="${fid}" role="status" aria-live="polite" hidden></p>`) + `</figure>`;
       continue;
     }
     if (!text.trim()) continue;
     if (role === "heading") {
-      const level = Math.min(6, Math.max(1, num((_h = o.semantic) == null ? void 0 : _h.level, inferredLevel != null ? inferredLevel : 2)));
+      const level = Math.min(6, Math.max(1, num(o.semantic?.level, inferredLevel ?? 2)));
       const hid = headingIds[hCursor++];
       html += `<h${level}${hid ? ` id="fx-rh-${hid}"` : ""}>${esc(text)}</h${level}>`;
     } else if (o.type === "link") {
-      html += `<p><a href="${esc(((_i = o.raw) == null ? void 0 : _i.href) || ((_j = o.raw) == null ? void 0 : _j.url) || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
+      html += `<p><a href="${esc(o.raw?.href || o.raw?.url || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
     } else {
       html += `<p>${esc(text)}</p>`;
     }
@@ -155,7 +156,6 @@ function renderReflow(ir, page, headingIds, ctx) {
   return html || '<p class="fx-empty">No extractable text on this page.</p>';
 }
 function auditPanel(audit, remediations) {
-  var _a, _b;
   if (!audit) return "";
   const issues = Array.isArray(audit.issues) ? audit.issues : [];
   const rows = issues.slice(0, 200).map(
@@ -165,7 +165,7 @@ function auditPanel(audit, remediations) {
   return `
   <section id="fx-a11y" class="fx-panel" aria-labelledby="fx-a11y-h">
     <h2 id="fx-a11y-h">Accessibility report</h2>
-    <p class="fx-score"><strong>Score:</strong> ${esc((_a = audit.score) != null ? _a : "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc((_b = audit.level) != null ? _b : "\u2014")} \xB7 <strong>Issues:</strong> ${issues.length}</p>
+    <p class="fx-score"><strong>Score:</strong> ${esc(audit.score ?? "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc(audit.level ?? "\u2014")} \xB7 <strong>Issues:</strong> ${issues.length}</p>
     ${rows ? `<table class="fx-table"><caption>WCAG 2.1 findings</caption><thead><tr><th scope="col">Severity</th><th scope="col">Criterion</th><th scope="col">Finding</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No WCAG issues detected.</p>"}
     ${plan ? `<h3>Remediation plan</h3><ol>${plan}</ol>` : ""}
   </section>`;
@@ -241,11 +241,10 @@ function conformancePanel() {
   </section>`;
 }
 function buildFidelityHtml(ir, options = {}) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i;
   if (!ir || typeof ir !== "object") throw new Error("An IR object is required.");
-  const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
-  const lang = options.lang || ((_d = (_c = ir.document) == null ? void 0 : _c.metadata) == null ? void 0 : _d.language) || "en";
-  const title = options.title || ((_f = (_e = ir.document) == null ? void 0 : _e.metadata) == null ? void 0 : _f.title) || ((_g = ir.document) == null ? void 0 : _g.title) || "Document";
+  const pages = Array.isArray(ir.document?.pages) ? ir.document.pages : Object.keys(ir.pages ?? {});
+  const lang = options.lang || ir.document?.metadata?.language || "en";
+  const title = options.title || ir.document?.metadata?.title || ir.document?.title || "Document";
   const showThumbs = options.thumbnails !== false;
   const initialView = options.view === "reflow" ? "reflow" : "fidelity";
   const ctx = newDocCtx();
@@ -254,12 +253,13 @@ function buildFidelityHtml(ir, options = {}) {
   let body = "";
   let nav = "";
   pages.forEach((pageId, index) => {
-    var _a2, _b2, _c2;
-    const page = (_a2 = ir.pages) == null ? void 0 : _a2[pageId];
+    const page = ir.pages?.[pageId];
     if (!page) return;
     const w = num(page.width, 612);
     const h = num(page.height, 792);
-    const label = ((_b2 = page.labels) == null ? void 0 : _b2.print) || `Page ${(_c2 = page.num) != null ? _c2 : index + 1}`;
+    const label = page.labels?.print || `Page ${page.num ?? index + 1}`;
+    const vectorCount = Array.isArray(page.vectors) ? page.vectors.length : pageObjects(ir, page).filter((o) => o.type === "vector" || o.type === "path" || o.type === "shape").length;
+    if (vectorCount) ctx.vectors[String(index + 1)] = vectorCount;
     nav += `<option value="${index + 1}">${esc(label)}</option>`;
     if (showThumbs) {
       thumbs += `<li><button type="button" class="fx-thumb" data-goto="${index + 1}" aria-label="Go to ${esc(label)}">` + (page.background ? `<img src="${esc(page.background)}" alt="" loading="lazy">` : `<span class="fx-thumb-blank" aria-hidden="true"></span>`) + `<span class="fx-thumb-num">${index + 1}</span></button></li>`;
@@ -280,9 +280,9 @@ function buildFidelityHtml(ir, options = {}) {
       <p class="fx-pagefoot" aria-hidden="true">${esc(label)}</p>
     </section>`;
   });
-  const rag = options.includeRag === false ? "" : (_h = options.rag) != null ? _h : null;
+  const rag = options.includeRag === false ? "" : options.rag ?? null;
   const translate = options.translate !== false;
-  const priority = (_i = options.priorityLanguages) != null ? _i : [];
+  const priority = options.priorityLanguages ?? [];
   const outlineHtml = ctx.outline.length ? ctx.outline.map(
     (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
   ).join("") : `<li class="fx-ol-empty">No headings were detected in this document.</li>`;
@@ -299,6 +299,30 @@ function buildFidelityHtml(ir, options = {}) {
     originalName: options.originalName || null,
     permalink: options.permalink || null,
     fingerprint: options.fingerprint || null
+  };
+  const knowledgePack = {
+    title,
+    language: lang,
+    pageCount: pages.length,
+    documentId: options.documentId || options.fingerprint || null,
+    originalName: options.originalName || null,
+    sourceUrl: options.sourceUrl || null,
+    permalink: options.permalink || null,
+    fingerprint: options.fingerprint || null,
+    outline: ctx.outline.map((e) => ({ level: e.level, text: e.text, page: e.page })),
+    headings: ctx.outline.length,
+    figures: ctx.figures,
+    vectors: ctx.vectors,
+    accessibility: options.audit ? {
+      score: options.audit.score ?? null,
+      level: options.audit.level ?? null,
+      issues: Array.isArray(options.audit.issues) ? options.audit.issues.length : 0,
+      topIssues: (Array.isArray(options.audit.issues) ? options.audit.issues : []).slice(0, 12).map((i) => ({ severity: i.severity ?? "info", wcag: i.wcag ?? "", message: i.message ?? i.type ?? "" }))
+    } : null,
+    conformance: CONFORMANCE,
+    assistiveTechnology: AT_TESTED,
+    notes: options.knowledge || options.documentContext || options.siteContext || null,
+    capabilities: ["ask", "summarize", "describe", "alt", "translate", "retrieve", "speak"]
   };
   const jsonScript = (id, value) => `<script type="application/json" id="${id}">${JSON.stringify(value).replace(/</g, "\\u003c")}<\/script>`;
   return `<!DOCTYPE html>
@@ -399,6 +423,13 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-note{font-size:.85rem;color:#5a6068}
 .fx-longdesc{margin-top:.4rem;font-size:.92rem}
 .fx-longdesc summary{cursor:pointer;font-weight:600}
+.fx-desc-btn{margin-top:.4rem;background:#eef4fb;border:1px solid #c3d7f2;color:#0f5fc4;border-radius:999px;
+  padding:.3rem .8rem;font:inherit;font-size:.85rem;cursor:pointer}
+.fx-desc-btn:hover{background:#e0ebfa}
+.fx-desc-btn[disabled]{opacity:.6;cursor:progress}
+.fx-desc-out{margin:.45rem 0 0;font-size:.92rem;line-height:1.55;background:#f5f8fc;border-left:3px solid var(--accent-2);
+  padding:.6rem .8rem;border-radius:0 8px 8px 0}
+
 .fx-backdrop{position:fixed;inset:0;background:rgba(10,12,15,.55);backdrop-filter:blur(2px);z-index:60;display:none}
 .fx-backdrop[data-open=true]{display:block}
 .fx-dialog{position:fixed;z-index:61;top:50%;left:50%;transform:translate(-50%,-50%);width:min(46rem,94vw);
@@ -504,6 +535,8 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   ${options.originalPdfSrc ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle"><label for="fx-pdf-toggle">Original PDF</label></span>` : ""}
   <div class="fx-group">
     <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
+    <button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>
+    <button type="button" id="fx-read" aria-pressed="false">Read aloud</button>
     <button type="button" id="fx-print">Print</button>
     ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
     <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
@@ -518,6 +551,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
     <span id="fx-search-count" aria-live="polite"></span>
   </div>
   <button type="button" class="fx-primary-btn" id="fx-qa-open" aria-haspopup="dialog">Ask AI</button>
+
 </header>
 <aside class="fx-drawer" id="fx-drawer" data-open="false" aria-label="Search results">
   <div class="fx-drawer-head">
@@ -571,13 +605,33 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   <div id="fx-qa-answer" class="fx-answer" hidden role="status" aria-live="polite"></div>
 </div>
 
+<div class="fx-dialog" id="fx-sum" role="dialog" aria-modal="true" aria-labelledby="fx-sum-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close AI summary">&#10005;</button>
+  <h2 id="fx-sum-h">AI summary of this document</h2>
+  <p class="fx-lang-note">A plain-language overview built from the whole document, its headings, figures and data.</p>
+  <button class="fx-primary" type="button" id="fx-sum-run">Summarise this document</button>
+  <div id="fx-sum-out" class="fx-answer" hidden role="status" aria-live="polite"></div>
+</div>
+
 ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="true" aria-labelledby="fx-lang-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close translation">&#10005;</button>
   <h2 id="fx-lang-h">Translate this document</h2>
   <p class="fx-lang-note">Translation into 250+ languages, including the accessible transcript, scanned content and question answers.</p>
   ${priority.length ? `<h3>Languages spoken in our service area</h3><ul>${priority.map((l) => `<li>${esc(l.label)}${l.share ? ` \u2014 ${esc(l.share)}` : ""}</li>`).join("")}</ul>` : ""}
   <div id="google_translate_element"></div>
+  <h3>AI translation of the accessible transcript</h3>
+  <p class="fx-lang-note">Keeps headings and reading order, so screen readers announce the translated document correctly.</p>
+  <div class="fx-field">
+    <label for="fx-ai-lang">Translate into</label>
+    <input id="fx-ai-lang" type="text" list="fx-lang-list" placeholder="e.g. Spanish, Haitian Creole, Vietnamese">
+    <datalist id="fx-lang-list">
+      ${["Spanish", "Haitian Creole", "Portuguese", "French", "Vietnamese", "Arabic", "Chinese (Simplified)", "Russian", "Tagalog", "American Sign Language gloss"].map((l) => `<option value="${esc(l)}"></option>`).join("")}
+    </datalist>
+  </div>
+  <button class="fx-primary" type="button" id="fx-ai-translate">Translate with AI</button>
+  <div id="fx-ai-tr-out" class="fx-answer" hidden role="status" aria-live="polite"></div>
 </div>` : ""}
+
 
 <div class="fx-dialog" id="fx-dl" role="dialog" aria-modal="true" aria-labelledby="fx-dl-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close downloads">&#10005;</button>
@@ -587,6 +641,8 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
     <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
     <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
     ${rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
+    <li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>
+
   </ul>
 </div>
 
@@ -625,7 +681,9 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
 ${jsonScript("codbdocs-config", config)}
 ${jsonScript("codbdocs-index", ctx.index)}
 ${jsonScript("codbdocs-outline", ctx.outline)}
+${jsonScript("codbdocs-knowledge", knowledgePack)}
 ${rag ? jsonScript("codbdocs-rag", rag) : ""}
+
 <script>
 (function(){
   var root=document.documentElement, pages=[].slice.call(document.querySelectorAll('.fx-page'));
@@ -853,6 +911,8 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     try{ return JSON.parse(el.textContent||'null'); }catch(e){ return null; } }
   var cfg=readJson('codbdocs-config')||{}, index=readJson('codbdocs-index')||[];
   var outline=readJson('codbdocs-outline')||[], ragData=readJson('codbdocs-rag');
+  var knowledge=readJson('codbdocs-knowledge')||{};
+
 
   // ---- accessible dialogs (focus trap, Escape to close) ---------------
   var backdrop=document.getElementById('fx-backdrop'), openDialog=null, lastFocus=null;
@@ -880,8 +940,10 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     b.onclick=function(){ showDialog(dialogId); if(after) after(); }; }
   wire('fx-outline-open','fx-outline');
   wire('fx-qa-open','fx-qa');
+  wire('fx-sum-open','fx-sum');
   wire('fx-dl-open','fx-dl');
   wire('fx-fb-open','fx-fb');
+
 
   // ---- document outline ----------------------------------------------
   function outlineTarget(i){
@@ -926,8 +988,37 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     };
   }
 
-  // ---- AI document knowledge (RAG + assistant) --------------------------
+  // ---- built-in AI (RAG + knowledge pack + assistant) -------------------
+  // Everything the AI needs travels with the file: the retrieval index, the
+  // outline, the figure/vector inventory and the accessibility conformance
+  // data. Host applications drive the same engine through window.CodbDocsAI.
   function docLanguage(){ return document.documentElement.lang||'en'; }
+  function endpointUrl(){ return cfg.qaEndpoint||cfg.aiEndpoint||null; }
+  function transcriptText(limit){
+    var t=(index||[]).map(function(e){ return e.t; }).join('\\n');
+    return limit? t.slice(0,limit) : t;
+  }
+  function callAI(payload){
+    var url=endpointUrl();
+    if(!url) return Promise.reject(new Error('This document has no AI endpoint configured.'));
+    payload.lang=payload.lang||docLanguage();
+    payload.title=cfg.title; payload.documentId=cfg.documentId;
+    if(payload.knowledge===undefined) payload.knowledge=knowledge;
+    // text/plain keeps this a simple request (no CORS preflight) so exported
+    // files work from disk, SharePoint or any other origin.
+    return fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},
+      body:JSON.stringify(payload)})
+      .then(function(r){ if(!r.ok) throw new Error('The AI service returned '+r.status+'.'); return r.json(); })
+      .then(function(d){ if(d&&d.error) throw new Error(d.error); return d; });
+  }
+  function passagesFor(q,n){ return retrieve(q,n||8).map(function(r){ return {page:r.pg.p,text:r.pg.t}; }); }
+  function coveragePassages(n){
+    var byPage={};
+    (index||[]).forEach(function(e){ if(!e||!e.t||e.t.length<20) return;
+      var k=String(e.p||0); byPage[k]=byPage[k]||[];
+      if(byPage[k].join(' ').length<1400) byPage[k].push(e.t); });
+    return Object.keys(byPage).map(function(k){ return {page:Number(k),text:byPage[k].join(' ')}; }).slice(0,n||40);
+  }
   function localAnswer(q){
     var r=retrieve(q,4);
     if(!r.length) return null;
@@ -945,41 +1036,143 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       p.appendChild(b); });
     container.appendChild(p);
   }
+
+  var AI={
+    knowledge:function(){ return knowledge; },
+    config:function(){ return cfg; },
+    transcript:function(){ return transcriptText(); },
+    outline:function(){ return outline; },
+    figures:function(){ return knowledge.figures||[]; },
+    retrieve:function(q,n){ return retrieve(q,n||8).map(function(r){
+      return {page:r.pg.p,text:r.pg.t,score:r.s}; }); },
+    goToPage:function(n){ goto(Number(n)||1); },
+    ask:function(q){
+      var top=passagesFor(q,8);
+      return callAI({mode:'ask',question:q,passages:top})
+        .then(function(d){ return {answer:d.answer,citations:d.citations||[],passages:top}; })
+        .catch(function(err){
+          var a=localAnswer(q);
+          if(!a) throw err;
+          return {answer:'The AI assistant is unavailable, so here are the closest passages:\\n\\n'+a,
+            citations:[],passages:top,offline:true}; });
+    },
+    summarize:function(){
+      return callAI({mode:'summarize',passages:coveragePassages(40)}).then(function(d){ return d.answer; });
+    },
+    describe:function(fig){
+      var f=(typeof fig==='string')?(AI.figures().filter(function(x){ return x.id===fig; })[0]||{id:fig}):(fig||{});
+      var around=passagesFor((f.alt||'')+' '+(f.kind||'figure'),4);
+      if(f.page) around=around.concat(coveragePassages(40).filter(function(p){ return p.page===f.page; }));
+      return callAI({mode:'describe',text:JSON.stringify(f),passages:around}).then(function(d){ return d.answer; });
+    },
+    altText:function(fig){
+      var f=(typeof fig==='string')?{id:fig}:(fig||{});
+      return callAI({mode:'alt',text:JSON.stringify(f),passages:passagesFor(f.alt||'image',3)})
+        .then(function(d){ return String(d.answer||'').replace(/^["']|["']$/g,'').slice(0,150); });
+    },
+    translate:function(target,text){
+      return callAI({mode:'translate',target:target,text:text||transcriptText(18000)})
+        .then(function(d){ return d.answer; });
+    },
+    speak:function(text){
+      if(!('speechSynthesis' in window)) return false;
+      window.speechSynthesis.cancel();
+      var u=new SpeechSynthesisUtterance(String(text||'').slice(0,6000));
+      u.lang=docLanguage(); window.speechSynthesis.speak(u); return true;
+    },
+    stopSpeaking:function(){ if('speechSynthesis' in window) window.speechSynthesis.cancel(); },
+    version:'2'
+  };
+  window.CodbDocsAI=AI;
+  try{ document.dispatchEvent(new CustomEvent('codbdocs:ready',{detail:AI})); }catch(e){}
+
+  // ---- Ask AI -----------------------------------------------------------
   var qaForm=document.getElementById('fx-qa-form'), qaOut=document.getElementById('fx-qa-answer');
   if(qaForm) qaForm.addEventListener('submit',function(e){
     e.preventDefault();
     var q=document.getElementById('fx-qa-input').value.trim(); if(!q) return;
-    qaOut.hidden=false; qaOut.textContent='Reading this document\u2026';
-    var top=retrieve(q,8);
-    var endpoint=cfg.qaEndpoint||cfg.aiEndpoint;
-    function fallback(prefix){
-      var a=localAnswer(q);
-      qaOut.textContent=a?(prefix+a):'No passage in this document matched that question.';
-      if(a) showSources(qaOut,top.slice(0,5));
-    }
-    if(endpoint){
-      // text/plain keeps this a simple request (no CORS preflight) so exported
-      // files work from disk, SharePoint or any other origin.
-      fetch(endpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},
-        body:JSON.stringify({question:q,lang:docLanguage(),documentId:cfg.documentId,title:cfg.title,
-          knowledge:cfg.knowledge||'',
-          passages:top.map(function(r){ return {page:r.pg.p,text:r.pg.t}; })})})
-        .then(function(r){ if(!r.ok) throw new Error('ai'); return r.json(); })
-        .then(function(d){
-          if(d&&d.error) throw new Error(d.error);
-          qaOut.textContent=d.answer||d.result||'No answer was returned.';
-          showSources(qaOut,top.slice(0,5));
-          if(resList){ renderResults(q,top); openDrawer();
-            var sum=document.getElementById('fx-ai-summary');
-            if(sum){ sum.hidden=false;
-              sum.innerHTML='<div class="fx-ai-card"><h3>AI answer</h3><p class="fx-ai-text"></p></div>';
-              sum.querySelector('.fx-ai-text').textContent=d.answer||''; } }
-        })
-        .catch(function(){ fallback('The AI assistant is unavailable, so here are the closest passages:\\n\\n'); });
-    } else {
-      fallback('Closest passages in this document:\\n\\n');
-    }
+    qaOut.hidden=false; qaOut.setAttribute('aria-busy','true');
+    qaOut.textContent='Reading this document\u2026'; say('Asking the document assistant.');
+    AI.ask(q).then(function(res){
+      qaOut.textContent=res.answer||'No answer was returned.';
+      qaOut.removeAttribute('aria-busy');
+      showSources(qaOut,retrieve(q,5));
+      if(resList){ renderResults(q,retrieve(q,10)); openDrawer();
+        var sum=document.getElementById('fx-ai-summary');
+        if(sum){ sum.hidden=false;
+          sum.innerHTML='<div class="fx-ai-card"><h3>AI answer</h3><p class="fx-ai-text"></p></div>';
+          sum.querySelector('.fx-ai-text').textContent=res.answer||''; } }
+      say('The assistant answered your question.');
+    }).catch(function(err){
+      qaOut.removeAttribute('aria-busy');
+      qaOut.textContent=(err&&err.message)||'No passage in this document matched that question.'; });
   });
+
+  // ---- AI summary -------------------------------------------------------
+  var sumBtn=document.getElementById('fx-sum-run'), sumOut=document.getElementById('fx-sum-out');
+  if(sumBtn) sumBtn.onclick=function(){
+    sumOut.hidden=false; sumOut.setAttribute('aria-busy','true');
+    sumOut.textContent='Reading the whole document\u2026';
+    AI.summarize().then(function(a){ sumOut.removeAttribute('aria-busy');
+      sumOut.textContent=a||'No summary was returned.';
+      var play=document.createElement('button'); play.type='button'; play.className='fx-chip';
+      play.textContent='Read this summary aloud';
+      play.onclick=function(){ AI.speak(sumOut.textContent); };
+      sumOut.appendChild(document.createElement('br')); sumOut.appendChild(play);
+      say('Summary ready.');
+    }).catch(function(err){ sumOut.removeAttribute('aria-busy');
+      sumOut.textContent=(err&&err.message)||'The summary could not be produced.'; });
+  };
+
+  // ---- AI image / chart descriptions ------------------------------------
+  [].forEach.call(document.querySelectorAll('.fx-desc-btn'),function(btn){
+    btn.onclick=function(){
+      var id=btn.getAttribute('data-fig');
+      var out=document.querySelector('.fx-desc-out[data-fig="'+id+'"]');
+      var fig=(AI.figures().filter(function(f){ return f.id===id; })[0])||{id:id};
+      if(out){ out.hidden=false; out.setAttribute('aria-busy','true'); out.textContent='Describing this image\u2026'; }
+      btn.disabled=true;
+      AI.describe(fig).then(function(a){
+        if(out){ out.removeAttribute('aria-busy'); out.textContent=a||'No description was returned.'; }
+        var host=btn.closest('figure'); var img=host&&host.querySelector('img');
+        if(img&&a) img.setAttribute('alt',String(a).slice(0,150));
+        btn.disabled=false; say('Image description ready.');
+      }).catch(function(err){ btn.disabled=false;
+        if(out){ out.removeAttribute('aria-busy'); out.textContent=(err&&err.message)||'The description could not be produced.'; } });
+    };
+  });
+
+  // ---- AI translation ----------------------------------------------------
+  var trBtn=document.getElementById('fx-ai-translate'), trOut=document.getElementById('fx-ai-tr-out');
+  if(trBtn) trBtn.onclick=function(){
+    var target=(document.getElementById('fx-ai-lang')||{}).value||'';
+    if(!target.trim()){ if(trOut){ trOut.hidden=false; trOut.textContent='Type the language you need first.'; } return; }
+    trOut.hidden=false; trOut.setAttribute('aria-busy','true'); trOut.textContent='Translating this document\u2026';
+    AI.translate(target).then(function(a){ trOut.removeAttribute('aria-busy');
+      trOut.textContent=a||'No translation was returned.';
+      say('Translation into '+target+' is ready.');
+    }).catch(function(err){ trOut.removeAttribute('aria-busy');
+      trOut.textContent=(err&&err.message)||'The translation could not be produced.'; });
+  };
+
+  // ---- read aloud (screen-reader friendly playback) ----------------------
+  var readBtn=document.getElementById('fx-read');
+  if(readBtn){
+    var reading=false;
+    readBtn.onclick=function(){
+      if(reading){ AI.stopSpeaking(); reading=false; readBtn.setAttribute('aria-pressed','false');
+        say('Reading stopped.'); return; }
+      var page=document.getElementById('fx-page-'+current);
+      var text=page? (page.querySelector('.fx-reflow')||page).textContent
+        : transcriptText(6000);
+      if(!AI.speak(text)){ say('Speech is not available in this browser.'); return; }
+      reading=true; readBtn.setAttribute('aria-pressed','true'); say('Reading page '+current+' aloud.');
+      if('speechSynthesis' in window) window.speechSynthesis.addEventListener('end',function(){
+        reading=false; readBtn.setAttribute('aria-pressed','false'); },{once:true});
+    };
+  }
+
+
 
 
   // ---- downloadable accessible versions --------------------------------
@@ -997,6 +1190,10 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
   var dt=document.getElementById('fx-dl-txt');
   if(dt) dt.onclick=function(){ download(base+'-transcript.txt',
     index.map(function(e){ return e.t; }).join('\\n\\n')); };
+  var dk=document.getElementById('fx-dl-know');
+  if(dk) dk.onclick=function(){ download(base+'-ai-knowledge.json',
+    JSON.stringify({knowledge:knowledge,outline:outline,transcript:transcriptText()},null,2),'application/json'); };
+
   var dj=document.getElementById('fx-dl-json');
   if(dj) dj.onclick=function(){ download(base+'-data.json',
     JSON.stringify(ragData,null,2),'application/json'); };
