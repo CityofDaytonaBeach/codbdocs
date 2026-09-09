@@ -1,22 +1,27 @@
-const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+const esc = (v) => String(v != null ? v : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const num = (v, fallback = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
 function pageObjects(ir, page) {
-  const ids = Array.isArray(page?.content) ? page.content : [];
-  return ids.map((id) => typeof id === "string" ? ir.objects?.[id] : id).filter(Boolean).map((o) => o);
+  const ids = Array.isArray(page == null ? void 0 : page.content) ? page.content : [];
+  return ids.map((id) => {
+    var _a;
+    return typeof id === "string" ? (_a = ir.objects) == null ? void 0 : _a[id] : id;
+  }).filter(Boolean).map((o) => o);
 }
 function objText(o) {
-  return String(o?.semantic?.text ?? o?.raw?.text ?? "");
+  var _a, _b, _c, _d;
+  return String((_d = (_c = (_a = o == null ? void 0 : o.semantic) == null ? void 0 : _a.text) != null ? _c : (_b = o == null ? void 0 : o.raw) == null ? void 0 : _b.text) != null ? _d : "");
 }
 function cssTop(pageHeight, bbox, fontSize) {
-  const y = num(bbox?.[1]);
-  const h = num(bbox?.[3]) || fontSize;
+  const y = num(bbox == null ? void 0 : bbox[1]);
+  const h = num(bbox == null ? void 0 : bbox[3]) || fontSize;
   return Math.max(0, pageHeight - y - h);
 }
 function fontFamily(o) {
-  const raw = String(o?.raw?.font ?? "");
+  var _a, _b;
+  const raw = String((_b = (_a = o == null ? void 0 : o.raw) == null ? void 0 : _a.font) != null ? _b : "");
   const name = raw.replace(/^[A-Z]{6}\+/, "").replace(/[^A-Za-z0-9 -]/g, "");
   const lower = name.toLowerCase();
   if (/times|serif|georgia|garamond|book/.test(lower)) return "'Times New Roman', Times, serif";
@@ -24,18 +29,19 @@ function fontFamily(o) {
   return "Helvetica, Arial, 'Segoe UI', system-ui, sans-serif";
 }
 function inferHeadingLevels(ir) {
+  var _a, _b, _c, _d, _e;
   const sizes = [];
   const candidates = [];
-  const pages = Array.isArray(ir.document?.pages) ? ir.document.pages : Object.keys(ir.pages ?? {});
+  const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
   for (const pid of pages) {
-    const page = ir.pages?.[pid];
+    const page = (_c = ir.pages) == null ? void 0 : _c[pid];
     if (!page) continue;
     for (const o of pageObjects(ir, page)) {
       if (o.type !== "text" && o.type !== void 0) continue;
-      if (o.semantic?.role && o.semantic.role !== "paragraph") continue;
+      if (((_d = o.semantic) == null ? void 0 : _d.role) && o.semantic.role !== "paragraph") continue;
       const text = objText(o).trim();
       if (!text) continue;
-      const size = num(o.raw?.fontSize, 0);
+      const size = num((_e = o.raw) == null ? void 0 : _e.fontSize, 0);
       if (!size) continue;
       sizes.push(size);
       if (text.length <= 120 && !/[.;]$/.test(text)) candidates.push({ id: o.id, size, text });
@@ -54,31 +60,112 @@ function inferHeadingLevels(ir) {
   return levels;
 }
 function newDocCtx() {
-  return { outline: [], index: [], h: 0, inferred: /* @__PURE__ */ new Map(), figures: [], vectors: {} };
+  return { outline: [], index: [], h: 0, inferred: /* @__PURE__ */ new Map(), figures: [], vectors: {}, elements: [] };
+}
+function tableParts(o) {
+  var _a, _b;
+  const raw = (_a = o.raw) != null ? _a : {};
+  const grid = Array.isArray(raw.rows) ? raw.rows.map((r) => Array.isArray(r) ? r : Array.isArray(r == null ? void 0 : r.cells) ? r.cells : [r]) : Array.isArray(raw.cells) ? [raw.cells] : [];
+  if (!grid.length) return { html: "", text: "", rows: 0, cols: 0 };
+  const cell = (c) => {
+    var _a2, _b2;
+    return String(c == null ? "" : typeof c === "object" ? (_b2 = (_a2 = c.text) != null ? _a2 : c.value) != null ? _b2 : "" : c);
+  };
+  const caption = String(((_b = o.semantic) == null ? void 0 : _b.caption) || raw.caption || "Table");
+  const [head, ...rest] = grid;
+  const cols = Math.max(...grid.map((r) => r.length));
+  const html = `<table class="fx-datatable"><caption>${esc(caption)}</caption><thead><tr>` + head.map((c) => `<th scope="col">${esc(cell(c))}</th>`).join("") + `</tr></thead><tbody>` + rest.map(
+    (r) => `<tr>${r.map((c, i) => i === 0 ? `<th scope="row">${esc(cell(c))}</th>` : `<td>${esc(cell(c))}</td>`).join("")}</tr>`
+  ).join("") + `</tbody></table>`;
+  const text = grid.map((r) => r.map(cell).join(" | ")).join("\n");
+  return { html, text, rows: grid.length, cols };
+}
+function vectorSummary(o) {
+  var _a, _b, _c, _d;
+  const raw = (_a = o.raw) != null ? _a : {};
+  const paths = Array.isArray(raw.paths) ? raw.paths.length : num(raw.pathCount, 0);
+  const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
+  const parts = [
+    ((_c = o.semantic) == null ? void 0 : _c.caption) || ((_d = o.accessibility) == null ? void 0 : _d.alt) || "Vector drawing",
+    paths ? `${paths} paths` : "",
+    w && h ? `${Math.round(num(w))}\xD7${Math.round(num(h))} pt` : "",
+    raw.fill ? `fill ${raw.fill}` : "",
+    raw.stroke ? `stroke ${raw.stroke}` : "",
+    `at x ${Math.round(num(x))}, y ${Math.round(num(y))}`
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+function pushElement(ctx, el) {
+  const id = el.id && String(el.id).trim() ? String(el.id) : `el-${ctx.elements.length + 1}`;
+  ctx.elements.push({ ...el, id });
+  return id;
 }
 function renderTextLayer(ir, page, ctx, pageNum) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
   const pageHeight = num(page.height, 792);
   let html = "";
   for (const o of pageObjects(ir, page)) {
     if (o.type === "image") {
-      const src = o.raw?.src;
-      const [x = 0, y = 0, w = 0, h = 0] = o.bbox ?? [];
-      const alt = o.accessibility?.alt || o.semantic?.caption || "Image";
-      ctx.figures.push({
-        id: String(o.id ?? `fig-${ctx.figures.length + 1}`),
+      const src = (_a = o.raw) == null ? void 0 : _a.src;
+      const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
+      const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
+      const long = String(
+        ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || ""
+      );
+      const kind = String(((_h = o.semantic) == null ? void 0 : _h.kind) || ((_i = o.raw) == null ? void 0 : _i.kind) || "image");
+      const fid = String((_j = o.id) != null ? _j : `fig-${ctx.figures.length + 1}`);
+      ctx.figures.push({ id: fid, page: pageNum, alt, long, kind });
+      pushElement(ctx, {
+        id: fid,
         page: pageNum,
-        alt,
-        long: String(o.accessibility?.longDescription || o.accessibility?.summary || o.semantic?.summary || ""),
-        kind: String(o.semantic?.kind || o.raw?.kind || "image")
+        kind: kind === "chart" ? "chart" : "image",
+        label: alt,
+        text: [alt, long].filter(Boolean).join(" \u2014 "),
+        detail: { width: Math.round(num(w)), height: Math.round(num(h)), hasImage: Boolean(src), graphic: kind }
       });
       if (src && w && h) {
-        html += `<img class="fx-img" src="${esc(src)}" alt="${esc(alt)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
+        html += `<img class="fx-img" src="${esc(src)}" alt="${esc(alt)}" data-el="${esc(fid)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
       }
       continue;
     }
+    if (o.type === "vector" || o.type === "path" || o.type === "shape") {
+      const summary = vectorSummary(o);
+      pushElement(ctx, {
+        id: String((_k = o.id) != null ? _k : ""),
+        page: pageNum,
+        kind: "vector",
+        label: ((_l = o.semantic) == null ? void 0 : _l.caption) || ((_m = o.accessibility) == null ? void 0 : _m.alt) || "Vector drawing",
+        text: summary,
+        detail: { bbox: (_n = o.bbox) != null ? _n : null, type: o.type }
+      });
+      continue;
+    }
+    if (o.type === "table" || Array.isArray((_o = o.raw) == null ? void 0 : _o.rows)) {
+      const t = tableParts(o);
+      if (t.rows) {
+        pushElement(ctx, {
+          id: String((_p = o.id) != null ? _p : ""),
+          page: pageNum,
+          kind: "table",
+          label: String(((_q = o.semantic) == null ? void 0 : _q.caption) || ((_r = o.raw) == null ? void 0 : _r.caption) || `Table with ${t.rows} rows`),
+          text: t.text,
+          detail: { rows: t.rows, columns: t.cols }
+        });
+        ctx.index.push({ p: pageNum, role: "table", t: t.text });
+        continue;
+      }
+    }
     if (o.type === "link") {
-      const href = o.raw?.href || o.raw?.url;
-      const rect = o.raw?.rect;
+      const href = ((_s = o.raw) == null ? void 0 : _s.href) || ((_t = o.raw) == null ? void 0 : _t.url);
+      const rect = (_u = o.raw) == null ? void 0 : _u.rect;
+      pushElement(ctx, {
+        id: String((_v = o.id) != null ? _v : ""),
+        page: pageNum,
+        kind: "link",
+        label: objText(o) || String(href || "Link"),
+        text: `${objText(o) || ""} (${href || "no destination"})`,
+        detail: { href: href || null }
+      });
       if (href && Array.isArray(rect) && rect.length >= 4) {
         const x = Math.min(num(rect[0]), num(rect[2]));
         const y = Math.min(num(rect[1]), num(rect[3]));
@@ -91,14 +178,14 @@ function renderTextLayer(ir, page, ctx, pageNum) {
     const text = objText(o);
     if (!text.trim()) continue;
     const bbox = Array.isArray(o.bbox) ? o.bbox : [];
-    const fontSize = num(o.raw?.fontSize, 12) || 12;
+    const fontSize = num((_w = o.raw) == null ? void 0 : _w.fontSize, 12) || 12;
     const left = num(bbox[0]);
     const top = cssTop(pageHeight, bbox, fontSize);
     const width = num(bbox[2]);
     const inferredLevel = ctx.inferred.get(o.id);
-    const declared = o.semantic?.role;
+    const declared = (_x = o.semantic) == null ? void 0 : _x.role;
     const role = inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
-    const level = Math.min(6, Math.max(1, num(o.semantic?.level, inferredLevel ?? 2)));
+    const level = Math.min(6, Math.max(1, num((_y = o.semantic) == null ? void 0 : _y.level, inferredLevel != null ? inferredLevel : 2)));
     const tag = role === "heading" ? `h${level}` : "span";
     const style = `left:${left}px;top:${top}px;font-size:${fontSize}px;font-family:${fontFamily(o)};` + (width ? `--fx-w:${width}px;` : "");
     let idAttr = "";
@@ -108,17 +195,26 @@ function renderTextLayer(ir, page, ctx, pageNum) {
       idAttr = ` id="fx-h-${ctx.h}"`;
     }
     ctx.index.push({ p: pageNum, role, t: text });
-    html += `<${tag}${idAttr} class="fx-text" data-object="${esc(o.id ?? "")}" data-role="${esc(role)}" style="${style}">${esc(text)}</${tag}>`;
+    const elId = pushElement(ctx, {
+      id: String((_z = o.id) != null ? _z : ""),
+      page: pageNum,
+      kind: role === "heading" ? "heading" : role === "list-item" ? "list" : "text",
+      label: text.length > 90 ? `${text.slice(0, 90)}\u2026` : text,
+      text,
+      detail: { role, level: role === "heading" ? level : void 0, fontSize: Math.round(fontSize) }
+    });
+    html += `<${tag}${idAttr} class="fx-text" data-object="${esc((_A = o.id) != null ? _A : "")}" data-el="${esc(elId)}" data-role="${esc(role)}" style="${style}">${esc(text)}</${tag}>`;
   }
   return html;
 }
 function renderReflow(ir, page, headingIds, ctx) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
   let html = "";
   let openList = false;
   let hCursor = 0;
   for (const o of pageObjects(ir, page)) {
     const inferredLevel = ctx.inferred.get(o.id);
-    const declared = o.semantic?.role;
+    const declared = (_a = o.semantic) == null ? void 0 : _a.role;
     const role = o.type === "image" ? "image" : inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
     const text = objText(o);
     if (role === "list-item") {
@@ -134,20 +230,35 @@ function renderReflow(ir, page, headingIds, ctx) {
       openList = false;
     }
     if (o.type === "image") {
-      const src = o.raw?.src;
-      const alt = o.accessibility?.alt || o.semantic?.caption || "Image";
-      const long = o.accessibility?.longDescription || o.accessibility?.summary || o.semantic?.summary || "";
-      const fid = esc(o.id ?? "");
+      const src = (_b = o.raw) == null ? void 0 : _b.src;
+      const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
+      const long = ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || "";
+      const fid = esc((_h = o.id) != null ? _h : "");
       html += `<figure data-fig="${fid}">${src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption>` + (long ? `<details class="fx-longdesc"><summary>Detailed description of this image</summary><p>${esc(long)}</p></details>` : `<button type="button" class="fx-desc-btn" data-fig="${fid}">Describe this image with AI</button><p class="fx-desc-out" data-fig="${fid}" role="status" aria-live="polite" hidden></p>`) + `</figure>`;
+      continue;
+    }
+    if (o.type === "table" || Array.isArray((_i = o.raw) == null ? void 0 : _i.rows)) {
+      const t = tableParts(o);
+      if (t.rows) {
+        const tid = esc((_j = o.id) != null ? _j : "");
+        html += `<div class="fx-tablewrap" data-el="${tid}" tabindex="0" role="group" aria-label="Data table">${t.html}<button type="button" class="fx-desc-btn" data-explain="${tid}">Explain this table with AI</button><p class="fx-desc-out" data-explain="${tid}" role="status" aria-live="polite" hidden></p></div>`;
+        continue;
+      }
+    }
+    if (o.type === "vector" || o.type === "path" || o.type === "shape") {
+      const vid = esc((_k = o.id) != null ? _k : "");
+      html += `<figure class="fx-vector" data-el="${vid}"><figcaption>${esc(
+        ((_l = o.semantic) == null ? void 0 : _l.caption) || ((_m = o.accessibility) == null ? void 0 : _m.alt) || "Vector drawing"
+      )}</figcaption><p class="fx-note">${esc(vectorSummary(o))}</p><button type="button" class="fx-desc-btn" data-explain="${vid}">Explain this drawing with AI</button><p class="fx-desc-out" data-explain="${vid}" role="status" aria-live="polite" hidden></p></figure>`;
       continue;
     }
     if (!text.trim()) continue;
     if (role === "heading") {
-      const level = Math.min(6, Math.max(1, num(o.semantic?.level, inferredLevel ?? 2)));
+      const level = Math.min(6, Math.max(1, num((_n = o.semantic) == null ? void 0 : _n.level, inferredLevel != null ? inferredLevel : 2)));
       const hid = headingIds[hCursor++];
       html += `<h${level}${hid ? ` id="fx-rh-${hid}"` : ""}>${esc(text)}</h${level}>`;
     } else if (o.type === "link") {
-      html += `<p><a href="${esc(o.raw?.href || o.raw?.url || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
+      html += `<p><a href="${esc(((_o = o.raw) == null ? void 0 : _o.href) || ((_p = o.raw) == null ? void 0 : _p.url) || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
     } else {
       html += `<p>${esc(text)}</p>`;
     }
@@ -156,6 +267,7 @@ function renderReflow(ir, page, headingIds, ctx) {
   return html || '<p class="fx-empty">No extractable text on this page.</p>';
 }
 function auditPanel(audit, remediations) {
+  var _a, _b;
   if (!audit) return "";
   const issues = Array.isArray(audit.issues) ? audit.issues : [];
   const rows = issues.slice(0, 200).map(
@@ -165,7 +277,7 @@ function auditPanel(audit, remediations) {
   return `
   <section id="fx-a11y" class="fx-panel" aria-labelledby="fx-a11y-h">
     <h2 id="fx-a11y-h">Accessibility report</h2>
-    <p class="fx-score"><strong>Score:</strong> ${esc(audit.score ?? "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc(audit.level ?? "\u2014")} \xB7 <strong>Issues:</strong> ${issues.length}</p>
+    <p class="fx-score"><strong>Score:</strong> ${esc((_a = audit.score) != null ? _a : "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc((_b = audit.level) != null ? _b : "\u2014")} \xB7 <strong>Issues:</strong> ${issues.length}</p>
     ${rows ? `<table class="fx-table"><caption>WCAG 2.1 findings</caption><thead><tr><th scope="col">Severity</th><th scope="col">Criterion</th><th scope="col">Finding</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No WCAG issues detected.</p>"}
     ${plan ? `<h3>Remediation plan</h3><ol>${plan}</ol>` : ""}
   </section>`;
@@ -241,10 +353,11 @@ function conformancePanel() {
   </section>`;
 }
 function buildFidelityHtml(ir, options = {}) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
   if (!ir || typeof ir !== "object") throw new Error("An IR object is required.");
-  const pages = Array.isArray(ir.document?.pages) ? ir.document.pages : Object.keys(ir.pages ?? {});
-  const lang = options.lang || ir.document?.metadata?.language || "en";
-  const title = options.title || ir.document?.metadata?.title || ir.document?.title || "Document";
+  const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
+  const lang = options.lang || ((_d = (_c = ir.document) == null ? void 0 : _c.metadata) == null ? void 0 : _d.language) || "en";
+  const title = options.title || ((_f = (_e = ir.document) == null ? void 0 : _e.metadata) == null ? void 0 : _f.title) || ((_g = ir.document) == null ? void 0 : _g.title) || "Document";
   const showThumbs = options.thumbnails !== false;
   const initialView = options.view === "reflow" ? "reflow" : "fidelity";
   const ctx = newDocCtx();
@@ -253,11 +366,12 @@ function buildFidelityHtml(ir, options = {}) {
   let body = "";
   let nav = "";
   pages.forEach((pageId, index) => {
-    const page = ir.pages?.[pageId];
+    var _a2, _b2, _c2;
+    const page = (_a2 = ir.pages) == null ? void 0 : _a2[pageId];
     if (!page) return;
     const w = num(page.width, 612);
     const h = num(page.height, 792);
-    const label = page.labels?.print || `Page ${page.num ?? index + 1}`;
+    const label = ((_b2 = page.labels) == null ? void 0 : _b2.print) || `Page ${(_c2 = page.num) != null ? _c2 : index + 1}`;
     const vectorCount = Array.isArray(page.vectors) ? page.vectors.length : pageObjects(ir, page).filter((o) => o.type === "vector" || o.type === "path" || o.type === "shape").length;
     if (vectorCount) ctx.vectors[String(index + 1)] = vectorCount;
     nav += `<option value="${index + 1}">${esc(label)}</option>`;
@@ -280,9 +394,9 @@ function buildFidelityHtml(ir, options = {}) {
       <p class="fx-pagefoot" aria-hidden="true">${esc(label)}</p>
     </section>`;
   });
-  const rag = options.includeRag === false ? "" : options.rag ?? null;
+  const rag = options.includeRag === false ? "" : (_h = options.rag) != null ? _h : null;
   const translate = options.translate !== false;
-  const priority = options.priorityLanguages ?? [];
+  const priority = (_i = options.priorityLanguages) != null ? _i : [];
   const outlineHtml = ctx.outline.length ? ctx.outline.map(
     (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
   ).join("") : `<li class="fx-ol-empty">No headings were detected in this document.</li>`;
@@ -314,15 +428,38 @@ function buildFidelityHtml(ir, options = {}) {
     figures: ctx.figures,
     vectors: ctx.vectors,
     accessibility: options.audit ? {
-      score: options.audit.score ?? null,
-      level: options.audit.level ?? null,
+      score: (_j = options.audit.score) != null ? _j : null,
+      level: (_k = options.audit.level) != null ? _k : null,
       issues: Array.isArray(options.audit.issues) ? options.audit.issues.length : 0,
-      topIssues: (Array.isArray(options.audit.issues) ? options.audit.issues : []).slice(0, 12).map((i) => ({ severity: i.severity ?? "info", wcag: i.wcag ?? "", message: i.message ?? i.type ?? "" }))
+      topIssues: (Array.isArray(options.audit.issues) ? options.audit.issues : []).slice(0, 12).map((i) => {
+        var _a2, _b2, _c2, _d2;
+        return { severity: (_a2 = i.severity) != null ? _a2 : "info", wcag: (_b2 = i.wcag) != null ? _b2 : "", message: (_d2 = (_c2 = i.message) != null ? _c2 : i.type) != null ? _d2 : "" };
+      })
     } : null,
     conformance: CONFORMANCE,
     assistiveTechnology: AT_TESTED,
     notes: options.knowledge || options.documentContext || options.siteContext || null,
-    capabilities: ["ask", "summarize", "describe", "alt", "translate", "retrieve", "speak"]
+    elementCounts: ctx.elements.reduce((acc, e) => {
+      var _a2;
+      acc[e.kind] = ((_a2 = acc[e.kind]) != null ? _a2 : 0) + 1;
+      return acc;
+    }, {}),
+    tables: ctx.elements.filter((e) => e.kind === "table").map((e) => {
+      var _a2;
+      return { id: e.id, page: e.page, label: e.label, ...(_a2 = e.detail) != null ? _a2 : {} };
+    }),
+    capabilities: [
+      "ask",
+      "summarize",
+      "describe",
+      "alt",
+      "translate",
+      "retrieve",
+      "speak",
+      "elements",
+      "explainElement",
+      "explainPage"
+    ]
   };
   const jsonScript = (id, value) => `<script type="application/json" id="${id}">${JSON.stringify(value).replace(/</g, "\\u003c")}<\/script>`;
   return `<!DOCTYPE html>
@@ -429,6 +566,23 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-desc-btn[disabled]{opacity:.6;cursor:progress}
 .fx-desc-out{margin:.45rem 0 0;font-size:.92rem;line-height:1.55;background:#f5f8fc;border-left:3px solid var(--accent-2);
   padding:.6rem .8rem;border-radius:0 8px 8px 0}
+.fx-datatable{border-collapse:collapse;width:100%;font-size:.92rem;margin:.4rem 0}
+.fx-datatable caption{text-align:left;font-weight:700;padding:.2rem 0 .4rem}
+.fx-datatable th,.fx-datatable td{border:1px solid #d5dae1;padding:.35rem .55rem;text-align:left}
+.fx-datatable thead th{background:#eef1f5}
+.fx-tablewrap{margin:.9rem 0;overflow-x:auto}
+.fx-vector{margin:.9rem 0;padding:.7rem .9rem;border:1px dashed #c7ced8;border-radius:10px}
+.fx-ex-tabs{display:flex;flex-wrap:wrap;gap:.35rem;margin:.6rem 0}
+.fx-ex-tabs button{border:1px solid #d5dae1;background:#f6f8fa;border-radius:999px;padding:.28rem .8rem;
+  font:inherit;font-size:.85rem;cursor:pointer}
+.fx-ex-tabs button[aria-pressed=true]{background:var(--accent-2);border-color:var(--accent-2);color:#fff}
+.fx-ex-list{list-style:none;margin:0;padding:0;max-height:52vh;overflow:auto}
+.fx-ex-list li{border-bottom:1px solid #e7eaee;padding:.6rem .2rem}
+.fx-ex-kind{display:inline-block;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;
+  background:#eef1f5;border-radius:999px;padding:.1rem .5rem;margin-right:.45rem;color:#4a525c}
+.fx-ex-label{font-size:.95rem}
+.fx-ex-actions{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.4rem}
+
 
 .fx-backdrop{position:fixed;inset:0;background:rgba(10,12,15,.55);backdrop-filter:blur(2px);z-index:60;display:none}
 .fx-backdrop[data-open=true]{display:block}
@@ -536,6 +690,8 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   <div class="fx-group">
     <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
     <button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>
+    <button type="button" id="fx-ex-open" aria-haspopup="dialog">Explore content</button>
+
     <button type="button" id="fx-read" aria-pressed="false">Read aloud</button>
     <button type="button" id="fx-print">Print</button>
     ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
@@ -610,8 +766,28 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   <h2 id="fx-sum-h">AI summary of this document</h2>
   <p class="fx-lang-note">A plain-language overview built from the whole document, its headings, figures and data.</p>
   <button class="fx-primary" type="button" id="fx-sum-run">Summarise this document</button>
+  <button class="fx-primary" type="button" id="fx-sum-page">Summarise the page I am on</button>
   <div id="fx-sum-out" class="fx-answer" hidden role="status" aria-live="polite"></div>
 </div>
+
+<div class="fx-dialog" id="fx-ex" role="dialog" aria-modal="true" aria-labelledby="fx-ex-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close content explorer">&#10005;</button>
+  <h2 id="fx-ex-h">Explore every part of this document</h2>
+  <p class="fx-lang-note">Every heading, paragraph, list, link, image, chart, vector drawing and table is listed
+    here. Choose an item to jump to it, hear it read aloud, or have the AI explain it in plain language.</p>
+  <div class="fx-field">
+    <label for="fx-ex-filter">Find an item</label>
+    <input id="fx-ex-filter" type="search" placeholder="e.g. budget table, logo, deadline">
+  </div>
+  <div class="fx-ex-tabs" role="group" aria-label="Filter by type" id="fx-ex-tabs">
+    ${["all", "heading", "text", "list", "table", "image", "chart", "vector", "link"].map(
+    (k) => `<button type="button" data-kind="${k}" aria-pressed="${k === "all"}">${k === "all" ? "Everything" : k.charAt(0).toUpperCase() + k.slice(1) + "s"}</button>`
+  ).join("")}
+  </div>
+  <p class="fx-status" id="fx-ex-count" aria-live="polite"></p>
+  <ul class="fx-ex-list" id="fx-ex-list"></ul>
+</div>
+
 
 ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="true" aria-labelledby="fx-lang-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close translation">&#10005;</button>
@@ -682,6 +858,7 @@ ${jsonScript("codbdocs-config", config)}
 ${jsonScript("codbdocs-index", ctx.index)}
 ${jsonScript("codbdocs-outline", ctx.outline)}
 ${jsonScript("codbdocs-knowledge", knowledgePack)}
+${jsonScript("codbdocs-elements", ctx.elements.map((e) => ({ ...e, text: e.text.slice(0, 4e3) })))}
 ${rag ? jsonScript("codbdocs-rag", rag) : ""}
 
 <script>
@@ -912,6 +1089,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
   var cfg=readJson('codbdocs-config')||{}, index=readJson('codbdocs-index')||[];
   var outline=readJson('codbdocs-outline')||[], ragData=readJson('codbdocs-rag');
   var knowledge=readJson('codbdocs-knowledge')||{};
+  var elements=readJson('codbdocs-elements')||[];
 
 
   // ---- accessible dialogs (focus trap, Escape to close) ---------------
@@ -941,6 +1119,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
   wire('fx-outline-open','fx-outline');
   wire('fx-qa-open','fx-qa');
   wire('fx-sum-open','fx-sum');
+  wire('fx-ex-open','fx-ex',function(){ renderElements(); });
   wire('fx-dl-open','fx-dl');
   wire('fx-fb-open','fx-fb');
 
@@ -1081,8 +1260,32 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       u.lang=docLanguage(); window.speechSynthesis.speak(u); return true;
     },
     stopSpeaking:function(){ if('speechSynthesis' in window) window.speechSynthesis.cancel(); },
-    version:'2'
+    elements:function(kind){ return kind&&kind!=='all'
+      ? elements.filter(function(e){ return e.kind===kind; }) : elements; },
+    element:function(id){ return elements.filter(function(e){ return e.id===String(id); })[0]||null; },
+    explainElement:function(id){
+      var el=(typeof id==='object'&&id)?id:AI.element(id);
+      if(!el) return Promise.reject(new Error('That item is not part of this document.'));
+      var around=passagesFor(el.label||el.text||'',3)
+        .concat(coveragePassages(40).filter(function(p){ return p.page===el.page; }));
+      return callAI({mode:'explain',text:JSON.stringify(el),question:'Explain this '+el.kind+' for a reader who cannot see the page.',passages:around})
+        .then(function(d){ return d.answer; })
+        .catch(function(err){
+          if(el.text) return 'The AI assistant is unavailable. Here is the content of this '+el.kind+
+            ' on page '+el.page+':\\n\\n'+el.text;
+          throw err; });
+    },
+    explainPage:function(n){
+      var p=Number(n)||current;
+      var items=elements.filter(function(e){ return e.page===p; });
+      return callAI({mode:'summarize',question:'Explain page '+p+' of this document.',
+        text:JSON.stringify(items).slice(0,12000),
+        passages:coveragePassages(40).filter(function(x){ return x.page===p; })})
+        .then(function(d){ return d.answer; });
+    },
+    version:'3'
   };
+
   window.CodbDocsAI=AI;
   try{ document.dispatchEvent(new CustomEvent('codbdocs:ready',{detail:AI})); }catch(e){}
 
@@ -1123,24 +1326,106 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     }).catch(function(err){ sumOut.removeAttribute('aria-busy');
       sumOut.textContent=(err&&err.message)||'The summary could not be produced.'; });
   };
+  var sumPage=document.getElementById('fx-sum-page');
+  if(sumPage) sumPage.onclick=function(){
+    sumOut.hidden=false; sumOut.setAttribute('aria-busy','true');
+    sumOut.textContent='Reading page '+current+'\u2026';
+    AI.explainPage(current).then(function(a){ sumOut.removeAttribute('aria-busy');
+      sumOut.textContent=a||'No summary was returned.'; say('Page summary ready.');
+    }).catch(function(err){ sumOut.removeAttribute('aria-busy');
+      sumOut.textContent=(err&&err.message)||'The page summary could not be produced.'; });
+  };
 
-  // ---- AI image / chart descriptions ------------------------------------
+  // ---- AI explanations for images, charts, drawings and tables -----------
+  function runExplain(btn,out,busyText,done){
+    if(out){ out.hidden=false; out.setAttribute('aria-busy','true'); out.textContent=busyText; }
+    btn.disabled=true;
+    return function(promise){
+      promise.then(function(a){
+        if(out){ out.removeAttribute('aria-busy'); out.textContent=a||'No explanation was returned.'; }
+        btn.disabled=false; if(done) done(a); say('Explanation ready.');
+      }).catch(function(err){ btn.disabled=false;
+        if(out){ out.removeAttribute('aria-busy');
+          out.textContent=(err&&err.message)||'The explanation could not be produced.'; } });
+    };
+  }
   [].forEach.call(document.querySelectorAll('.fx-desc-btn'),function(btn){
     btn.onclick=function(){
-      var id=btn.getAttribute('data-fig');
-      var out=document.querySelector('.fx-desc-out[data-fig="'+id+'"]');
-      var fig=(AI.figures().filter(function(f){ return f.id===id; })[0])||{id:id};
-      if(out){ out.hidden=false; out.setAttribute('aria-busy','true'); out.textContent='Describing this image\u2026'; }
-      btn.disabled=true;
-      AI.describe(fig).then(function(a){
-        if(out){ out.removeAttribute('aria-busy'); out.textContent=a||'No description was returned.'; }
-        var host=btn.closest('figure'); var img=host&&host.querySelector('img');
-        if(img&&a) img.setAttribute('alt',String(a).slice(0,150));
-        btn.disabled=false; say('Image description ready.');
-      }).catch(function(err){ btn.disabled=false;
-        if(out){ out.removeAttribute('aria-busy'); out.textContent=(err&&err.message)||'The description could not be produced.'; } });
+      var fid=btn.getAttribute('data-fig'), eid=btn.getAttribute('data-explain');
+      if(fid!==null&&fid!==undefined&&!eid){
+        var out=document.querySelector('.fx-desc-out[data-fig="'+fid+'"]');
+        var fig=(AI.figures().filter(function(f){ return f.id===fid; })[0])||{id:fid};
+        runExplain(btn,out,'Describing this image\u2026',function(a){
+          var host=btn.closest('figure'); var img=host&&host.querySelector('img');
+          if(img&&a) img.setAttribute('alt',String(a).slice(0,150)); })(AI.describe(fig));
+        return;
+      }
+      var eout=document.querySelector('.fx-desc-out[data-explain="'+eid+'"]');
+      runExplain(btn,eout,'Explaining this item\u2026')(AI.explainElement(eid));
     };
   });
+
+  // ---- content explorer (every text block, image, drawing and table) -----
+  var exKind='all';
+  function elementNodeFor(el){
+    return document.querySelector('[data-el="'+(window.CSS&&CSS.escape?CSS.escape(el.id):el.id)+'"]');
+  }
+  function renderElements(){
+    var list=document.getElementById('fx-ex-list'); if(!list) return;
+    var q=((document.getElementById('fx-ex-filter')||{}).value||'').toLowerCase().trim();
+    var items=elements.filter(function(e){
+      if(exKind!=='all'&&e.kind!==exKind) return false;
+      if(!q) return true;
+      return (e.label+' '+e.text+' page '+e.page).toLowerCase().indexOf(q)>=0; }).slice(0,400);
+    list.innerHTML='';
+    var count=document.getElementById('fx-ex-count');
+    if(count) count.textContent=items.length+' item'+(items.length===1?'':'s')+
+      (exKind==='all'?'':' of type '+exKind)+' in this document.';
+    items.forEach(function(el){
+      var li=document.createElement('li');
+      var head=document.createElement('p'); head.style.margin='0';
+      var k=document.createElement('span'); k.className='fx-ex-kind'; k.textContent=el.kind;
+      var lab=document.createElement('span'); lab.className='fx-ex-label';
+      lab.textContent=el.label||el.text.slice(0,90)||('Item on page '+el.page);
+      head.appendChild(k); head.appendChild(lab);
+      var meta=document.createElement('span'); meta.className='fx-ex-kind'; meta.style.marginLeft='.4rem';
+      meta.textContent='page '+el.page; head.appendChild(meta);
+      li.appendChild(head);
+      var actions=document.createElement('div'); actions.className='fx-ex-actions';
+      function chip(label,fn){ var b=document.createElement('button'); b.type='button'; b.className='fx-chip';
+        b.textContent=label; b.onclick=fn; actions.appendChild(b); return b; }
+      chip('Go to it',function(){ goto(el.page);
+        var node=elementNodeFor(el);
+        if(node){ node.setAttribute('tabindex','-1'); node.scrollIntoView({behavior:'smooth',block:'center'});
+          node.focus({preventScroll:true}); }
+        closeDialog(); });
+      chip('Read aloud',function(){ AI.speak(el.text||el.label); });
+      var out=document.createElement('p'); out.className='fx-desc-out'; out.hidden=true;
+      out.setAttribute('role','status'); out.setAttribute('aria-live','polite');
+      var ex=chip('Explain with AI',function(){ runExplain(ex,out,'Explaining this '+el.kind+'\u2026')(AI.explainElement(el)); });
+      if(el.kind==='image'||el.kind==='chart'){
+        var alt=chip('Write alt text',function(){
+          runExplain(alt,out,'Writing alt text\u2026')(AI.altText(el)); });
+      }
+      li.appendChild(actions); li.appendChild(out);
+      if(el.kind==='table'&&el.text){
+        var pre=document.createElement('pre'); pre.className='fx-pre'; pre.textContent=el.text.slice(0,4000);
+        var det=document.createElement('details'); var sm=document.createElement('summary');
+        sm.textContent='Show the table data as text'; det.appendChild(sm); det.appendChild(pre);
+        li.appendChild(det);
+      }
+      list.appendChild(li);
+    });
+  }
+  var exFilter=document.getElementById('fx-ex-filter');
+  if(exFilter) exFilter.oninput=function(){ renderElements(); };
+  [].forEach.call(document.querySelectorAll('#fx-ex-tabs button'),function(b){
+    b.onclick=function(){ exKind=b.dataset.kind||'all';
+      [].forEach.call(document.querySelectorAll('#fx-ex-tabs button'),function(x){
+        x.setAttribute('aria-pressed',String(x===b)); });
+      renderElements(); };
+  });
+
 
   // ---- AI translation ----------------------------------------------------
   var trBtn=document.getElementById('fx-ai-translate'), trOut=document.getElementById('fx-ai-tr-out');
