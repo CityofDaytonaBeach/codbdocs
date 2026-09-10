@@ -42,6 +42,7 @@ function viewerToolbarHTML() {
     <div class="codbdocs-sep" aria-hidden="true"></div>
     <button type="button" class="codbdocs-toggle" id="codbdocs-contrast" aria-pressed="false">High contrast</button>
     <button type="button" class="codbdocs-btn" id="codbdocs-outline-toggle" aria-expanded="true" aria-controls="codbdocs-outline">Outline</button>
+    <button type="button" class="codbdocs-btn codbdocs-return-btn" id="codbdocs-return-referrer">Return</button>
   </div>
   `;
 }
@@ -107,6 +108,7 @@ function viewerStyles() {
     .codbdocs-toolbar .codbdocs-toggle, .codbdocs-toolbar .codbdocs-btn { background: #2b3140; color: #cfd6e6; border: 1px solid #40475a; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
     .codbdocs-toolbar .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
     .codbdocs-toolbar .codbdocs-btn:hover, .codbdocs-toolbar .codbdocs-toggle:hover { background: #394159; }
+    .codbdocs-return-btn { margin-left: auto; }
     .codbdocs-searchbox { display: flex; align-items: center; gap: 8px; }
     .codbdocs-searchbox input { padding: 6px 10px; border: 1px solid #40475a; border-radius: 6px; background: #0d1117; color: #eee; font-size: 13px; width: 220px; }
     .codbdocs-searchbox input:focus { outline: 2px solid #4361ee; }
@@ -223,6 +225,12 @@ function viewerScript() {
     var prevBtn = $('#codbdocs-page-prev'), nextBtn = $('#codbdocs-page-next');
     if (prevBtn) prevBtn.addEventListener('click', function () { gotoPage(currentPage - 1, { smooth: true }); });
     if (nextBtn) nextBtn.addEventListener('click', function () { gotoPage(currentPage + 1, { smooth: true }); });
+
+    var returnBtn = $('#codbdocs-return-referrer');
+    if (returnBtn) returnBtn.addEventListener('click', function () {
+      if (document.referrer) window.location.href = document.referrer;
+      else window.history.back();
+    });
 
     var zi = $('#codbdocs-zoom-in'), zo = $('#codbdocs-zoom-out'), zf = $('#codbdocs-zoom-fit');
     if (zi) zi.addEventListener('click', function () { fitMode = false; zoom = Math.min(3, +(zoom + 0.25).toFixed(2)); applyZoom(); });

@@ -88,8 +88,21 @@ export function buildRAGContext(ir, contentGraph) {
       page: page.num,
       size: { width: page.width, height: page.height },
       text,
+      summary: summarizeText(text),
       blocks,
       entities: pageEntities,
+      accessibility: {
+        hasTaggedStructure: Boolean(ir.structure?.[pageId]),
+        readingOrderItems: Array.isArray(page.readingOrder) ? page.readingOrder.length : 0,
+        language: page.language || ir.document.metadata?.language || null,
+        textQuality: page.textQuality || null,
+      },
+      fidelity: {
+        hasRaster: Boolean(page.background),
+        width: page.width,
+        height: page.height,
+        rotation: page.rotation || 0,
+      },
     };
   }).filter(Boolean);
 
@@ -101,6 +114,22 @@ export function buildRAGContext(ir, contentGraph) {
 
   return {
     format: 'codbdocs-rag-v2',
+    aiContract: {
+      version: '1.0',
+      purpose: 'Grounded document search, summaries, metadata extraction, citations, and accessible descriptions.',
+      recommendedFlow: [
+        'Use pages and chunks as retrievable passages.',
+        'Use metadata, entities, tables, relationships, and accessibility fields to enrich prompts.',
+        'Return page citations using page or pageNumber.',
+        'Use fidelity dimensions and bounding boxes when highlighting source evidence.',
+      ],
+      extensionPoints: {
+        search: ['fullText', 'pages[].text', 'pages[].blocks', 'chunks'],
+        summaries: ['pages[].summary', 'documentSummary', 'outline'],
+        metadata: ['metadata', 'entityTypes', 'pages[].entities'],
+        accessibility: ['accessibility', 'pages[].accessibility'],
+      },
+    },
     source: ir.document.metadata?.title || 'PDF document',
     title: ir.document.metadata?.title || null,
     author: ir.document.metadata?.author || null,
@@ -108,15 +137,30 @@ export function buildRAGContext(ir, contentGraph) {
     documentType: content.documentType || ir.document.type || null,
     pageCount: (ir.document.pages || []).length,
     pages,
+    documentSummary: summarizeText(pages.map(p => p.text).join(' '), 600),
     fullText: pages.map(p => `[Page ${p.page}]\n${p.text}`).join('\n\n'),
     blockTypes,
     entityTypes,
     tables: content.allTables ? content.allTables.map(t => t.toJSON ? t.toJSON() : t) : [],
     relationships: content.allRelationships || [],
     metadata: ir.document.metadata || {},
+    accessibility: {
+      language: ir.document.metadata?.language || null,
+      taggedPages: pages.filter(p => p.accessibility?.hasTaggedStructure).length,
+      pageCount: pages.length,
+      screenReaderFriendly: pages.some(p => p.text && p.text.trim()),
+    },
     security: ir.document.security ? summarizeSecurity(ir.document.security) : null,
     outline: ir.document.navigation?.outline || [],
   };
+}
+
+function summarizeText(text, limit = 320) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  if (clean.length <= limit) return clean;
+  const cut = clean.lastIndexOf('.', limit);
+  return clean.slice(0, cut > limit * 0.55 ? cut + 1 : limit).trim() + '...';
 }
 
 function summarizeSecurity(security) {

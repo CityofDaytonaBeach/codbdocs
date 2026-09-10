@@ -727,6 +727,16 @@ export function createRAGOutput(graph, options = {}) {
   
   // Build RAG output
   const ragOutput = {
+    format: 'codbdocs-rag-v3',
+    aiContract: {
+      version: '1.0',
+      description: 'Use this payload to extend SDK search with AI answers, summaries, metadata extraction, accessibility descriptions, and cited RAG responses.',
+      retrievalFields: ['chunks[].text', 'chunks[].metadata', 'pages[].text', 'entities', 'relationships', 'topicFlow'],
+      citationFields: ['chunks[].pageNumber', 'chunks[].bbox', 'pages[].pageNumber'],
+      summaryFields: ['document.summary', 'pages[].summary', 'structure'],
+      accessibilityFields: ['document.accessibility', 'pages[].accessibility'],
+      promptGuidance: 'Answer only from retrieved passages, include page citations, and use accessibility metadata for screen-reader or ADA-focused explanations.',
+    },
     // Document metadata
     document: {
       type: documentType?.type || 'unknown',
@@ -735,6 +745,12 @@ export function createRAGOutput(graph, options = {}) {
       wordCount: summary.wordCount,
       headings: summary.headings,
       metadata: summary.metadata,
+      summary: summarizeRagText(graph.text?.pages?.map(p => p.text).join(' ') || ''),
+      accessibility: {
+        screenReaderFriendly: Boolean(graph.text?.pages?.some(p => p.text && p.text.trim())),
+        hasSearchableText: Boolean(graph.text?.pages?.some(p => p.source === 'native' || p.source === 'fusion')),
+        hasOcrText: Boolean(graph.text?.pages?.some(p => p.source === 'ocr' || p.source === 'fusion')),
+      },
     },
     
     // Content chunks for vector DB
@@ -775,8 +791,14 @@ export function createRAGOutput(graph, options = {}) {
     pages: graph.text?.pages?.map(p => ({
       pageNumber: p.pageNum,
       text: p.text,
+      summary: summarizeRagText(p.text),
       source: p.source,
       classification: graph.classifications?.[p.pageNum - 1] || null,
+      accessibility: {
+        textSource: p.source || null,
+        hasText: Boolean(p.text && p.text.trim()),
+        screenReaderText: p.text || '',
+      },
     })) || [],
   };
   
@@ -812,6 +834,14 @@ export function createRAGOutput(graph, options = {}) {
   }
   
   return ragOutput;
+}
+
+function summarizeRagText(text, limit = 420) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  if (clean.length <= limit) return clean;
+  const cut = clean.lastIndexOf('.', limit);
+  return clean.slice(0, cut > limit * 0.5 ? cut + 1 : limit).trim() + '...';
 }
 
 // ─── Embedding Providers ─────────────────────────────────────────────────────

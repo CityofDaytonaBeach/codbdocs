@@ -737,9 +737,10 @@ function renderPageImages(page, ir, attrs) {
     const src = obj.raw?.src;
     if (!src) continue;
     const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+    const top = cssTop(page, y, h);
     const alt = escapeHTML(obj.accessibility?.alt || obj.semantic?.caption || 'Image');
     html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
-    html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">\n`;
+    html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${top}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">\n`;
   }
   return html;
 }
@@ -770,19 +771,19 @@ function renderPageVisual(page, ir, attrs) {
     if (obj.type === 'text') {
       const bbox = obj.bbox || [];
       const style = textRunStyle(obj);
-      html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic?.text || '')}</div>\n`;
+      html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic?.text || '')}</div>\n`;
     } else if (obj.type === 'image') {
       const bbox = obj.bbox || [];
       const src = obj.raw?.src || '';
       if (src) {
-        html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML(obj.accessibility?.alt || 'Image')}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
+        html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML(obj.accessibility?.alt || 'Image')}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
       } else {
-        html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>\n`;
+        html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>\n`;
       }
     } else if (obj.type === 'link') {
       const bbox = obj.bbox || [];
       const href = escapeHTML(obj.raw?.href || '#');
-      html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML(obj.semantic?.text || obj.raw?.url || 'link')}</a>\n`;
+      html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML(obj.semantic?.text || obj.raw?.url || 'link')}</a>\n`;
     }
   }
 
@@ -810,17 +811,17 @@ function renderPagePositionedText(page, ir, attrs) {
 
     if (obj.type === 'text' && obj.semantic?.text) {
       const style = textRunStyle(obj);
-      html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic.text)}</div>\n`;
+      html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic.text)}</div>\n`;
     } else if (obj.type === 'image') {
       const src = obj.raw?.src || '';
       const alt = escapeHTML(obj.accessibility?.alt || obj.semantic?.caption || 'Image');
       if (src) {
-        html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
+        html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
       }
     } else if (obj.type === 'link') {
       const href = escapeHTML(obj.raw?.href || '#');
       const text = escapeHTML(obj.semantic?.text || obj.raw?.url || 'link');
-      html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>\n`;
+      html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>\n`;
     }
   }
 
@@ -899,6 +900,13 @@ function textRunStyle(obj) {
   return style;
 }
 
+function cssTop(page, y, height = 0) {
+  const pageHeight = Number(page?.height) || 0;
+  const yy = Number(y) || 0;
+  const hh = Number(height) || 0;
+  return Math.max(0, pageHeight - yy - hh);
+}
+
 function sanitizeFontName(name) {
   return String(name)
     .replace(/[^A-Za-z0-9]+/g, ' ')
@@ -946,7 +954,7 @@ function generateVisualStyles(ir) {
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
     .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
     .pdf-page-raster { position: relative; }
-    .pdf-page-raster > img { display: block; position: relative; z-index: 1; }
+    .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
     .pdf-embedded-image { position: absolute; z-index: 2; }
     /* The positioned text layer sits directly over the raster at the same
        coordinates, so it renders on top of the pixels and stays selectable.
@@ -969,7 +977,7 @@ function generateAccessibleStyles() {
     body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 820px; margin: 0 auto; }
     .pdf-page { margin: 40px 0; padding: 10px 0; position: relative; }
     .pdf-page-raster { position: relative; }
-    .pdf-page-raster > img { display: block; width: 100%; height: auto; }
+    .pdf-page-raster > img { display: block; width: auto; height: auto; max-width: none; }
     .pdf-text-layer { position: absolute; inset: 10px 0 0; }
     h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; }
     p { margin: 0.5em 0; }

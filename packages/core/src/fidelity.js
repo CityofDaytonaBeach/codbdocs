@@ -427,6 +427,24 @@ function buildFidelityHtml(ir, options = {}) {
     headings: ctx.outline.length,
     figures: ctx.figures,
     vectors: ctx.vectors,
+    pages: pages.map((pageId, index) => {
+      var _a2, _b2;
+      const page = (_a2 = ir.pages) == null ? void 0 : _a2[pageId];
+      const pageText = ctx.index.filter((e) => e.p === index + 1).map((e) => e.t).join(" ");
+      return {
+        page: index + 1,
+        label: ((_b2 = page == null ? void 0 : page.labels) == null ? void 0 : _b2.print) || `Page ${index + 1}`,
+        width: num(page == null ? void 0 : page.width, 612),
+        height: num(page == null ? void 0 : page.height, 792),
+        hasRaster: Boolean(page == null ? void 0 : page.background),
+        summary: pageText.replace(/\s+/g, " ").trim().slice(0, 420),
+        accessibility: {
+          hasText: Boolean(pageText.trim()),
+          language: (page == null ? void 0 : page.language) || lang,
+          screenReaderText: pageText
+        }
+      };
+    }),
     accessibility: options.audit ? {
       score: (_j = options.audit.score) != null ? _j : null,
       level: (_k = options.audit.level) != null ? _k : null,
@@ -459,7 +477,14 @@ function buildFidelityHtml(ir, options = {}) {
       "elements",
       "explainElement",
       "explainPage"
-    ]
+    ],
+    aiContract: {
+      version: "1.0",
+      globalObject: "window.CodbDocsAI",
+      readyEvent: "codbdocs:ready",
+      methods: ["retrieve", "ask", "summarize", "describe", "altText", "translate", "speak", "elements", "explainElement", "explainPage"],
+      guidance: "Use retrieve() for grounded passages, then ask() or your own AI endpoint with returned page citations. Use pages[].accessibility.screenReaderText for ADA and screen-reader workflows."
+    }
   };
   const jsonScript = (id, value) => `<script type="application/json" id="${id}">${JSON.stringify(value).replace(/</g, "\\u003c")}<\/script>`;
   return `<!DOCTYPE html>
@@ -601,9 +626,12 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-switch input:checked{background:var(--accent-2)}
 .fx-switch input:checked::after{transform:translateX(13px)}
 .fx-switch label{cursor:pointer;font-size:.76rem;white-space:nowrap}
-.fx-original{max-width:1100px;margin:0 auto 24px;padding:16px}
+.fx-original{width:100%;max-width:1100px;margin:0 auto 24px;padding:16px}
 .fx-original iframe{width:100%;height:82vh;border:0;background:#fff;border-radius:10px;
   box-shadow:0 0 0 1px rgba(0,0,0,.08),0 10px 30px rgba(15,20,30,.14)}
+.fx-op-page{display:grid;justify-items:center;margin:0 auto 1.25rem;overflow:auto}
+.fx-op-page canvas{display:block;max-width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 8px 22px rgba(15,20,30,.12)}
+.fx-op-num{font-size:.78rem;color:#5a6068;margin:.25rem 0 .4rem}
 .fx-outline{list-style:none;margin:0;padding:0}
 .fx-outline li{margin:0}
 .fx-ol-item{display:flex;width:100%;gap:.75rem;justify-content:space-between;align-items:baseline;
@@ -1057,11 +1085,14 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
         var chain=Promise.resolve();
         for(var n=1;n<=doc.numPages;n++)(function(n){
           chain=chain.then(function(){ return doc.getPage(n); }).then(function(page){
-            var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/page.getViewport({scale:1}).width);
+            var base=page.getViewport({scale:1});
+            var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/base.width);
+            var cssVp=page.getViewport({scale:scale});
             var vp=page.getViewport({scale:scale*(window.devicePixelRatio||1)});
             var wrap=document.createElement('div'); wrap.className='fx-op-page';
             var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
             var cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height;
+            cv.style.width=cssVp.width+'px'; cv.style.height=cssVp.height+'px';
             cv.setAttribute('role','img'); cv.setAttribute('aria-label','Original PDF page '+n);
             wrap.appendChild(lab); wrap.appendChild(cv); if(host) host.appendChild(wrap);
             return page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
