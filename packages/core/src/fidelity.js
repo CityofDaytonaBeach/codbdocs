@@ -359,6 +359,7 @@ function buildFidelityHtml(ir, options = {}) {
   const lang = options.lang || ((_d = (_c = ir.document) == null ? void 0 : _c.metadata) == null ? void 0 : _d.language) || "en";
   const title = options.title || ((_f = (_e = ir.document) == null ? void 0 : _e.metadata) == null ? void 0 : _f.title) || ((_g = ir.document) == null ? void 0 : _g.title) || "Document";
   const showThumbs = options.thumbnails !== false;
+  const showDataControls = options.showDataControls === true;
   const initialView = options.view === "reflow" ? "reflow" : "fidelity";
   const ctx = newDocCtx();
   if (options.inferHeadings !== false) ctx.inferred = inferHeadingLevels(ir);
@@ -761,7 +762,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
     ${infoPanel(options, pages.length, ctx.outline.length)}
     ${auditPanel(options.audit, options.remediations)}
     ${conformancePanel()}
-    ${tagPanel(options.tags)}
+    ${showDataControls ? tagPanel(options.tags) : ""}
     </div>
   </main>
 </div>
@@ -844,8 +845,8 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
     ${options.originalUrl ? `<li><a href="${esc(options.originalUrl)}" download target="_blank" rel="noopener">Original document${options.originalName ? ` (${esc(options.originalName)})` : ""}</a></li>` : ""}
     <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
     <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
-    ${rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
-    <li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>
+    ${showDataControls && rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
+    ${showDataControls ? `<li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>` : ""}
 
   </ul>
 </div>

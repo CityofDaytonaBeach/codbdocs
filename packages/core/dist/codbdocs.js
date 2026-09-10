@@ -533,6 +533,7 @@ var CodbDocs = (() => {
     const lang = options.lang || ((_d = (_c = ir.document) == null ? void 0 : _c.metadata) == null ? void 0 : _d.language) || "en";
     const title = options.title || ((_f = (_e = ir.document) == null ? void 0 : _e.metadata) == null ? void 0 : _f.title) || ((_g = ir.document) == null ? void 0 : _g.title) || "Document";
     const showThumbs = options.thumbnails !== false;
+    const showDataControls = options.showDataControls === true;
     const initialView = options.view === "reflow" ? "reflow" : "fidelity";
     const ctx = newDocCtx();
     if (options.inferHeadings !== false) ctx.inferred = inferHeadingLevels(ir);
@@ -907,7 +908,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
     ${infoPanel(options, pages.length, ctx.outline.length)}
     ${auditPanel(options.audit, options.remediations)}
     ${conformancePanel()}
-    ${tagPanel(options.tags)}
+    ${showDataControls ? tagPanel(options.tags) : ""}
     </div>
   </main>
 </div>
@@ -990,8 +991,8 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
     ${options.originalUrl ? `<li><a href="${esc(options.originalUrl)}" download target="_blank" rel="noopener">Original document${options.originalName ? ` (${esc(options.originalName)})` : ""}</a></li>` : ""}
     <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
     <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
-    ${rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
-    <li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>
+    ${showDataControls && rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
+    ${showDataControls ? `<li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>` : ""}
 
   </ul>
 </div>
@@ -3611,7 +3612,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     return context;
   }
   function createRAGOutput(graph, options = {}) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     const {
       chunkStrategy = ChunkStrategies.SEMANTIC,
       chunkSize = 1e3,
@@ -3634,6 +3635,16 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     });
     const context = includeCrossPageContext ? buildCrossPageContext(graph) : null;
     const ragOutput = {
+      format: "codbdocs-rag-v3",
+      aiContract: {
+        version: "1.0",
+        description: "Use this payload to extend SDK search with AI answers, summaries, metadata extraction, accessibility descriptions, and cited RAG responses.",
+        retrievalFields: ["chunks[].text", "chunks[].metadata", "pages[].text", "entities", "relationships", "topicFlow"],
+        citationFields: ["chunks[].pageNumber", "chunks[].bbox", "pages[].pageNumber"],
+        summaryFields: ["document.summary", "pages[].summary", "structure"],
+        accessibilityFields: ["document.accessibility", "pages[].accessibility"],
+        promptGuidance: "Answer only from retrieved passages, include page citations, and use accessibility metadata for screen-reader or ADA-focused explanations."
+      },
       // Document metadata
       document: {
         type: (documentType == null ? void 0 : documentType.type) || "unknown",
@@ -3641,7 +3652,13 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
         pageCount: summary.pageCount,
         wordCount: summary.wordCount,
         headings: summary.headings,
-        metadata: summary.metadata
+        metadata: summary.metadata,
+        summary: summarizeRagText(((_c = (_b = graph.text) == null ? void 0 : _b.pages) == null ? void 0 : _c.map((p) => p.text).join(" ")) || ""),
+        accessibility: {
+          screenReaderFriendly: Boolean((_e = (_d = graph.text) == null ? void 0 : _d.pages) == null ? void 0 : _e.some((p) => p.text && p.text.trim())),
+          hasSearchableText: Boolean((_g = (_f = graph.text) == null ? void 0 : _f.pages) == null ? void 0 : _g.some((p) => p.source === "native" || p.source === "fusion")),
+          hasOcrText: Boolean((_i = (_h = graph.text) == null ? void 0 : _h.pages) == null ? void 0 : _i.some((p) => p.source === "ocr" || p.source === "fusion"))
+        }
       },
       // Content chunks for vector DB
       chunks: chunks.map((chunk) => ({
@@ -3669,15 +3686,21 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       // Cross-page references
       crossPageReferences: (context == null ? void 0 : context.crossPageReferences) || [],
       // Full text for context
-      fullText: ((_c = (_b = graph.text) == null ? void 0 : _b.pages) == null ? void 0 : _c.map((p) => p.text).join("\n\n")) || "",
+      fullText: ((_k = (_j = graph.text) == null ? void 0 : _j.pages) == null ? void 0 : _k.map((p) => p.text).join("\n\n")) || "",
       // Page-by-page text
-      pages: ((_e = (_d = graph.text) == null ? void 0 : _d.pages) == null ? void 0 : _e.map((p) => {
+      pages: ((_m = (_l = graph.text) == null ? void 0 : _l.pages) == null ? void 0 : _m.map((p) => {
         var _a2;
         return {
           pageNumber: p.pageNum,
           text: p.text,
+          summary: summarizeRagText(p.text),
           source: p.source,
-          classification: ((_a2 = graph.classifications) == null ? void 0 : _a2[p.pageNum - 1]) || null
+          classification: ((_a2 = graph.classifications) == null ? void 0 : _a2[p.pageNum - 1]) || null,
+          accessibility: {
+            textSource: p.source || null,
+            hasText: Boolean(p.text && p.text.trim()),
+            screenReaderText: p.text || ""
+          }
         };
       })) || []
     };
@@ -3687,7 +3710,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     if (includeVectors) {
       ragOutput.vectors = [];
       for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-        const pageVectors = ((_f = graph.getVectors) == null ? void 0 : _f.call(graph, pageNum)) || [];
+        const pageVectors = ((_n = graph.getVectors) == null ? void 0 : _n.call(graph, pageNum)) || [];
         ragOutput.vectors.push(...pageVectors.map((v) => ({
           ...v,
           pageNumber: pageNum
@@ -3707,6 +3730,13 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       };
     }
     return ragOutput;
+  }
+  function summarizeRagText(text, limit = 420) {
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    if (!clean) return "";
+    if (clean.length <= limit) return clean;
+    const cut = clean.lastIndexOf(".", limit);
+    return clean.slice(0, cut > limit * 0.5 ? cut + 1 : limit).trim() + "...";
   }
   var EmbeddingProvider = class {
     constructor(name, model, dimensions) {
@@ -3826,9 +3856,9 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     return String(text || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/^([#>*+\-]|\d+\.)\s*/gm, "\\$&");
   }
   function buildRAGContext(ir, contentGraph) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const pages = (ir.document.pages || []).map((pageId) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g, _h, _i, _j, _k, _l, _m;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g, _h, _i, _j, _k, _l, _m, _a3, _b3;
       const page = ir.pages[pageId];
       if (!page) return null;
       const blocks = [];
@@ -3871,8 +3901,21 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
         page: page.num,
         size: { width: page.width, height: page.height },
         text,
+        summary: summarizeText(text),
         blocks,
-        entities: pageEntities
+        entities: pageEntities,
+        accessibility: {
+          hasTaggedStructure: Boolean((_a3 = ir.structure) == null ? void 0 : _a3[pageId]),
+          readingOrderItems: Array.isArray(page.readingOrder) ? page.readingOrder.length : 0,
+          language: page.language || ((_b3 = ir.document.metadata) == null ? void 0 : _b3.language) || null,
+          textQuality: page.textQuality || null
+        },
+        fidelity: {
+          hasRaster: Boolean(page.background),
+          width: page.width,
+          height: page.height,
+          rotation: page.rotation || 0
+        }
       };
     }).filter(Boolean);
     const entityTypes = {};
@@ -3886,6 +3929,22 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     });
     return {
       format: "codbdocs-rag-v2",
+      aiContract: {
+        version: "1.0",
+        purpose: "Grounded document search, summaries, metadata extraction, citations, and accessible descriptions.",
+        recommendedFlow: [
+          "Use pages and chunks as retrievable passages.",
+          "Use metadata, entities, tables, relationships, and accessibility fields to enrich prompts.",
+          "Return page citations using page or pageNumber.",
+          "Use fidelity dimensions and bounding boxes when highlighting source evidence."
+        ],
+        extensionPoints: {
+          search: ["fullText", "pages[].text", "pages[].blocks", "chunks"],
+          summaries: ["pages[].summary", "documentSummary", "outline"],
+          metadata: ["metadata", "entityTypes", "pages[].entities"],
+          accessibility: ["accessibility", "pages[].accessibility"]
+        }
+      },
       source: ((_a = ir.document.metadata) == null ? void 0 : _a.title) || "PDF document",
       title: ((_b = ir.document.metadata) == null ? void 0 : _b.title) || null,
       author: ((_c = ir.document.metadata) == null ? void 0 : _c.author) || null,
@@ -3893,6 +3952,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       documentType: content.documentType || ir.document.type || null,
       pageCount: (ir.document.pages || []).length,
       pages,
+      documentSummary: summarizeText(pages.map((p) => p.text).join(" "), 600),
       fullText: pages.map((p) => `[Page ${p.page}]
 ${p.text}`).join("\n\n"),
       blockTypes,
@@ -3900,9 +3960,25 @@ ${p.text}`).join("\n\n"),
       tables: content.allTables ? content.allTables.map((t) => t.toJSON ? t.toJSON() : t) : [],
       relationships: content.allRelationships || [],
       metadata: ir.document.metadata || {},
+      accessibility: {
+        language: ((_g = ir.document.metadata) == null ? void 0 : _g.language) || null,
+        taggedPages: pages.filter((p) => {
+          var _a2;
+          return (_a2 = p.accessibility) == null ? void 0 : _a2.hasTaggedStructure;
+        }).length,
+        pageCount: pages.length,
+        screenReaderFriendly: pages.some((p) => p.text && p.text.trim())
+      },
       security: ir.document.security ? summarizeSecurity(ir.document.security) : null,
-      outline: ((_f = ir.document.navigation) == null ? void 0 : _f.outline) || []
+      outline: ((_h = ir.document.navigation) == null ? void 0 : _h.outline) || []
     };
+  }
+  function summarizeText(text, limit = 320) {
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    if (!clean) return "";
+    if (clean.length <= limit) return clean;
+    const cut = clean.lastIndexOf(".", limit);
+    return clean.slice(0, cut > limit * 0.55 ? cut + 1 : limit).trim() + "...";
   }
   function summarizeSecurity(security) {
     if (!security) return null;
@@ -5298,7 +5374,7 @@ ${p.text}`).join("\n\n")
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
     .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
     .pdf-page-raster { position: relative; }
-    .pdf-page-raster > img { display: block; position: relative; z-index: 1; }
+    .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
     .pdf-embedded-image { position: absolute; z-index: 2; }
     /* The positioned text layer sits directly over the raster at the same
        coordinates, so it renders on top of the pixels and stays selectable.
@@ -5321,7 +5397,7 @@ ${p.text}`).join("\n\n")
     body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 820px; margin: 0 auto; }
     .pdf-page { margin: 40px 0; padding: 10px 0; position: relative; }
     .pdf-page-raster { position: relative; }
-    .pdf-page-raster > img { display: block; width: 100%; height: auto; }
+    .pdf-page-raster > img { display: block; width: auto; height: auto; max-width: none; }
     .pdf-text-layer { position: absolute; inset: 10px 0 0; }
     h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; }
     p { margin: 0.5em 0; }
