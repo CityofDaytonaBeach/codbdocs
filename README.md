@@ -4,6 +4,10 @@
 
 No server. No external APIs. Pure browser JavaScript. Use the CDN or host the files yourself.
 
+**Created by the City of Daytona Beach.**
+
+Lead developer: **Daniel Gurczynski**.
+
 **jsDelivr access URL:**
 ```text
 https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js
