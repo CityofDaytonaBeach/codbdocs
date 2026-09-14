@@ -12,6 +12,33 @@
 import { buildRAGContext } from './exporters.js';
 import { generateViewerChrome } from './viewer.js';
 
+function bytesToBase64(bytes) {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.slice(i, i + 0x8000));
+  if (typeof btoa === 'function') return btoa(bin);
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  for (let i = 0; i < bin.length; i += 3) {
+    const a = bin.charCodeAt(i), b = bin.charCodeAt(i + 1), c = bin.charCodeAt(i + 2);
+    out += alphabet[a >> 2] + alphabet[((a & 3) << 4) | (b >> 4)] + (Number.isNaN(b) ? '=' : alphabet[((b & 15) << 2) | (c >> 6)]) + (Number.isNaN(c) ? '=' : alphabet[c & 63]);
+  }
+  return out;
+}
+
+function textToBase64(text) {
+  if (typeof TextEncoder !== 'undefined') return bytesToBase64(new TextEncoder().encode(String(text)));
+  const encoded = unescape(encodeURIComponent(String(text)));
+  const bytes = new Uint8Array(encoded.length);
+  for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
+  return bytesToBase64(bytes);
+}
+
+function embeddedImageSrc(src) {
+  src = String(src || '');
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : '';
+}
+
 // ─── PDF-IR Core ─────────────────────────────────────────────────────────────
 
 /**
@@ -638,8 +665,6 @@ export function exportHTML(ir, options = {}) {
   const {
     mode = 'visual', // 'visual' | 'accessible' | 'intelligent' | 'selectable'
     includeDataAttributes = true,
-    includeRAG = true,
-    includeRawText = true,
   } = options;
 
   // Build a RAG/context payload so an AI can summarize/answer with full context.
@@ -674,9 +699,10 @@ export function exportHTML(ir, options = {}) {
     const page = ir.pages[pageId];
     if (!page) continue;
 
-    const attrs = includeDataAttributes
+    const nativeText = pageHasNativeText(page, ir);
+    const attrs = (includeDataAttributes
       ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"`
-      : '';
+      : '') + ` data-native-text="${nativeText ? '1' : '0'}"`;
 
     const pageLabel = page.labels?.print || `Page ${page.num}`;
 
@@ -684,7 +710,9 @@ export function exportHTML(ir, options = {}) {
     // layer and the selectable accessible text layer on top.
     html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML(pageLabel)}" role="region">\n`;
 
-    // Raster layer — pixel-accurate representation of the source page.
+    html += renderPageVectorLayer(page, ir);
+
+    // Raster layer — fallback for scanned/OCR-only pages and optional original preview.
     if (page.background) {
       html += `<div class="pdf-page-raster" aria-hidden="true">\n`;
       html += `<img src="${page.background}" alt="" width="${page.width}" height="${page.height}">\n`;
@@ -711,12 +739,8 @@ export function exportHTML(ir, options = {}) {
   html += '</div>\n'; // #codbdocs-viewer
   html += '</main>\n';
 
-  // RAG / raw context payload for AI summarization (machine-readable, hidden).
-  if (includeRAG || includeRawText) {
-    html += '<script type="application/json" id="codbdocs-rag" data-page-count="' +
-      (ir.document.pages.length || 0) + '">' +
-      JSON.stringify(ragPayload).replace(/</g, '\\u003c') + '</script>\n';
-  }
+  // Backend/search context is intentionally not embedded in viewer HTML.
+  // Use getRAGContext(), toRAG(), or exportFull() to store backend data separately.
 
   // Offline viewer chrome (search / zoom / nav / outline / a11y).
   html += viewer.script;
@@ -734,7 +758,7 @@ function renderPageImages(page, ir, attrs) {
   for (const objId of page.content) {
     const obj = ir.objects[objId];
     if (!obj || obj.type !== 'image') continue;
-    const src = obj.raw?.src;
+    const src = embeddedImageSrc(obj.raw?.src);
     if (!src) continue;
     const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
     const top = cssTop(page, y, h);
@@ -756,13 +780,6 @@ function buildRAGPayload(ir) {
 function renderPageVisual(page, ir, attrs) {
   let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + 'px;height:' + (page.height || 0) + 'px;">\n';
 
-  // Render vectors first (background)
-  for (const vecId of page.vectors || []) {
-    const vec = ir.vectors[vecId];
-    if (!vec) continue;
-    html += renderVectorVisual(vec, attrs);
-  }
-
   // Render content (text + images, positioned)
   for (const objId of page.content) {
     const obj = ir.objects[objId];
@@ -774,7 +791,7 @@ function renderPageVisual(page, ir, attrs) {
       html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic?.text || '')}</div>\n`;
     } else if (obj.type === 'image') {
       const bbox = obj.bbox || [];
-      const src = obj.raw?.src || '';
+      const src = embeddedImageSrc(obj.raw?.src || '');
       if (src) {
         html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML(obj.accessibility?.alt || 'Image')}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
       } else {
@@ -813,7 +830,7 @@ function renderPagePositionedText(page, ir, attrs) {
       const style = textRunStyle(obj);
       html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML(obj.semantic.text)}</div>\n`;
     } else if (obj.type === 'image') {
-      const src = obj.raw?.src || '';
+      const src = embeddedImageSrc(obj.raw?.src || '');
       const alt = escapeHTML(obj.accessibility?.alt || obj.semantic?.caption || 'Image');
       if (src) {
         html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">\n`;
@@ -841,7 +858,7 @@ function renderPageAccessible(page, ir, attrs, mode) {
 
     if (obj.type === 'image') {
       const alt = obj.accessibility?.alt || obj.semantic?.caption || (mode === 'intelligent' ? 'AI-generated description' : 'Image');
-      const src = obj.raw?.src || '';
+        const src = embeddedImageSrc(obj.raw?.src || '');
       html += `<figure${dataAttr}>\n`;
       if (src) html += `<img src="${escapeHTML(src)}" alt="${escapeHTML(alt)}" loading="lazy">\n`;
       if (obj.semantic?.caption) html += `<figcaption>${escapeHTML(obj.semantic.caption)}</figcaption>\n`;
@@ -953,9 +970,11 @@ function generateVisualStyles(ir) {
   return `<style>
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
     .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
-    .pdf-page-raster { position: relative; }
+    .pdf-page-raster { position: relative; z-index: 0; }
+    .pdf-page[data-native-text="1"] .pdf-page-raster { display: none; }
     .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
     .pdf-embedded-image { position: absolute; z-index: 2; }
+    .pdf-vector-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
     /* The positioned text layer sits directly over the raster at the same
        coordinates, so it renders on top of the pixels and stays selectable.
        This makes the page look exactly like the source PDF while keeping
@@ -966,10 +985,51 @@ function generateVisualStyles(ir) {
     .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
     .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
     .pdf-text { position: absolute; white-space: pre; line-height: 1; transform-origin: 0 0; }
+    body[data-codbdocs-view="pdf"] .pdf-page[data-native-text="0"] .pdf-text { color: transparent !important; }
+    body[data-codbdocs-view="text"] .pdf-page[data-native-text="0"] .pdf-text { color: #111 !important; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
     .ai-generated { color: #999; font-style: italic; }
   </style>\n`;
+}
+
+function renderPageVectorLayer(page, ir) {
+  if (!Array.isArray(page.vectors) || !page.vectors.length) return '';
+  let body = '';
+  for (const vecId of page.vectors) {
+    const vec = ir.vectors[vecId];
+    if (!vec) continue;
+    const stroke = escapeHTML(vec.graphicsState?.stroke || '#000');
+    const fill = escapeHTML(vec.graphicsState?.fill || 'none');
+    const width = Number(vec.graphicsState?.lineWidth) || 1;
+    if (vec.type === 'rect' && Array.isArray(vec.bbox)) {
+      const [x = 0, y = 0, w = 0, h = 0] = vec.bbox;
+      body += `<rect x="${Number(x) || 0}" y="${Number(y) || 0}" width="${Math.abs(Number(w) || 0)}" height="${Math.abs(Number(h) || 0)}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+    } else if (vec.type === 'path' && Array.isArray(vec.points)) {
+      let d = '';
+      for (const p of vec.points) {
+        if (p.op === 'moveTo') d += `M${Number(p.x) || 0} ${Number(p.y) || 0} `;
+        else if (p.op === 'lineTo') d += `L${Number(p.x) || 0} ${Number(p.y) || 0} `;
+        else if (p.op === 'curveTo') d += `C${Number(p.x1) || 0} ${Number(p.y1) || 0} ${Number(p.x2) || 0} ${Number(p.y2) || 0} ${Number(p.x3) || 0} ${Number(p.y3) || 0} `;
+        else if (p.op === 'closePath') d += 'Z ';
+      }
+      if (d.trim()) body += `<path d="${escapeHTML(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+    }
+  }
+  if (!body) return '';
+  const w = Number(page.width) || 0;
+  const h = Number(page.height) || 0;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
+  return `<img class="pdf-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase64(svg)}">\n`;
+}
+
+function pageHasNativeText(page, ir) {
+  return (page.content || []).some(id => {
+    const obj = ir.objects[id];
+    if (!obj || obj.type !== 'text' || !obj.semantic?.text) return false;
+    const method = String(obj.provenance?.method || obj.raw?.source || obj.raw?.textSource || 'native').toLowerCase();
+    return method !== 'ocr' && method !== 'fusion';
+  });
 }
 
 function generateAccessibleStyles() {

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodbDocs PDF Recreation Test</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #101318; color: #eef2f7; }
+    header { padding: 18px 22px; border-bottom: 1px solid #2b313c; background: #171b22; }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    p { margin: 0; color: #aab4c3; }
+    .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; padding: 14px 22px; }
+    .check { background: #1b212b; border: 1px solid #303846; border-radius: 10px; padding: 10px 12px; }
+    .pass { color: #7ee787; font-weight: 700; }
+    .fail { color: #ff7b72; font-weight: 700; }
+    iframe { display: block; width: 100%; height: calc(100vh - 150px); border: 0; background: white; }
+    code { color: #d2a8ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CodbDocs PDF Recreation Test</h1>
+    <p>Both pages render as converted HTML: positioned text, embedded base64 images, and base64 SVG vector overlays. The left rail shows page thumbnails.</p>
+  </header>
+  <div class="checks" id="checks"></div>
+  <iframe id="preview" title="Rendered CodbDocs HTML"></iframe>
+
+  <script src="../packages/core/dist/codbdocs.js"></script>
+  <script>
+    function svgImage(svg) {
+      return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+    }
+
+    const page1Preview = svgImage(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 792">
+        <rect width="612" height="792" fill="white"/>
+        <text x="72" y="92" font-family="Arial" font-size="28" font-weight="700" fill="#111">Native PDF Text Layer</text>
+        <text x="72" y="142" font-family="Arial" font-size="16" fill="#222">This page is reconstructed as HTML text, image, and vector objects.</text>
+        <rect x="68" y="164" width="92" height="96" fill="none" stroke="#1473e6" stroke-width="3"/>
+        <rect x="72" y="172" width="80" height="80" fill="#1473e6"/>
+      </svg>`);
+    const page2Preview = svgImage(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 792">
+        <rect width="612" height="792" fill="white"/>
+        <text x="72" y="92" font-family="Arial" font-size="26" font-weight="700" fill="#111">Image + Text PDF Page</text>
+        <rect x="72" y="132" width="220" height="140" rx="12" fill="#f4f7fb" stroke="#c9d4e5"/>
+        <circle cx="132" cy="202" r="38" fill="#16a34a"/>
+        <text x="72" y="318" font-family="Arial" font-size="16" fill="#222">Embedded image and raw text are both positioned in HTML.</text>
+      </svg>`);
+    const blueImage = svgImage('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="10" fill="#1473e6"/><circle cx="40" cy="40" r="21" fill="white" opacity=".85"/></svg>');
+    const greenImage = svgImage('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 90"><rect width="140" height="90" rx="12" fill="#f4f7fb"/><circle cx="52" cy="45" r="28" fill="#16a34a"/><path d="M88 62 L108 34 L126 62 Z" fill="#2563eb"/></svg>');
+
+    const ir = {
+      document: {
+        metadata: { title: 'Recreation Smoke Test', language: 'en' },
+        pages: ['page_1', 'page_2'],
+      },
+      pages: {
+        page_1: {
+          id: 'page_1',
+          num: 1,
+          width: 612,
+          height: 792,
+          background: page1Preview,
+          content: ['t_title', 't_body', 'img_logo'],
+          vectors: ['vec_box'],
+        },
+        page_2: {
+          id: 'page_2',
+          num: 2,
+          width: 612,
+          height: 792,
+          background: page2Preview,
+          content: ['t_page2_title', 'img_chart', 't_page2_body'],
+          vectors: ['vec_rule'],
+        },
+      },
+      objects: {
+        t_title: {
+          id: 't_title', type: 'text', page: 'page_1', bbox: [72, 700, 330, 28],
+          raw: { text: 'Native PDF Text Layer', fontSize: 28, font: 'Helvetica-Bold' },
+          semantic: { text: 'Native PDF Text Layer', role: 'heading', level: 1 },
+          provenance: { method: 'native', confidence: 1 },
+        },
+        t_body: {
+          id: 't_body', type: 'text', page: 'page_1', bbox: [72, 650, 430, 16],
+          raw: { text: 'This text is real selectable HTML positioned from PDF coordinates.', fontSize: 16, font: 'Helvetica' },
+          semantic: { text: 'This text is real selectable HTML positioned from PDF coordinates.', role: 'paragraph' },
+          provenance: { method: 'native', confidence: 1 },
+        },
+        img_logo: {
+          id: 'img_logo', type: 'image', page: 'page_1', bbox: [72, 540, 80, 80],
+          raw: { src: blueImage, width: 80, height: 80 },
+          semantic: { role: 'image', caption: 'Extracted embedded image' },
+          accessibility: { alt: 'Extracted embedded image' },
+        },
+        t_page2_title: {
+          id: 't_page2_title', type: 'text', page: 'page_2', bbox: [72, 700, 360, 26],
+          raw: { text: 'Image + Text PDF Page', fontSize: 26, font: 'Helvetica-Bold' },
+          semantic: { text: 'Image + Text PDF Page', role: 'heading', level: 1 },
+          provenance: { method: 'native', confidence: 1 },
+        },
+        img_chart: {
+          id: 'img_chart', type: 'image', page: 'page_2', bbox: [72, 520, 220, 140],
+          raw: { src: greenImage, width: 220, height: 140 },
+          semantic: { role: 'image', caption: 'Embedded chart image' },
+          accessibility: { alt: 'Embedded chart image' },
+        },
+        t_page2_body: {
+          id: 't_page2_body', type: 'text', page: 'page_2', bbox: [72, 470, 430, 16],
+          raw: { text: 'Embedded image and raw text are both positioned in HTML.', fontSize: 16, font: 'Helvetica' },
+          semantic: { text: 'Embedded image and raw text are both positioned in HTML.', role: 'paragraph' },
+          provenance: { method: 'native', confidence: 1 },
+        },
+      },
+      vectors: {
+        vec_box: {
+          id: 'vec_box', type: 'rect', page: 'page_1', bbox: [68, 532, 92, 96],
+          graphicsState: { stroke: '#1473e6', fill: 'none', lineWidth: 3 },
+        },
+        vec_rule: {
+          id: 'vec_rule', type: 'rect', page: 'page_2', bbox: [72, 450, 440, 2],
+          graphicsState: { stroke: '#94a3b8', fill: '#94a3b8', lineWidth: 1 },
+        },
+      },
+    };
+
+    let html = CodbDocs.buildFidelityHtml(ir, { title: 'Recreation Smoke Test' });
+    html = html.replace('</style>', '.fx-page{margin-bottom:72px!important}.fx-page:last-child{margin-bottom:0!important} main.fx-stage{gap:0!important}</style>');
+    document.getElementById('preview').srcdoc = html;
+
+    const checks = [
+      ['native page marked as raw text', html.includes('data-native-text="1"')],
+      ['both pages marked as native HTML', (html.match(/<section class="fx-page"[^>]*data-native-text="1"/g) || []).length === 2],
+      ['vector SVG layer emitted', html.includes('fx-vector-layer')],
+      ['vectors embedded as base64 images', html.includes('data:image/svg+xml;base64,')],
+      ['backend JSON not embedded', !html.includes('<script type="application/json"')],
+      ['native text is visible by default', html.includes('color:#111')],
+      ['native-page raster is hidden by CSS', html.includes('[data-native-text="1"] .fx-raster{display:none}')],
+      ['bottom metadata panels removed', !html.includes('Document information') && !html.includes('Accessibility conformance')],
+      ['page foot labels removed', !html.includes('fx-pagefoot')],
+      ['left thumbnail rail exists', html.includes('class="fx-rail"') && (html.match(/class="fx-thumb"/g) || []).length === 2],
+      ['no green fallback screen', !html.includes('OCR fallback text for scanned PDF page')],
+    ];
+
+    document.getElementById('checks').innerHTML = checks.map(([label, pass]) => (
+      `<div class="check"><span class="${pass ? 'pass' : 'fail'}">${pass ? 'PASS' : 'FAIL'}</span> ${label}</div>`
+    )).join('');
+  </script>
+</body>
+</html>

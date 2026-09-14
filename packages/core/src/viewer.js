@@ -119,10 +119,8 @@ function viewerStyles() {
 
     body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
     body[data-codbdocs-view="text"] .pdf-embedded-image { display: none; }
-    body[data-codbdocs-view="pdf"] .pdf-text-layer { visibility: hidden; }
-    body[data-codbdocs-view="pdf"] .pdf-text-layer { pointer-events: none; }
+    body[data-codbdocs-view="pdf"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
     body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
-    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text { color: transparent !important; }
     body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text.sr-highlight { color: #000 !important; }
 
     .pdf-text.sr-highlight { background: rgba(255, 213, 79, 0.9); color: #000; border-radius: 2px; }
@@ -160,6 +158,12 @@ function viewerScript() {
     var pageTextIndex = (rag.pages || []).map(function (p) {
       return { page: p.page || 1, text: normalize(p.text || ''), raw: p.text || '' };
     });
+    if (!pageTextIndex.length) {
+      pageTextIndex = pages.map(function (pg, i) {
+        var text = $$('.pdf-text', pg).map(function (el) { return el.textContent || ''; }).join(' ');
+        return { page: i + 1, text: normalize(text), raw: text };
+      });
+    }
 
     // Wrap each page so zoom scales raster + text together and keeps alignment.
     pages.forEach(function (pg) {

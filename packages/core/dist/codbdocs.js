@@ -177,6 +177,17 @@ var CodbDocs = (() => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
+  function textToBase64(text) {
+    if (typeof TextEncoder !== "undefined") return bytesToBase64(new TextEncoder().encode(String(text)));
+    const encoded = unescape(encodeURIComponent(String(text)));
+    const bytes = new Uint8Array(encoded.length);
+    for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
+    return bytesToBase64(bytes);
+  }
+  function embeddedImageSrc(src) {
+    src = String(src || "");
+    return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : "";
+  }
   function pageObjects(ir, page) {
     const ids = Array.isArray(page == null ? void 0 : page.content) ? page.content : [];
     return ids.map((id) => {
@@ -297,8 +308,9 @@ var CodbDocs = (() => {
           text: [alt, long].filter(Boolean).join(" \u2014 "),
           detail: { width: Math.round(num(w)), height: Math.round(num(h)), hasImage: Boolean(src), graphic: kind }
         });
-        if (src && w && h) {
-          html += `<img class="fx-img" src="${esc(src)}" alt="${esc(alt)}" data-el="${esc(fid)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
+        const embeddedSrc = embeddedImageSrc(src);
+        if (embeddedSrc && w && h) {
+          html += `<img class="fx-img" src="${esc(embeddedSrc)}" alt="${esc(alt)}" data-el="${esc(fid)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
         }
         continue;
       }
@@ -381,6 +393,43 @@ var CodbDocs = (() => {
     }
     return html;
   }
+  function renderVectorLayer(ir, page) {
+    const ids = Array.isArray(page == null ? void 0 : page.vectors) ? page.vectors : [];
+    if (!ids.length) return "";
+    const w = num(page.width, 612);
+    const h = num(page.height, 792);
+    let body = "";
+    for (const id of ids) {
+      const v = typeof id === "string" ? ir.vectors && ir.vectors[id] : id;
+      if (!v) continue;
+      const stroke = esc(v.graphicsState && v.graphicsState.stroke || "#000");
+      const fill = esc(v.graphicsState && v.graphicsState.fill || "none");
+      const lineWidth = num(v.graphicsState && v.graphicsState.lineWidth, 1);
+      if (v.type === "rect" && Array.isArray(v.bbox)) {
+        const [x = 0, y = 0, rw = 0, rh = 0] = v.bbox;
+        body += `<rect x="${num(x)}" y="${num(y)}" width="${Math.abs(num(rw))}" height="${Math.abs(num(rh))}" fill="${fill}" stroke="${stroke}" stroke-width="${lineWidth}"/>`;
+      } else if (v.type === "path" && Array.isArray(v.points)) {
+        let d = "";
+        v.points.forEach((p) => {
+          if (p.op === "moveTo") d += `M${num(p.x)} ${num(p.y)} `;
+          else if (p.op === "lineTo") d += `L${num(p.x)} ${num(p.y)} `;
+          else if (p.op === "curveTo") d += `C${num(p.x1)} ${num(p.y1)} ${num(p.x2)} ${num(p.y2)} ${num(p.x3)} ${num(p.y3)} `;
+          else if (p.op === "closePath") d += "Z ";
+        });
+        if (d.trim()) body += `<path d="${esc(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${lineWidth}"/>`;
+      }
+    }
+    if (!body) return "";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
+    return `<img class="fx-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase64(svg)}">`;
+  }
+  function hasNativeText(page, ir) {
+    return pageObjects(ir, page).some((o) => {
+      if (!o || o.type !== "text" || !objText(o).trim()) return false;
+      const method = String((o.provenance && o.provenance.method) || (o.raw && (o.raw.source || o.raw.textSource)) || "native").toLowerCase();
+      return method !== "ocr" && method !== "fusion";
+    });
+  }
   function renderReflow(ir, page, headingIds, ctx) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
     let html = "";
@@ -408,7 +457,8 @@ var CodbDocs = (() => {
         const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
         const long = ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || "";
         const fid = esc((_h = o.id) != null ? _h : "");
-        html += `<figure data-fig="${fid}">${src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption>` + (long ? `<details class="fx-longdesc"><summary>Detailed description of this image</summary><p>${esc(long)}</p></details>` : `<button type="button" class="fx-desc-btn" data-fig="${fid}">Describe this image with AI</button><p class="fx-desc-out" data-fig="${fid}" role="status" aria-live="polite" hidden></p>`) + `</figure>`;
+        const embeddedSrc = embeddedImageSrc(src);
+        html += `<figure data-fig="${fid}">${embeddedSrc ? `<img src="${esc(embeddedSrc)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption>` + (long ? `<details class="fx-longdesc"><summary>Detailed description of this image</summary><p>${esc(long)}</p></details>` : `<button type="button" class="fx-desc-btn" data-fig="${fid}">Describe this image with AI</button><p class="fx-desc-out" data-fig="${fid}" role="status" aria-live="polite" hidden></p>`) + `</figure>`;
         continue;
       }
       if (o.type === "table" || Array.isArray((_i = o.raw) == null ? void 0 : _i.rows)) {
@@ -485,47 +535,6 @@ var CodbDocs = (() => {
     "Dragon NaturallySpeaking",
     "Keyboard-only navigation"
   ];
-  function infoPanel(o, pageCount, headings) {
-    const rows = [
-      `<div><dt>Pages</dt><dd>${pageCount}</dd></div>`,
-      `<div><dt>Sections detected</dt><dd>${headings}</dd></div>`
-    ];
-    if (o.originalName) rows.push(`<div><dt>Original document</dt><dd>${esc(o.originalName)}</dd></div>`);
-    if (o.originalUrl)
-      rows.push(
-        `<div><dt>Original file</dt><dd><a href="${esc(o.originalUrl)}" target="_blank" rel="noopener">Open the original document</a></dd></div>`
-      );
-    if (o.sourceUrl)
-      rows.push(
-        `<div><dt>Found on</dt><dd><a href="${esc(o.sourceUrl)}" target="_blank" rel="noopener">${esc(o.sourceUrl)}</a></dd></div>`
-      );
-    if (o.permalink)
-      rows.push(
-        `<div><dt>Accessible version URL</dt><dd><a href="${esc(o.permalink)}">${esc(o.permalink)}</a></dd></div>`
-      );
-    if (o.fingerprint)
-      rows.push(`<div><dt>Document fingerprint (MD5)</dt><dd><code>${esc(o.fingerprint)}</code></dd></div>`);
-    if (o.documentContext)
-      rows.push(`<div><dt>Document interpretation notes</dt><dd>${esc(o.documentContext)}</dd></div>`);
-    if (o.siteContext) rows.push(`<div><dt>Site-wide notes</dt><dd>${esc(o.siteContext)}</dd></div>`);
-    return `
-  <section id="fx-info" class="fx-panel" aria-labelledby="fx-info-h">
-    <h2 id="fx-info-h">Document information</h2>
-    <dl class="fx-dl">${rows.join("")}</dl>
-  </section>`;
-  }
-  function conformancePanel() {
-    return `
-  <section id="fx-conformance" class="fx-panel" aria-labelledby="fx-conf-h">
-    <h2 id="fx-conf-h">Accessibility conformance</h2>
-    <p>This accessible transcript is produced to support the following standards and requirements:</p>
-    <ul class="fx-cols">${CONFORMANCE.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
-    <h3>Assistive technology tested</h3>
-    <ul class="fx-cols">${AT_TESTED.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
-    <p class="fx-note">Automated checks use axe-core, WAVE, Lighthouse and Pa11y, combined with manual code review
-    and assistive-technology testing across Chrome, Firefox, Safari and Edge.</p>
-  </section>`;
-  }
   function buildFidelityHtml(ir, options = {}) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
     if (!ir || typeof ir !== "object") throw new Error("An IR object is required.");
@@ -546,18 +555,21 @@ var CodbDocs = (() => {
       if (!page) return;
       const w = num(page.width, 612);
       const h = num(page.height, 792);
+      const nativeText = hasNativeText(page, ir);
+      const pageBg = embeddedImageSrc(page.background);
       const label = ((_b2 = page.labels) == null ? void 0 : _b2.print) || `Page ${(_c2 = page.num) != null ? _c2 : index + 1}`;
       const vectorCount = Array.isArray(page.vectors) ? page.vectors.length : pageObjects(ir, page).filter((o) => o.type === "vector" || o.type === "path" || o.type === "shape").length;
       if (vectorCount) ctx.vectors[String(index + 1)] = vectorCount;
       nav += `<option value="${index + 1}">${esc(label)}</option>`;
       if (showThumbs) {
-        thumbs += `<li><button type="button" class="fx-thumb" data-goto="${index + 1}" aria-label="Go to ${esc(label)}">` + (page.background ? `<img src="${esc(page.background)}" alt="" loading="lazy">` : `<span class="fx-thumb-blank" aria-hidden="true"></span>`) + `<span class="fx-thumb-num">${index + 1}</span></button></li>`;
+        thumbs += `<li><button type="button" class="fx-thumb" data-goto="${index + 1}" aria-label="Go to ${esc(label)}">` + (pageBg ? `<img src="${esc(pageBg)}" alt="" loading="lazy">` : `<span class="fx-thumb-blank" aria-hidden="true"></span>`) + `<span class="fx-thumb-num">${index + 1}</span></button></li>`;
       }
       body += `
     <section class="fx-page" id="fx-page-${index + 1}" role="region" aria-label="${esc(label)}"
-      data-page="${index + 1}" data-raster="${page.background ? "1" : "0"}" style="--pw:${w}px;--ph:${h}px">
+      data-page="${index + 1}" data-raster="${pageBg ? "1" : "0"}" data-native-text="${nativeText ? "1" : "0"}" style="--pw:${w}px;--ph:${h}px">
       <div class="fx-canvas">
-        ${page.background ? `<img class="fx-raster" src="${esc(page.background)}" alt="" aria-hidden="true" width="${w}" height="${h}">` : ""}
+        ${pageBg ? `<img class="fx-raster" src="${esc(pageBg)}" alt="" aria-hidden="true" width="${w}" height="${h}">` : ""}
+        ${renderVectorLayer(ir, page)}
         <div class="fx-textlayer" aria-label="${esc(label)} text">${renderTextLayer(ir, page, ctx, index + 1)}</div>
       </div>
       <div class="fx-reflow">${renderReflow(
@@ -566,10 +578,9 @@ var CodbDocs = (() => {
         ctx.outline.filter((e) => e.page === index + 1).map((e) => e.i),
         ctx
       )}</div>
-      <p class="fx-pagefoot" aria-hidden="true">${esc(label)}</p>
     </section>`;
     });
-    const rag = options.includeRag === false ? "" : (_h = options.rag) != null ? _h : null;
+    const rag = null;
     const translate = options.translate !== false;
     const priority = (_i = options.priorityLanguages) != null ? _i : [];
     const outlineHtml = ctx.outline.length ? ctx.outline.map(
@@ -636,7 +647,7 @@ var CodbDocs = (() => {
         "explainPage"
       ]
     };
-    const jsonScript = (id, value) => `<script type="application/json" id="${id}">${JSON.stringify(value).replace(/</g, "\\u003c")}<\/script>`;
+    const backendDataScripts = "";
     return `<!DOCTYPE html>
 <html lang="${esc(lang)}" data-view="${initialView}">
 <head>
@@ -680,37 +691,40 @@ header.fx-bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:.
 .fx-shell{display:flex;min-height:calc(100vh - 3.1rem)}
 .fx-rail{width:12rem;flex:none;background:#e7e9ec;border-right:1px solid #d3d7dc;overflow:auto;
   max-height:calc(100vh - 3.1rem);position:sticky;top:3.1rem}
-.fx-rail ul{list-style:none;margin:0;padding:.7rem;display:grid;gap:.7rem}
+.fx-rail ul{list-style:none;margin:0;padding:.85rem;display:grid;gap:.95rem}
 .fx-thumb{width:100%;background:none;border:0;padding:0;cursor:pointer;display:block}
-.fx-thumb img{width:100%;display:block;background:#fff;border:1px solid #cfd4da;border-radius:6px;
+.fx-thumb img{width:100%;aspect-ratio:var(--pw,612)/var(--ph,792);object-fit:contain;display:block;background:#fff;border:1px solid #cfd4da;border-radius:6px;
   box-shadow:0 1px 3px rgba(0,0,0,.12)}
-.fx-thumb-blank{display:block;width:100%;padding-top:129%;background:#fff;border:1px solid #cfd4da;border-radius:6px}
+.fx-thumb-blank{display:block;width:100%;aspect-ratio:612/792;background:#fff;border:1px solid #cfd4da;border-radius:6px}
 .fx-thumb-num{display:block;color:#5a6068;font-size:.72rem;padding:.2rem 0;text-align:center}
 .fx-thumb[aria-current=true] img,.fx-thumb[aria-current=true] .fx-thumb-blank{border-color:var(--accent-2);
   box-shadow:0 0 0 2px rgba(20,115,230,.35)}
-main.fx-stage{flex:1;padding:1.75rem;display:grid;justify-items:center;gap:1.75rem;background:var(--stage)}
+main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:3.5rem;background:var(--stage)}
 .fx-page{width:calc(var(--pw) * var(--zoom));}
 .fx-canvas{position:relative;width:var(--pw);height:var(--ph);background:#fff;border-radius:2px;
   box-shadow:0 0 0 1px rgba(0,0,0,.08),0 12px 28px rgba(15,20,30,.16);
   transform:scale(var(--zoom));transform-origin:top left;overflow:hidden}
-.fx-page{height:calc(var(--ph) * var(--zoom))}
-.fx-raster{position:absolute;inset:0;width:100%;height:100%;display:block}
-.fx-textlayer{position:absolute;inset:0}
-.fx-text{position:absolute;margin:0;white-space:pre;transform-origin:left top;color:transparent;
+.fx-page{height:calc(var(--ph) * var(--zoom));margin:0 0 3.5rem}
+.fx-page:last-child{margin-bottom:0}
+.fx-raster{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0}
+.fx-page[data-native-text="1"] .fx-raster{display:none}
+.fx-vector-layer{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.fx-textlayer{position:absolute;inset:0;z-index:2}
+.fx-text{position:absolute;margin:0;white-space:pre;transform-origin:left top;color:#111;
   line-height:1;font-weight:400;cursor:text}
 .fx-text::selection{background:rgba(20,115,230,.35)}
 
 /* No rasterised background available (text-only extraction): show the text layer
    itself so the fidelity view is never a blank page. */
+.fx-page[data-native-text="0"][data-raster="1"] .fx-text{color:transparent}
 .fx-page[data-raster="0"] .fx-text{color:#111}
 .fx-page[data-raster="0"] .fx-link{color:#0b4f9e;border-bottom-color:currentColor}
-.fx-img{position:absolute;object-fit:contain}
+.fx-img{position:absolute;object-fit:contain;z-index:1}
 .fx-link{position:absolute;display:block;color:transparent;overflow:hidden;border-bottom:1px solid transparent}
 .fx-link:hover,.fx-link:focus{border-bottom-color:var(--accent-2);background:rgba(20,115,230,.12)}
 .fx-reflow{display:none}
-.fx-pagefoot{color:#6b727b;font-size:.75rem;text-align:center;margin:.45rem 0 0}
 html[data-view=reflow] .fx-canvas{display:none}
-html[data-view=reflow] .fx-page{width:min(52rem,100%);height:auto}
+html[data-view=reflow] .fx-page{width:min(52rem,100%);height:auto;margin-bottom:3rem}
 html[data-view=reflow] .fx-reflow{display:block;background:#fff;padding:2.75rem 3.25rem;border-radius:12px;
   box-shadow:0 0 0 1px rgba(0,0,0,.06),0 10px 30px rgba(15,20,30,.12);line-height:1.7;font-size:1.05rem;color:#16181a}
 html[data-view=reflow] .fx-reflow h1,html[data-view=reflow] .fx-reflow h2,html[data-view=reflow] .fx-reflow h3{line-height:1.25;letter-spacing:-.01em}
@@ -762,12 +776,20 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-backdrop{position:fixed;inset:0;background:rgba(10,12,15,.55);backdrop-filter:blur(2px);z-index:60;display:none}
 .fx-backdrop[data-open=true]{display:block}
 .fx-dialog{position:fixed;z-index:61;top:50%;left:50%;transform:translate(-50%,-50%);width:min(46rem,94vw);
-  max-height:86vh;overflow:auto;background:#fff;color:#16181a;border-radius:14px;padding:1.4rem 1.6rem;
+  max-height:86vh;overflow:auto;background:#fff;color:#16181a;border-radius:14px;padding:1.65rem 1.85rem;
+  gap:1rem;align-content:start;
   box-shadow:0 24px 60px rgba(0,0,0,.4);display:none}
-.fx-dialog[data-open=true]{display:block}
-.fx-dialog h2{margin-top:0;letter-spacing:-.01em}
+.fx-dialog[data-open=true]{display:grid}
+.fx-dialog h2{margin:0 2.6rem .15rem 0;letter-spacing:-.01em;line-height:1.2}
+.fx-dialog h3{margin:.35rem 0 .15rem;line-height:1.25}
+.fx-dialog p{margin:.15rem 0 .5rem}
+.fx-dialog ul,.fx-dialog ol{margin:.25rem 0 .75rem;padding-left:1.35rem}
 .fx-dialog-close{position:absolute;top:.7rem;right:.7rem;background:#f0f2f5;border:1px solid #dde1e6;
   border-radius:999px;width:2rem;height:2rem;cursor:pointer;font-size:.95rem}
+.fx-field{display:grid;gap:.4rem;margin:.35rem 0 .75rem}
+.fx-field label{font-weight:600;font-size:.9rem;color:#303846}
+.fx-field input,.fx-field textarea,.fx-field select{width:100%;border:1px solid #cfd6df;border-radius:9px;padding:.58rem .7rem;font:inherit;line-height:1.35;background:#fff;color:#16181a}
+.fx-dialog .fx-primary{margin:.25rem .35rem .25rem 0}
 .fx-switch{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:0 .25rem}
 .fx-switch input{appearance:none;-webkit-appearance:none;width:28px;height:15px;border-radius:999px;
   background:#4b5563;position:relative;cursor:pointer;transition:background .15s;margin:0;flex:0 0 28px}
@@ -831,14 +853,27 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   .fx-page{page-break-after:always;width:auto;height:auto}
   @page{margin:0}
 }
-@media (max-width:900px){.fx-rail{display:none}main.fx-stage{padding:1rem}}
+@media (max-width:900px){
+  header.fx-bar{position:static;gap:.45rem;padding:.65rem;align-items:stretch}
+  .fx-brand{width:100%;margin-right:0}.fx-brand h1{max-width:none}
+  .fx-group{max-width:100%;overflow-x:auto;justify-content:flex-start}.fx-spacer{display:none}
+  .fx-bar input{min-width:12rem;width:100%}.fx-bar .fx-primary-btn{margin-left:0}
+  .fx-shell{display:block;min-height:auto}.fx-rail{display:none}
+  main.fx-stage{padding:1rem;gap:2rem;overflow-x:hidden}
+  .fx-page{max-width:100%;overflow:visible}
+  .fx-canvas{max-width:100%;height:auto;transform-origin:top center}
+  .fx-drawer{top:0;width:100%;max-width:none}.fx-dialog{width:calc(100vw - 1rem);max-height:92vh;padding:1.25rem}
+}
+@media (max-width:520px){
+  header.fx-bar{font-size:.9rem}.fx-bar button,.fx-bar select,.fx-bar input{font-size:.78rem;padding:.38rem .58rem}
+  main.fx-stage{padding:.75rem;gap:1.5rem}.fx-dialog{border-radius:10px}
+}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 
 </style>
 </head>
 <body>
 <a class="fx-skip" href="#fx-content">Skip to document content</a>
-<a class="fx-skip" href="#fx-a11y">Skip to accessibility report</a>
 <header class="fx-bar" role="banner">
   <div class="fx-brand">
     <span class="fx-brand-mark" aria-hidden="true">DA</span>
@@ -905,10 +940,6 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
     </section>` : ""}
     <div id="fx-accessible">
     ${body}
-    ${infoPanel(options, pages.length, ctx.outline.length)}
-    ${auditPanel(options.audit, options.remediations)}
-    ${conformancePanel()}
-    ${showDataControls ? tagPanel(options.tags) : ""}
     </div>
   </main>
 </div>
@@ -1029,12 +1060,7 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
 </div>
 
 <p class="fx-status" role="status" aria-live="polite" id="fx-live"></p>
-${jsonScript("codbdocs-config", config2)}
-${jsonScript("codbdocs-index", ctx.index)}
-${jsonScript("codbdocs-outline", ctx.outline)}
-${jsonScript("codbdocs-knowledge", knowledgePack)}
-${jsonScript("codbdocs-elements", ctx.elements.map((e) => ({ ...e, text: e.text.slice(0, 4e3) })))}
-${rag ? jsonScript("codbdocs-rag", rag) : ""}
+${backendDataScripts}
 
 <script>
 (function(){
@@ -1101,6 +1127,14 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     (index||[]).forEach(function(e,i){
       if(!e||!e.t||e.t.length<(out.length?40:20)) return;
       out.push({id:'i'+i,p:Number(e.p)||0,t:String(e.t),src:'text'}); });
+    if(!out.length){
+      [].forEach.call(document.querySelectorAll('.fx-page'),function(page,pi){
+        [].forEach.call(page.querySelectorAll('.fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3'),function(el,ei){
+          var t=(el.textContent||'').replace(/\s+/g,' ').trim();
+          if(t.length>=20) out.push({id:'d'+pi+'-'+ei,p:Number(page.dataset.page)||pi+1,t:t,src:'dom'});
+        });
+      });
+    }
     // BM25-style field stats
     var df={}, total=0;
     out.forEach(function(pg){ pg.tok=tokens(pg.t); total+=pg.tok.length;
@@ -3097,17 +3131,34 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
     try {
       const opList = await page.getOperatorList();
       const pageNumber = page.pageNumber;
-      let currentImage = null;
+      const viewport = page.getViewport ? page.getViewport({ scale: 1 }) : { height: 0 };
       let imageIndex = 0;
+      let ctm = [1, 0, 0, 1, 0, 0];
+      const ctmStack = [];
       for (let i = 0; i < opList.fnArray.length; i++) {
         const fn = opList.fnArray[i];
         const args = opList.argsArray[i];
         const OPS = {
+          save: 10,
+          restore: 11,
+          transform: 12,
           paintImageXObject: 85,
           paintJpegXObject: 86,
           paintImageXObjectRepeat: 88,
           paintImageMaskXObject: 89
         };
+        if (fn === OPS.save) {
+          ctmStack.push(ctm.slice());
+          continue;
+        }
+        if (fn === OPS.restore) {
+          ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
+          continue;
+        }
+        if (fn === OPS.transform && Array.isArray(args) && args.length >= 6) {
+          ctm = multiplyMatrix2(ctm, args.slice(0, 6));
+          continue;
+        }
         if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
           const imgName = args[0];
           try {
@@ -3153,7 +3204,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
                 );
                 ctx.putImageData(imageData, 0, 0);
               }
-              const bbox = args.length > 1 ? args[1] : null;
+              const bbox = imageBBoxFromCTM(ctm, viewport.height || 0);
               const image = {
                 id: `page_${pageNumber}_img_${imageIndex}`,
                 name: imgName,
@@ -3162,12 +3213,7 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
                 height: canvas.height,
                 originalWidth: imgData.width,
                 originalHeight: imgData.height,
-                bbox: bbox ? {
-                  x: bbox[4] || 0,
-                  y: bbox[5] || 0,
-                  width: bbox[0] || canvas.width,
-                  height: bbox[3] || canvas.height
-                } : null,
+                bbox,
                 format,
                 dataUrl: canvas.toDataURL(`image/${format}`, quality),
                 arrayBuffer: await new Promise((resolve) => {
@@ -3205,6 +3251,29 @@ ${rag ? jsonScript("codbdocs-rag", rag) : ""}
       console.warn("[codbdocs] Image extraction failed:", e.message);
     }
     return images;
+  }
+  function multiplyMatrix2(m1, m2) {
+    const [a1, b1, c1, d1, e1, f1] = m1;
+    const [a2, b2, c2, d2, e2, f2] = m2;
+    return [
+      a1 * a2 + c1 * b2,
+      b1 * a2 + d1 * b2,
+      a1 * c2 + c1 * d2,
+      b1 * c2 + d1 * d2,
+      a1 * e2 + c1 * f2 + e1,
+      b1 * e2 + d1 * f2 + f1
+    ];
+  }
+  function imageBBoxFromCTM(ctm, pageHeight) {
+    const [a, b, c, d, e, f] = ctm;
+    const corners = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) => [a * x + c * y + e, b * x + d * y + f]);
+    const xs = corners.map((p) => p[0]);
+    const ys = corners.map((p) => p[1]);
+    const x = Math.min(...xs);
+    const yPdf = Math.min(...ys);
+    const width = Math.max(...xs) - x;
+    const height = Math.max(...ys) - yPdf;
+    return { x, y: yPdf, width, height, cssTop: pageHeight ? Math.max(0, pageHeight - yPdf - height) : yPdf };
   }
   async function extractAllImages(pdf, options = {}) {
     const allImages = [];
@@ -4304,10 +4373,8 @@ ${p.text}`).join("\n\n")
 
     body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
     body[data-codbdocs-view="text"] .pdf-embedded-image { display: none; }
-    body[data-codbdocs-view="pdf"] .pdf-text-layer { visibility: hidden; }
-    body[data-codbdocs-view="pdf"] .pdf-text-layer { pointer-events: none; }
+    body[data-codbdocs-view="pdf"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
     body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
-    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text { color: transparent !important; }
     body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text.sr-highlight { color: #000 !important; }
 
     .pdf-text.sr-highlight { background: rgba(255, 213, 79, 0.9); color: #000; border-radius: 2px; }
@@ -4344,6 +4411,12 @@ ${p.text}`).join("\n\n")
     var pageTextIndex = (rag.pages || []).map(function (p) {
       return { page: p.page || 1, text: normalize(p.text || ''), raw: p.text || '' };
     });
+    if (!pageTextIndex.length) {
+      pageTextIndex = pages.map(function (pg, i) {
+        var text = $$('.pdf-text', pg).map(function (el) { return el.textContent || ''; }).join(' ');
+        return { page: i + 1, text: normalize(text), raw: text };
+      });
+    }
 
     // Wrap each page so zoom scales raster + text together and keeps alignment.
     pages.forEach(function (pg) {
@@ -5124,9 +5197,7 @@ ${p.text}`).join("\n\n")
     const {
       mode = "visual",
       // 'visual' | 'accessible' | 'intelligent' | 'selectable'
-      includeDataAttributes: includeDataAttributes2 = true,
-      includeRAG = true,
-      includeRawText = true
+      includeDataAttributes: includeDataAttributes2 = true
     } = options;
     const ragPayload = buildRAGPayload(ir);
     const viewer = generateViewerChrome(ragPayload);
@@ -5150,10 +5221,12 @@ ${p.text}`).join("\n\n")
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
       if (!page) continue;
-      const attrs = includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "";
+      const nativeText = pageHasNativeText(page, ir);
+      const attrs = (includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "") + ` data-native-text="${nativeText ? "1" : "0"}"`;
       const pageLabel = ((_c = page.labels) == null ? void 0 : _c.print) || `Page ${page.num}`;
       html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML2(pageLabel)}" role="region">
 `;
+      html += renderPageVectorLayer(page, ir);
       if (page.background) {
         html += `<div class="pdf-page-raster" aria-hidden="true">
 `;
@@ -5174,9 +5247,7 @@ ${p.text}`).join("\n\n")
     html += "</div>\n";
     html += "</div>\n";
     html += "</main>\n";
-    if (includeRAG || includeRawText) {
-      html += '<script type="application/json" id="codbdocs-rag" data-page-count="' + (ir.document.pages.length || 0) + '">' + JSON.stringify(ragPayload).replace(/</g, "\\u003c") + "<\/script>\n";
-    }
+    // Backend/search context is intentionally not embedded in viewer HTML.
     html += viewer.script;
     html += "</body>\n</html>";
     return html;
@@ -5187,12 +5258,13 @@ ${p.text}`).join("\n\n")
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj || obj.type !== "image") continue;
-      const src = (_a = obj.raw) == null ? void 0 : _a.src;
+      const src = embeddedImageSrc((_a = obj.raw) == null ? void 0 : _a.src);
       if (!src) continue;
       const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+      const top = cssTop2(page, y, h);
       const alt = escapeHTML2(((_b = obj.accessibility) == null ? void 0 : _b.alt) || ((_c = obj.semantic) == null ? void 0 : _c.caption) || "Image");
       html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
-      html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
+      html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${top}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
 `;
     }
     return html;
@@ -5200,36 +5272,70 @@ ${p.text}`).join("\n\n")
   function buildRAGPayload(ir) {
     return buildRAGContext(ir, null);
   }
+  function renderPageVectorLayer(page, ir) {
+    var _a, _b, _c;
+    if (!Array.isArray(page.vectors) || !page.vectors.length) return "";
+    let body = "";
+    for (const vecId of page.vectors) {
+      const vec = ir.vectors[vecId];
+      if (!vec) continue;
+      const stroke = escapeHTML2(((_a = vec.graphicsState) == null ? void 0 : _a.stroke) || "#000");
+      const fill = escapeHTML2(((_b = vec.graphicsState) == null ? void 0 : _b.fill) || "none");
+      const width = Number((_c = vec.graphicsState) == null ? void 0 : _c.lineWidth) || 1;
+      if (vec.type === "rect" && Array.isArray(vec.bbox)) {
+        const [x = 0, y = 0, w = 0, h = 0] = vec.bbox;
+        body += `<rect x="${Number(x) || 0}" y="${Number(y) || 0}" width="${Math.abs(Number(w) || 0)}" height="${Math.abs(Number(h) || 0)}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+      } else if (vec.type === "path" && Array.isArray(vec.points)) {
+        let d = "";
+        for (const p of vec.points) {
+          if (p.op === "moveTo") d += `M${Number(p.x) || 0} ${Number(p.y) || 0} `;
+          else if (p.op === "lineTo") d += `L${Number(p.x) || 0} ${Number(p.y) || 0} `;
+          else if (p.op === "curveTo") d += `C${Number(p.x1) || 0} ${Number(p.y1) || 0} ${Number(p.x2) || 0} ${Number(p.y2) || 0} ${Number(p.x3) || 0} ${Number(p.y3) || 0} `;
+          else if (p.op === "closePath") d += "Z ";
+        }
+        if (d.trim()) body += `<path d="${escapeHTML2(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+      }
+    }
+    if (!body) return "";
+    const w = Number(page.width) || 0;
+    const h = Number(page.height) || 0;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
+    return `<img class="pdf-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase64(svg)}">\n`;
+  }
+  function pageHasNativeText(page, ir) {
+    return (page.content || []).some((id) => {
+      var _a, _b, _c, _d, _e;
+      const obj = ir.objects[id];
+      if (!obj || obj.type !== "text" || !((_a = obj.semantic) == null ? void 0 : _a.text)) return false;
+      const method = String(((_b = obj.provenance) == null ? void 0 : _b.method) || ((_c = obj.raw) == null ? void 0 : _c.source) || ((_d = obj.raw) == null ? void 0 : _d.textSource) || "native").toLowerCase();
+      return method !== "ocr" && method !== "fusion";
+    });
+  }
   function renderPageVisual(page, ir, attrs) {
     var _a, _b, _c, _d, _e, _f, _g;
     let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + "px;height:" + (page.height || 0) + 'px;">\n';
-    for (const vecId of page.vectors || []) {
-      const vec = ir.vectors[vecId];
-      if (!vec) continue;
-      html += renderVectorVisual(vec, attrs);
-    }
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj) continue;
       if (obj.type === "text") {
         const bbox = obj.bbox || [];
         const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${((_a = obj.raw) == null ? void 0 : _a.fontSize) || 12}px;${style}">${escapeHTML2(((_b = obj.semantic) == null ? void 0 : _b.text) || "")}</div>
+        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || ((_a = obj.raw) == null ? void 0 : _a.fontSize) || 12)}px;font-size:${((_a = obj.raw) == null ? void 0 : _a.fontSize) || 12}px;${style}">${escapeHTML2(((_b = obj.semantic) == null ? void 0 : _b.text) || "")}</div>
 `;
       } else if (obj.type === "image") {
         const bbox = obj.bbox || [];
-        const src = ((_c = obj.raw) == null ? void 0 : _c.src) || "";
+        const src = embeddedImageSrc(((_c = obj.raw) == null ? void 0 : _c.src) || "");
         if (src) {
-          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(((_d = obj.accessibility) == null ? void 0 : _d.alt) || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(((_d = obj.accessibility) == null ? void 0 : _d.alt) || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
         } else {
-          html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
+          html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
 `;
         }
       } else if (obj.type === "link") {
         const bbox = obj.bbox || [];
         const href = escapeHTML2(((_e = obj.raw) == null ? void 0 : _e.href) || "#");
-        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(((_f = obj.semantic) == null ? void 0 : _f.text) || ((_g = obj.raw) == null ? void 0 : _g.url) || "link")}</a>
+        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(((_f = obj.semantic) == null ? void 0 : _f.text) || ((_g = obj.raw) == null ? void 0 : _g.url) || "link")}</a>
 `;
       }
     }
@@ -5246,19 +5352,19 @@ ${p.text}`).join("\n\n")
       const bbox = obj.bbox || [];
       if (obj.type === "text" && ((_a = obj.semantic) == null ? void 0 : _a.text)) {
         const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;font-size:${((_b = obj.raw) == null ? void 0 : _b.fontSize) || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
+        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || ((_b = obj.raw) == null ? void 0 : _b.fontSize) || 12)}px;font-size:${((_b = obj.raw) == null ? void 0 : _b.fontSize) || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
 `;
       } else if (obj.type === "image") {
-        const src = ((_c = obj.raw) == null ? void 0 : _c.src) || "";
+        const src = embeddedImageSrc(((_c = obj.raw) == null ? void 0 : _c.src) || "");
         const alt = escapeHTML2(((_d = obj.accessibility) == null ? void 0 : _d.alt) || ((_e = obj.semantic) == null ? void 0 : _e.caption) || "Image");
         if (src) {
-          html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+          html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
         }
       } else if (obj.type === "link") {
         const href = escapeHTML2(((_f = obj.raw) == null ? void 0 : _f.href) || "#");
         const text = escapeHTML2(((_g = obj.semantic) == null ? void 0 : _g.text) || ((_h = obj.raw) == null ? void 0 : _h.url) || "link");
-        html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${bbox[1] || 0}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>
+        html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>
 `;
       }
     }
@@ -5275,7 +5381,7 @@ ${p.text}`).join("\n\n")
       const role = ((_a = obj.semantic) == null ? void 0 : _a.role) || "paragraph";
       if (obj.type === "image") {
         const alt = ((_b = obj.accessibility) == null ? void 0 : _b.alt) || ((_c = obj.semantic) == null ? void 0 : _c.caption) || (mode === "intelligent" ? "AI-generated description" : "Image");
-        const src = ((_d = obj.raw) == null ? void 0 : _d.src) || "";
+        const src = embeddedImageSrc(((_d = obj.raw) == null ? void 0 : _d.src) || "");
         html += `<figure${dataAttr}>
 `;
         if (src) html += `<img src="${escapeHTML2(src)}" alt="${escapeHTML2(alt)}" loading="lazy">
@@ -5335,6 +5441,12 @@ ${p.text}`).join("\n\n")
     }
     return style;
   }
+  function cssTop2(page, y, height = 0) {
+    const pageHeight = Number((page == null ? void 0 : page.height) || 0);
+    const yy = Number(y) || 0;
+    const hh = Number(height) || 0;
+    return Math.max(0, pageHeight - yy - hh);
+  }
   function sanitizeFontName(name) {
     return String(name).replace(/[^A-Za-z0-9]+/g, " ").replace(/^\d+\s?/, "").trim() || "sans-serif";
   }
@@ -5373,9 +5485,11 @@ ${p.text}`).join("\n\n")
     return `<style>
     body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
     .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
-    .pdf-page-raster { position: relative; }
+    .pdf-page-raster { position: relative; z-index: 0; }
+    .pdf-page[data-native-text="1"] .pdf-page-raster { display: none; }
     .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
     .pdf-embedded-image { position: absolute; z-index: 2; }
+    .pdf-vector-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
     /* The positioned text layer sits directly over the raster at the same
        coordinates, so it renders on top of the pixels and stays selectable.
        This makes the page look exactly like the source PDF while keeping
@@ -5386,6 +5500,8 @@ ${p.text}`).join("\n\n")
     .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
     .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
     .pdf-text { position: absolute; white-space: pre; line-height: 1; transform-origin: 0 0; }
+    body[data-codbdocs-view="pdf"] .pdf-page[data-native-text="0"] .pdf-text { color: transparent !important; }
+    body[data-codbdocs-view="text"] .pdf-page[data-native-text="0"] .pdf-text { color: #111 !important; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
     .ai-generated { color: #999; font-style: italic; }
@@ -10997,7 +11113,7 @@ ${customStyles}
       html += "  </section>\n";
     }
     html += "</main>\n";
-    html += '<script type="application/json" id="codbdocs-rag" data-page-count="' + (ir.document.pages.length || 0) + '">' + JSON.stringify(buildAccessibleRAGPayload(ir)).replace(/</g, "\\u003c") + "<\/script>\n";
+    // Backend/search context is intentionally not embedded in viewer HTML.
     if (includeLandmarks) {
       html += '<footer role="contentinfo" aria-label="Document footer">\n';
       html += '  <p>Generated by <a href="https://github.com/CityofDaytonaBeach/codbdocs">CodbDocs</a></p>\n';
@@ -11337,7 +11453,7 @@ ${customStyles}
   function renderAccessibleImage(obj, opts) {
     var _a, _b, _c, _d, _e, _f;
     const { dataAttr, wrapImagesInFigures, mode } = opts;
-    const src = ((_a = obj.raw) == null ? void 0 : _a.src) || "";
+    const src = embeddedImageSrc(((_a = obj.raw) == null ? void 0 : _a.src) || "");
     const alt = ((_b = obj.accessibility) == null ? void 0 : _b.alt) || "";
     const caption = ((_c = obj.semantic) == null ? void 0 : _c.caption) || "";
     const isDecorative = ((_d = obj.accessibility) == null ? void 0 : _d.decorative) || !alt && !caption;
@@ -11347,7 +11463,7 @@ ${customStyles}
     if (wrapImagesInFigures) {
       html += `    <figure${dataAttr}>
 `;
-      html += `      <img src="${escapeHTML3(src)}"${altAttr} loading="lazy">
+      if (src) html += `      <img src="${escapeHTML3(src)}"${altAttr} loading="lazy">
 `;
       if (caption) {
         html += `      <figcaption>${escapeHTML3(caption)}</figcaption>
@@ -11359,7 +11475,7 @@ ${customStyles}
       }
       html += "    </figure>\n";
     } else {
-      html += `    <img${dataAttr} src="${escapeHTML3(src)}"${altAttr} loading="lazy">
+      if (src) html += `    <img${dataAttr} src="${escapeHTML3(src)}"${altAttr} loading="lazy">
 `;
     }
     return html;

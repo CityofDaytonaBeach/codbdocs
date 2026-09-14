@@ -32,9 +32,11 @@ export async function extractImages(page, options = {}) {
     // Get page operator list to find image operations
     const opList = await page.getOperatorList();
     const pageNumber = page.pageNumber;
+    const viewport = page.getViewport ? page.getViewport({ scale: 1 }) : { height: 0 };
     
-    let currentImage = null;
     let imageIndex = 0;
+    let ctm = [1, 0, 0, 1, 0, 0];
+    const ctmStack = [];
     
     for (let i = 0; i < opList.fnArray.length; i++) {
       const fn = opList.fnArray[i];
@@ -42,11 +44,27 @@ export async function extractImages(page, options = {}) {
       
       // PDF.js OPS constants for image operations
       const OPS = {
+        save: 10,
+        restore: 11,
+        transform: 12,
         paintImageXObject: 85,
         paintJpegXObject: 86,
         paintImageXObjectRepeat: 88,
         paintImageMaskXObject: 89,
       };
+
+      if (fn === OPS.save) {
+        ctmStack.push(ctm.slice());
+        continue;
+      }
+      if (fn === OPS.restore) {
+        ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
+        continue;
+      }
+      if (fn === OPS.transform && Array.isArray(args) && args.length >= 6) {
+        ctm = multiplyMatrix(ctm, args.slice(0, 6));
+        continue;
+      }
       
       if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
         const imgName = args[0];
@@ -100,8 +118,7 @@ export async function extractImages(page, options = {}) {
               ctx.putImageData(imageData, 0, 0);
             }
             
-            // Get bounding box from transform matrix if available
-            const bbox = args.length > 1 ? args[1] : null;
+            const bbox = imageBBoxFromCTM(ctm, viewport.height || 0);
             
             const image = {
               id: `page_${pageNumber}_img_${imageIndex}`,
@@ -111,12 +128,7 @@ export async function extractImages(page, options = {}) {
               height: canvas.height,
               originalWidth: imgData.width,
               originalHeight: imgData.height,
-              bbox: bbox ? {
-                x: bbox[4] || 0,
-                y: bbox[5] || 0,
-                width: bbox[0] || canvas.width,
-                height: bbox[3] || canvas.height,
-              } : null,
+              bbox,
               format,
               dataUrl: canvas.toDataURL(`image/${format}`, quality),
               arrayBuffer: await new Promise((resolve) => {
@@ -834,6 +846,39 @@ export function createRAGOutput(graph, options = {}) {
   }
   
   return ragOutput;
+}
+
+function multiplyMatrix(m1, m2) {
+  const [a1, b1, c1, d1, e1, f1] = m1;
+  const [a2, b2, c2, d2, e2, f2] = m2;
+  return [
+    a1 * a2 + c1 * b2,
+    b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2,
+    b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1,
+    b1 * e2 + d1 * f2 + f1,
+  ];
+}
+
+function imageBBoxFromCTM(ctm, pageHeight) {
+  const [a, b, c, d, e, f] = ctm;
+  const corners = [
+    [0, 0], [1, 0], [0, 1], [1, 1],
+  ].map(([x, y]) => [a * x + c * y + e, b * x + d * y + f]);
+  const xs = corners.map(p => p[0]);
+  const ys = corners.map(p => p[1]);
+  const x = Math.min(...xs);
+  const yPdf = Math.min(...ys);
+  const width = Math.max(...xs) - x;
+  const height = Math.max(...ys) - yPdf;
+  return {
+    x,
+    y: yPdf,
+    width,
+    height,
+    cssTop: pageHeight ? Math.max(0, pageHeight - yPdf - height) : yPdf,
+  };
 }
 
 function summarizeRagText(text, limit = 420) {

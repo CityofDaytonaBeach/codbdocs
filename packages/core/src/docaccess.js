@@ -36,6 +36,11 @@ function escapeHTML(str) {
     .replace(/'/g, '&#39;');
 }
 
+function embeddedImageSrc(src) {
+  src = String(src || '');
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : '';
+}
+
 // ─── WCAG 2.1 AA Audit ───────────────────────────────────────────────────────
 
 /**
@@ -497,10 +502,8 @@ export function exportAccessibleHTML(ir, options = {}) {
 
   html += '</main>\n';
 
-  // RAG / full-context payload for AI summarization (machine-readable, no AI runs here).
-  html += '<script type="application/json" id="codbdocs-rag" data-page-count="' +
-    (ir.document.pages.length || 0) + '">' +
-    JSON.stringify(buildAccessibleRAGPayload(ir)).replace(/</g, '\\u003c') + '</script>\n';
+  // Backend/search context is intentionally not embedded in viewer HTML.
+  // Use getRAGContext(), toRAG(), or exportFull() to store backend data separately.
 
   // ─── Landmark Footer ──────────────────────────────────────────────────
   if (includeLandmarks) {
@@ -912,7 +915,7 @@ function renderAccessibleLink(obj, opts) {
 
 function renderAccessibleImage(obj, opts) {
   const { dataAttr, wrapImagesInFigures, mode } = opts;
-  const src = obj.raw?.src || '';
+  const src = embeddedImageSrc(obj.raw?.src || '');
   const alt = obj.accessibility?.alt || '';
   const caption = obj.semantic?.caption || '';
   const isDecorative = obj.accessibility?.decorative || (!alt && !caption);
@@ -923,7 +926,7 @@ function renderAccessibleImage(obj, opts) {
   let html = '';
   if (wrapImagesInFigures) {
     html += `    <figure${dataAttr}>\n`;
-    html += `      <img src="${escapeHTML(src)}"${altAttr} loading="lazy">\n`;
+    if (src) html += `      <img src="${escapeHTML(src)}"${altAttr} loading="lazy">\n`;
     if (caption) {
       html += `      <figcaption>${escapeHTML(caption)}</figcaption>\n`;
     }
@@ -932,7 +935,7 @@ function renderAccessibleImage(obj, opts) {
     }
     html += '    </figure>\n';
   } else {
-    html += `    <img${dataAttr} src="${escapeHTML(src)}"${altAttr} loading="lazy">\n`;
+    if (src) html += `    <img${dataAttr} src="${escapeHTML(src)}"${altAttr} loading="lazy">\n`;
   }
 
   return html;
