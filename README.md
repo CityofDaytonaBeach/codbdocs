@@ -13,6 +13,8 @@ Lead developer: **Daniel Gurczynski**.
 https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
 ```
 
+Load PDF.js first, then import the CodbDocs ES module from jsDelivr. OCR is optional and only runs when you also load Tesseract.js.
+
 ```
 CodbDocs
    │
@@ -277,6 +279,11 @@ But the point is: **you don't need them to get good results.** The model-free pi
   <input type="file" id="fileInput" accept=".pdf" />
   <div id="results"></div>
 
+  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.worker.min.js';
+  </script>
+
   <script type="module">
     import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
 
@@ -286,7 +293,7 @@ But the point is: **you don't need them to get good results.** The model-free pi
 
       // Load and analyze
       const doc = await CodbDocs.load(file);
-      const graph = await doc.analyze({ ocr: true });
+      const graph = await doc.analyze({ ocr: false });
 
       // Query
       const dates = graph.query("what dates are mentioned?");
@@ -1208,6 +1215,11 @@ The browser module entrypoint is committed under `packages/core/src/index.js`. P
 **CDN URL:**
 ```
 https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
+```
+
+If jsDelivr serves a stale file after a GitHub update, purge the URL at:
+```text
+https://purge.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
 ```
 
 ---

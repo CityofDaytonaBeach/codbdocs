@@ -561,6 +561,9 @@ export async function packageDocumentFull(source, options = {}) {
   const pageFiles = [];
   const vectorFiles = [];
   const bytes = await sourceBytes(source);
+  const originalPdfSrc = options.includeOriginal !== false && bytes
+    ? `data:application/pdf;base64,${bytesToBase64(bytes)}`
+    : undefined;
 
   const html =
     options.html ||
@@ -569,7 +572,7 @@ export async function packageDocumentFull(source, options = {}) {
       lang: data.document.language || 'en',
       rag: { chunks: data.chunks },
       originalName: data.document.source,
-      originalPdfSrc: options.includeOriginal !== false ? 'original.pdf' : undefined,
+      originalPdfSrc,
       ...(options.htmlOptions ?? {}),
     });
   entries.push({ name: 'index.html', data: html });
@@ -776,11 +779,13 @@ export async function buildAccessibleHtml(source, options = {}) {
     dpi: options.dpi ?? 150,
   });
   const ir = dataToIR(data, options);
+  const bytes = options.includeOriginal === false ? null : await sourceBytes(source);
   const html = buildFidelityHtml(ir, {
     title: data.document.title,
     lang: data.document.language || 'en',
     rag: { chunks: data.chunks },
     originalName: data.document.source,
+    originalPdfSrc: bytes ? `data:application/pdf;base64,${bytesToBase64(bytes)}` : undefined,
     ...(options.html ?? {}),
   });
   return { html, data, ir };

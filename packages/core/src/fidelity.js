@@ -23,6 +23,9 @@ function textToBase64(text) {
   for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
   return bytesToBase64(bytes);
 }
+function jsonScript(id, value) {
+  return `<script type="application/json" id="${esc(id)}">${JSON.stringify(value == null ? null : value).replace(/<\//g, "<\\/")}</script>`;
+}
 function embeddedImageSrc(src) {
   src = String(src || "");
   return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : "";
@@ -283,15 +286,43 @@ function hasNativeText(page, ir) {
 }
 function renderReflow(ir, page, headingIds, ctx) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+  const pageHeight = num(page == null ? void 0 : page.height, 792);
   let html = "";
   let openList = false;
   let hCursor = 0;
+  let pending = [];
+  const joinRuns = (runs) => runs.reduce((out, run) => {
+    const clean = String(run.text || "").replace(/\s+/g, " ").trim();
+    if (!clean) return out;
+    if (!out) return clean;
+    return /[-\u2010-\u2015]$/.test(out) ? out.replace(/[-\u2010-\u2015]$/, "") + clean : `${out} ${clean}`;
+  }, "");
+  const flushParagraph = () => {
+    const text = joinRuns(pending);
+    if (text) html += `<p>${esc(text)}</p>`;
+    pending = [];
+  };
+  const pushParagraphRun = (o, text) => {
+    const bbox = Array.isArray(o.bbox) ? o.bbox : [];
+    const fontSize = num(o.raw == null ? void 0 : o.raw.fontSize, 12) || 12;
+    const top = cssTop(pageHeight, bbox, fontSize);
+    const left = num(bbox[0]);
+    const last = pending[pending.length - 1];
+    if (last) {
+      const gap = Math.abs(top - last.top);
+      const indentShift = Math.abs(left - last.left);
+      const startsSection = /^[A-Z][A-Z0-9 &/(),.'\u2019-]{8,}\s[-\u2013\u2014]/.test(String(text).trim());
+      if ((startsSection && gap > Math.max(14, fontSize * 1.2)) || gap > Math.max(18, fontSize * 1.85) || indentShift > 72) flushParagraph();
+    }
+    pending.push({ text, top, left, fontSize });
+  };
   for (const o of pageObjects(ir, page)) {
     const inferredLevel = ctx.inferred.get(o.id);
     const declared = (_a = o.semantic) == null ? void 0 : _a.role;
     const role = o.type === "image" ? "image" : inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
     const text = objText(o);
     if (role === "list-item") {
+      flushParagraph();
       if (!openList) {
         html += "<ul>";
         openList = true;
@@ -304,6 +335,7 @@ function renderReflow(ir, page, headingIds, ctx) {
       openList = false;
     }
     if (o.type === "image") {
+      flushParagraph();
       const src = (_b = o.raw) == null ? void 0 : _b.src;
       const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
       const long = ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || "";
@@ -315,12 +347,14 @@ function renderReflow(ir, page, headingIds, ctx) {
     if (o.type === "table" || Array.isArray((_i = o.raw) == null ? void 0 : _i.rows)) {
       const t = tableParts(o);
       if (t.rows) {
+        flushParagraph();
         const tid = esc((_j = o.id) != null ? _j : "");
         html += `<div class="fx-tablewrap" data-el="${tid}" tabindex="0" role="group" aria-label="Data table">${t.html}<button type="button" class="fx-desc-btn" data-explain="${tid}">Explain this table with AI</button><p class="fx-desc-out" data-explain="${tid}" role="status" aria-live="polite" hidden></p></div>`;
         continue;
       }
     }
     if (o.type === "vector" || o.type === "path" || o.type === "shape") {
+      flushParagraph();
       const vid = esc((_k = o.id) != null ? _k : "");
       html += `<figure class="fx-vector" data-el="${vid}"><figcaption>${esc(
         ((_l = o.semantic) == null ? void 0 : _l.caption) || ((_m = o.accessibility) == null ? void 0 : _m.alt) || "Vector drawing"
@@ -329,15 +363,18 @@ function renderReflow(ir, page, headingIds, ctx) {
     }
     if (!text.trim()) continue;
     if (role === "heading") {
+      flushParagraph();
       const level = Math.min(6, Math.max(1, num((_n = o.semantic) == null ? void 0 : _n.level, inferredLevel != null ? inferredLevel : 2)));
       const hid = headingIds[hCursor++];
       html += `<h${level}${hid ? ` id="fx-rh-${hid}"` : ""}>${esc(text)}</h${level}>`;
     } else if (o.type === "link") {
+      flushParagraph();
       html += `<p><a href="${esc(((_o = o.raw) == null ? void 0 : _o.href) || ((_p = o.raw) == null ? void 0 : _p.url) || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
     } else {
-      html += `<p>${esc(text)}</p>`;
+      pushParagraphRun(o, text);
     }
   }
+  flushParagraph();
   if (openList) html += "</ul>";
   return html || '<p class="fx-empty">No extractable text on this page.</p>';
 }
@@ -431,7 +468,7 @@ function buildFidelityHtml(ir, options = {}) {
     )}</div>
     </section>`;
   });
-  const rag = null;
+  const rag = options.rag || null;
   const translate = options.translate === true;
   const priority = (_i = options.priorityLanguages) != null ? _i : [];
   const outlineHtml = ctx.outline.length ? ctx.outline.map(
@@ -523,7 +560,14 @@ function buildFidelityHtml(ir, options = {}) {
       guidance: "Use retrieve() for grounded passages, then ask() or your own AI endpoint with returned page citations. Use pages[].accessibility.screenReaderText for ADA and screen-reader workflows."
     }
   };
-  const backendDataScripts = "";
+  const backendDataScripts = [
+    jsonScript("codbdocs-config", config),
+    jsonScript("codbdocs-index", ctx.index),
+    jsonScript("codbdocs-outline", ctx.outline),
+    jsonScript("codbdocs-rag", rag),
+    jsonScript("codbdocs-knowledge", knowledgePack),
+    jsonScript("codbdocs-elements", ctx.elements),
+  ].join("\n");
   return `<!DOCTYPE html>
 <html lang="${esc(lang)}" data-view="${initialView}">
 <head>
@@ -600,9 +644,12 @@ main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:
 .fx-link:hover,.fx-link:focus{border-bottom-color:var(--accent-2);background:rgba(20,115,230,.12)}
 .fx-reflow{display:none}
 html[data-view=reflow] .fx-canvas{display:none}
-html[data-view=reflow] .fx-page{width:min(52rem,100%);height:auto;margin-bottom:3rem}
+html[data-view=reflow] .fx-page{width:min(58rem,100%);height:auto;margin-bottom:3rem}
 html[data-view=reflow] .fx-reflow{display:block;background:#fff;padding:2.75rem 3.25rem;border-radius:12px;
-  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 10px 30px rgba(15,20,30,.12);line-height:1.7;font-size:1.05rem;color:#16181a}
+  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 10px 30px rgba(15,20,30,.12);line-height:1.72;font-size:1.04rem;color:#16181a;
+  text-wrap:pretty;overflow-wrap:break-word;hyphens:auto}
+html[data-view=reflow] .fx-reflow p{margin:.35rem 0 1rem;max-width:72ch}
+html[data-view=reflow] .fx-reflow p+p{margin-top:.2rem}
 html[data-view=reflow] .fx-reflow h1,html[data-view=reflow] .fx-reflow h2,html[data-view=reflow] .fx-reflow h3{line-height:1.25;letter-spacing:-.01em}
 html[data-view=reflow] .fx-reflow img{max-width:100%;height:auto}
 html.fx-contrast body,html.fx-contrast .fx-reflow,html.fx-contrast main.fx-stage{background:#000;color:#fff}
@@ -1136,10 +1183,11 @@ ${backendDataScripts}
     }
     function renderOriginal(){
       if(pdfLoaded||pdfLoading) return; pdfLoading=true;
-      if(!pdfJsUrl){ pdfLoading=false; opStatus('Original PDF rendering requires a local pdfJsUrl option.'); return; }
+      if(!pdfSrc){ pdfLoading=false; opStatus('No original PDF is embedded in this document.'); return; }
       opStatus('Rendering the original PDF\u2026');
-      import(pdfJsUrl).then(function(pdfjs){
-        pdfjs.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.mjs$/,'pdf.worker$1.mjs');
+      var pdfjsReady=window.pdfjsLib ? Promise.resolve(window.pdfjsLib) : (pdfJsUrl ? import(pdfJsUrl) : Promise.reject(new Error('PDF.js is not loaded.')));
+      pdfjsReady.then(function(pdfjs){
+        if(pdfJsUrl&&pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.mjs$/,'pdf.worker$1.mjs');
         var bytes=toBytes(pdfSrc);
         var task=bytes?pdfjs.getDocument({data:bytes}):pdfjs.getDocument(pdfSrc);
         return task.promise;
@@ -1165,7 +1213,7 @@ ${backendDataScripts}
           opStatus('Original PDF \u2014 '+doc.numPages+' page'+(doc.numPages===1?'':'s')+' rendered with pdf.js.'); });
       }).catch(function(err){
         pdfLoading=false;
-        opStatus('The original PDF could not be rendered here ('+(err&&err.message||err)+'). Use Download to open the file.');
+        opStatus('The original PDF could not be rendered here ('+(err&&err.message||err)+').');
       });
     }
     pdfToggle.addEventListener('change',function(){
@@ -1556,7 +1604,7 @@ ${backendDataScripts}
     '<!DOCTYPE html>'+document.documentElement.outerHTML,'text/html;charset=utf-8'); };
   var dt=document.getElementById('fx-dl-txt');
   if(dt) dt.onclick=function(){ download(base+'-transcript.txt',
-    index.map(function(e){ return e.t; }).join('\\n\\n')); };
+    transcriptText()); };
   var dk=document.getElementById('fx-dl-know');
   if(dk) dk.onclick=function(){ download(base+'-ai-knowledge.json',
     JSON.stringify({knowledge:knowledge,outline:outline,transcript:transcriptText()},null,2),'application/json'); };
