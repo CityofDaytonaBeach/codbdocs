@@ -309,6 +309,16 @@ const DEFAULTS = {
 
 let config = { ...DEFAULTS };
 
+function bytesToBase64(bytes) {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  let bin = '';
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+  }
+  return btoa(bin);
+}
+
 function configure(opts = {}) {
   // Deep merge memory config
   if (opts.memory) {
@@ -348,27 +358,32 @@ async function load(source) {
   const pdfjsLib = getPdfjs();
 
   let data;
+  let sourceBytes = null;
   if (typeof source === 'string') {
     data = { url: source };
   } else if (source instanceof ArrayBuffer) {
-    data = { data: source.slice(0) };
+    sourceBytes = new Uint8Array(source.slice(0));
+    data = { data: sourceBytes.slice(0).buffer };
   } else if (source instanceof Uint8Array) {
-    data = { data: source.slice(0).buffer };
+    sourceBytes = source.slice(0);
+    data = { data: sourceBytes.slice(0).buffer };
   } else if (source && typeof source.arrayBuffer === 'function') {
-    data = { data: await source.arrayBuffer() };
+    sourceBytes = new Uint8Array(await source.arrayBuffer());
+    data = { data: sourceBytes.slice(0).buffer };
   } else {
     throw new Error('[codbdocs] Unsupported source. Pass a File, Blob, ArrayBuffer, Uint8Array, or URL string.');
   }
 
   const pdf = await pdfjsLib.getDocument(data).promise;
-  return new CodbDoc(pdf);
+  return new CodbDoc(pdf, sourceBytes);
 }
 
 // ─── CodbDoc ─────────────────────────────────────────────────────────────────
 
 class CodbDoc {
-  constructor(pdf) {
+  constructor(pdf, sourceBytes = null) {
     this._pdf = pdf;
+    this._sourceBytes = sourceBytes;
     this.pageCount = pdf.numPages;
   }
 
@@ -883,6 +898,7 @@ class CodbDoc {
     graph._contentGraph = contentGraph;
     graph._doc = this;
     graph._ir = ir;
+    graph._sourceBytes = this._sourceBytes;
     graph._conceptGraph = conceptGraph;
     graph._fingerprint = fingerprint;
 
@@ -2081,7 +2097,11 @@ export function exportFidelityHTML(graph, options = {}) {
   const remediations = options.remediations ?? safe(() => graph.getRemediations());
   const rag = options.rag ?? safe(() => graph.toRAG());
   const tags = options.tags ?? safe(() => graph.getAccessibilityTree());
-  return _buildFidelityHtml(ir, { ...options, audit, remediations, rag, tags });
+  const sourceBytes = graph?._sourceBytes || graph?._doc?._sourceBytes || null;
+  const originalPdfSrc = options.originalPdfSrc || (options.includeOriginal !== false && sourceBytes
+    ? `data:application/pdf;base64,${bytesToBase64(sourceBytes)}`
+    : undefined);
+  return _buildFidelityHtml(ir, { ...options, audit, remediations, rag, tags, originalPdfSrc });
 }
 
 export { normalizeIR, hydrateGraph } from './guards.js';

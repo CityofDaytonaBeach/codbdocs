@@ -13,6 +13,11 @@ Lead developer: **Daniel Gurczynski**.
 https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
 ```
 
+**GitHub source URL:**
+```text
+https://github.com/CityofDaytonaBeach/codbdocs/blob/main/packages/core/src/index.js
+```
+
 Load PDF.js first, then import the CodbDocs ES module from jsDelivr. OCR is optional and only runs when you also load Tesseract.js.
 
 ```
