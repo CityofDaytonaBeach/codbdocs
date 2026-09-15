@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CodbDocs Visual Regression Runner</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    #original-pages { display: grid; gap: 24px; padding: 24px; }
+    .orig-page { background: white; box-shadow: 0 0 0 1px #ddd; width: fit-content; }
+    #generated-frame { position: absolute; left: 200vw; top: 0; width: 1440px; height: 2000px; border: 0; }
+  </style>
+</head>
+<body>
+  <div id="original-pages"></div>
+  <iframe id="generated-frame" title="Generated HTML"></iframe>
+  <script src="/vendor/pdf.js/pdf.min.js"></script>
+  <script src="/packages/core/dist/codbdocs.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.js/pdf.worker.min.js';
+
+    window.runVisualRegression = async function ({ name, base64 }) {
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const originalHost = document.getElementById('original-pages');
+      originalHost.textContent = '';
+
+      for (let i = 1; i <= pdf.numPages; i += 1) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1 });
+        const canvas = document.createElement('canvas');
+        canvas.id = 'orig-page-' + i;
+        canvas.className = 'orig-page';
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        originalHost.appendChild(canvas);
+      }
+
+      const file = new File([bytes], name || 'input.pdf', { type: 'application/pdf' });
+      const doc = await CodbDocs.load(file);
+      const graph = await doc.analyze({ extractVectors: true, extractExtended: true, ocr: false });
+      const html = graph.toFidelityHTML({ thumbnails: false, translate: false });
+      const frame = document.getElementById('generated-frame');
+      frame.srcdoc = html;
+      await new Promise(resolve => { frame.onload = resolve; });
+      const frameDoc = frame.contentDocument;
+      frameDoc.documentElement.dataset.view = 'fidelity';
+      frameDoc.querySelectorAll('header.fx-bar,.fx-rail,.fx-drawer').forEach(el => el.remove());
+      frameDoc.querySelectorAll('.fx-page').forEach(el => { el.style.margin = '0'; });
+      frameDoc.querySelectorAll('.fx-canvas').forEach(el => { el.style.transform = 'none'; });
+      window.visualResult = { pageCount: pdf.numPages };
+    };
+  </script>
+</body>
+</html>

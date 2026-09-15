@@ -6,5 +6,8 @@
   "workspaces": [
     "packages/*"
   ],
+  "scripts": {
+    "test:visual": "node test/visual/compare-pdf-html.mjs"
+  },
   "license": "MIT"
 }

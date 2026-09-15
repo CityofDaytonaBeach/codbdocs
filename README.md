@@ -804,6 +804,18 @@ for (const chunk of ragOutput.chunks) {
 
 ---
 
+## Visual Regression Testing
+
+Compare the generated HTML viewer against the original PDF render page-by-page:
+
+```bash
+npm i -D playwright pngjs
+npx playwright install chromium
+npm run test:visual -- path/to/document.pdf
+```
+
+The harness renders the original PDF with PDF.js, renders the CodbDocs HTML output in Chromium, screenshots matching pages, and reports per-page `mismatchRatio` and `meanDelta`. Set `CODBDOCS_VISUAL_MAX_MISMATCH=0.02` to tighten the failure threshold.
+
 ## PDF Creation (Round-Trip)
 
 Generate new PDFs from the analyzed document with three fidelity levels:

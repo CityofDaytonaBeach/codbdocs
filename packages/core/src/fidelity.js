@@ -52,6 +52,18 @@ function fontFamily(o) {
   if (/courier|mono/.test(lower)) return "'Courier New', Courier, monospace";
   return "Helvetica, Arial, 'Segoe UI', system-ui, sans-serif";
 }
+function textTransformVars(o) {
+  const t = o && o.raw && Array.isArray(o.raw.transform) ? o.raw.transform : null;
+  if (!t || t.length < 4) return "";
+  const [a, b, c, d] = t.map(Number);
+  if (![a, b, c, d].every(Number.isFinite)) return "";
+  const rotate = Math.atan2(b, a || 1);
+  const skew = Math.atan2(c, d || 1);
+  let out = "";
+  if (Math.abs(rotate) > 0.001) out += `--fx-rotate:${-rotate}rad;`;
+  if (Math.abs(skew) > 0.001 && Math.abs(skew + rotate) > 0.001) out += `--fx-skew:${skew}rad;`;
+  return out;
+}
 function inferHeadingLevels(ir) {
   var _a, _b, _c, _d, _e;
   const sizes = [];
@@ -212,7 +224,7 @@ function renderTextLayer(ir, page, ctx, pageNum) {
     const role = inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
     const level = Math.min(6, Math.max(1, num((_y = o.semantic) == null ? void 0 : _y.level, inferredLevel != null ? inferredLevel : 2)));
     const tag = role === "heading" ? `h${level}` : "span";
-    const style = `left:${left}px;top:${top}px;font-size:${fontSize}px;font-family:${fontFamily(o)};` + (width ? `--fx-w:${width}px;` : "");
+    const style = `left:${left}px;top:${top}px;font-size:${fontSize}px;font-family:${fontFamily(o)};${textTransformVars(o)}` + (width ? `--fx-w:${width}px;` : "");
     let idAttr = "";
     if (role === "heading") {
       ctx.h += 1;
@@ -1103,7 +1115,9 @@ ${backendDataScripts}
       var target=parseFloat(getComputedStyle(el).getPropertyValue('--fx-w'));
       if(!target||!isFinite(target)) return;
       var actual=el.getBoundingClientRect().width; if(!actual) return;
-      el.style.transform='scaleX('+(target/actual).toFixed(4)+')';
+      var rotate=getComputedStyle(el).getPropertyValue('--fx-rotate').trim()||'0rad';
+      var skew=getComputedStyle(el).getPropertyValue('--fx-skew').trim()||'0rad';
+      el.style.transform='rotate('+rotate+') skewX('+skew+') scaleX('+(target/actual).toFixed(4)+')';
     });
   });
   // ---- original PDF switch -------------------------------------------
