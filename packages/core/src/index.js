@@ -351,9 +351,9 @@ async function load(source) {
   if (typeof source === 'string') {
     data = { url: source };
   } else if (source instanceof ArrayBuffer) {
-    data = { data: source };
+    data = { data: source.slice(0) };
   } else if (source instanceof Uint8Array) {
-    data = { data: source.buffer };
+    data = { data: source.slice(0).buffer };
   } else if (source && typeof source.arrayBuffer === 'function') {
     data = { data: await source.arrayBuffer() };
   } else {

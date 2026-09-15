@@ -122,11 +122,11 @@ export class PDFCreator {
       }
 
       pdf.body[newPageId] = pageObj;
-      pagesId.kids.push(newPageId);
+      pdf.body[pagesId].kids.push(newPageId);
       this.pages.push(newPageId);
     }
 
-    pagesId.count = this.pages.length;
+    pdf.body[pagesId].count = this.pages.length;
 
     // Build trailer
     pdf.trailer = {

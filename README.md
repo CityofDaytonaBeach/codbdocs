@@ -8,9 +8,9 @@ No server. No external APIs. Pure browser JavaScript. Use the CDN or host the fi
 
 Lead developer: **Daniel Gurczynski**.
 
-**jsDelivr access URL:**
+**jsDelivr module URL:**
 ```text
-https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js
+https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
 ```
 
 ```
@@ -19,7 +19,7 @@ CodbDocs
 @codbdocs/core        ← the engine + Document Brain + RAG + PDF Creator
    │
    ├── @codbdocs/react     ← useCodbDocs() hook
-   └── (vanilla JS / any framework via dist/codbdocs.js)
+   └── (vanilla JS / any framework via src/index.js)
 ```
 
 ---
@@ -277,9 +277,9 @@ But the point is: **you don't need them to get good results.** The model-free pi
   <input type="file" id="fileInput" accept=".pdf" />
   <div id="results"></div>
 
-  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js"></script>
-  
-  <script>
+  <script type="module">
+    import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+
     document.getElementById('fileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -335,9 +335,9 @@ const result = graph.askEnhanced("Who approved the $425,000 contract?");
   pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.js/pdf.worker.min.js";
 </script>
 <script src="vendor/tesseract.js/tesseract.min.js"></script>
-<script src="packages/core/dist/codbdocs.js"></script>
+<script type="module">
+  import CodbDocs from "./packages/core/src/index.js";
 
-<script>
   const doc = await CodbDocs.load(file);
   const graph = await doc.prepare();
   console.log(graph.getSummary());
@@ -1203,11 +1203,11 @@ For the retrieval engine specifically: CodbDocs handles the **exact factual look
 
 ## Hosting
 
-Everything under `packages/*/dist` is a plain browser-ready `.js` file. Push to GitHub, turn on GitHub Pages, and `codbdocs.js` is a stable URL any site can use — no build step required.
+The browser module entrypoint is committed under `packages/core/src/index.js`. Push to GitHub and jsDelivr serves that updated module directly from the `main` branch.
 
 **CDN URL:**
 ```
-https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js
+https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
 ```
 
 ---

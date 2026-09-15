@@ -22,7 +22,9 @@ A comprehensive guide to using CodbDocs for browser-based document processing.
 ### Option 1: CDN (jsDelivr)
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js"></script>
+<script type="module">
+  import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+</script>
 ```
 
 ### Option 2: Local Files
@@ -32,7 +34,9 @@ Download the files from the `vendor/` directory and include them directly:
 ```html
 <script src="vendor/pdf.js/pdf.min.js"></script>
 <script src="vendor/tesseract.js/tesseract.min.js"></script>
-<script src="packages/core/dist/codbdocs.js"></script>
+<script type="module">
+  import CodbDocs from './packages/core/src/index.js';
+</script>
 ```
 
 ### Option 3: NPM (when published)
@@ -48,9 +52,9 @@ npm install @codbdocs/core @codbdocs/react
 ### Basic PDF Text Extraction
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js"></script>
+<script type="module">
+  import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
 
-<script>
   // Load a PDF file
   const fileInput = document.getElementById('fileInput');
   fileInput.addEventListener('change', async (e) => {
@@ -1510,9 +1514,9 @@ CodbDocs.configure({
   
   <div id="results"></div>
 
-  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js"></script>
-  
-  <script>
+  <script type="module">
+    import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+
     let currentDoc = null;
     
     document.getElementById('analyzeBtn').addEventListener('click', async () => {
