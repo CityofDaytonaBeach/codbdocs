@@ -278,30 +278,18 @@ async function imageToDataUri(img) {
 
 /* ── 4. OCR for scanned pages ────────────────────────────────────── */
 
-const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 let ocrWorkerPromise = null;
 
-async function loadTesseract() {
+async function loadTesseract(provided) {
+  if (provided) return provided;
   if (typeof window !== 'undefined' && window.Tesseract) return window.Tesseract;
-  if (typeof document === 'undefined') throw new Error('[codbdocs] OCR requires a browser.');
-  await new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${TESSERACT_CDN}"]`);
-    if (existing) return resolve();
-    const el = document.createElement('script');
-    el.src = TESSERACT_CDN;
-    el.async = true;
-    el.onload = () => resolve();
-    el.onerror = () => reject(new Error('[codbdocs] failed to load tesseract.js'));
-    document.head.appendChild(el);
-  });
-  if (!window.Tesseract) throw new Error('[codbdocs] tesseract.js unavailable.');
-  return window.Tesseract;
+  throw new Error('[codbdocs] Tesseract not found. Load or pass Tesseract before using OCR.');
 }
 
-async function getOcrWorker(language) {
+async function getOcrWorker(language, providedTesseract) {
   if (!ocrWorkerPromise) {
     ocrWorkerPromise = (async () => {
-      const Tesseract = await loadTesseract();
+      const Tesseract = await loadTesseract(providedTesseract);
       return Tesseract.createWorker(language || 'eng');
     })();
   }
@@ -322,7 +310,7 @@ export async function terminateOcr() {
 
 /** OCR a single already-rendered page image (data URI, Blob or canvas). */
 export async function ocrImage(image, options = {}) {
-  const worker = await getOcrWorker(options.language ?? 'eng');
+  const worker = await getOcrWorker(options.language ?? 'eng', options.tesseract);
   const { data } = await worker.recognize(image);
   return {
     text: (data?.text || '').trim(),
@@ -436,7 +424,7 @@ export async function documentData(source, options = {}) {
     const wantOcr = ocr === true || (ocr === 'auto' && text.replace(/\s+/g, '').length < ocrMinChars);
     if (wantOcr) {
       try {
-        const result = await ocrPage(page, { language: options.ocrLanguage, dpi: Math.max(dpi, 200) });
+        const result = await ocrPage(page, { language: options.ocrLanguage, dpi: Math.max(dpi, 200), tesseract: options.tesseract });
         if (result.text) {
           text = result.text;
           pageOcr = true;

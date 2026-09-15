@@ -703,38 +703,23 @@ const ragOutput = graph.toRAG({
 Generate embeddings for vector databases.
 
 ```javascript
-import { OpenAIEmbeddingProvider, LocalEmbeddingProvider } from '@codbdocs/core';
+import { LocalEmbeddingProvider, CustomEmbeddingProvider } from '@codbdocs/core';
 
-// OpenAI embeddings
-const openaiProvider = new OpenAIEmbeddingProvider('your-api-key', {
-  model: 'text-embedding-3-small',
-  dimensions: 1536,
-});
-
-const ragWithEmbeddings = await graph.toRAGWithEmbeddings(openaiProvider, {
-  chunkStrategy: 'semantic',
-});
+const localProvider = new LocalEmbeddingProvider({ dimensions: 384 });
+const ragWithEmbeddings = await graph.toRAGWithEmbeddings(localProvider, { chunkStrategy: 'semantic' });
 
 // Each chunk now includes:
 // {
 //   id: 'page_1_chunk_0',
 //   text: '...',
-//   embedding: [0.123, -0.456, ...]  // 1536-dimensional vector
+//   embedding: [0.123, -0.456, ...]  // 384-dimensional vector
 // }
-
-// Local embeddings (no API needed)
-const localProvider = new LocalEmbeddingProvider({
-  dimensions: 384,
-});
-
-const ragLocal = await graph.toRAGWithEmbeddings(localProvider);
 ```
 
 **Embedding Providers:**
 
 | Provider | Model | Dimensions | Description |
 |----------|-------|------------|-------------|
-| `OpenAIEmbeddingProvider` | text-embedding-3-small | 1536 | OpenAI API |
 | `LocalEmbeddingProvider` | transformers.js | 384 | Browser-based (no API) |
 | `CustomEmbeddingProvider` | any | any | Your own provider |
 
@@ -767,14 +752,14 @@ a.click();
 ### Complete RAG Example
 
 ```javascript
-import CodbDocs, { OpenAIEmbeddingProvider } from '@codbdocs/core';
+import CodbDocs, { LocalEmbeddingProvider } from '@codbdocs/core';
 
 // Load and analyze document
 const doc = await CodbDocs.load(file);
 const graph = await doc.analyze({ ocr: true });
 
 // Create embedding provider
-const embeddings = new OpenAIEmbeddingProvider('your-api-key');
+const embeddings = new LocalEmbeddingProvider({ dimensions: 384 });
 
 // Generate RAG output with embeddings
 const ragOutput = await graph.toRAGWithEmbeddings(embeddings, {

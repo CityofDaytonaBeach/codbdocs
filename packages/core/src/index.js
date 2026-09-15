@@ -62,7 +62,6 @@ import {
   exportAsCSV,
   ChunkStrategies,
   EmbeddingProvider,
-  OpenAIEmbeddingProvider,
   LocalEmbeddingProvider,
   CustomEmbeddingProvider,
 } from './rag.js';
@@ -1943,7 +1942,6 @@ export {
   exportAsCSV,
   ChunkStrategies,
   EmbeddingProvider,
-  OpenAIEmbeddingProvider,
   LocalEmbeddingProvider,
   CustomEmbeddingProvider,
 } from './rag.js';

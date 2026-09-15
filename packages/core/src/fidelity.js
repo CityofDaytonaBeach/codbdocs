@@ -365,7 +365,7 @@ function tagPanel(tags) {
     <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
   </section>`;
 }
-const PDFJS_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+const PDFJS_URL = null;
 const CONFORMANCE = [
   "WCAG 2.1 Level A",
   "WCAG 2.1 Level AA",
@@ -432,7 +432,7 @@ function buildFidelityHtml(ir, options = {}) {
     </section>`;
   });
   const rag = null;
-  const translate = options.translate !== false;
+  const translate = options.translate === true;
   const priority = (_i = options.priorityLanguages) != null ? _i : [];
   const outlineHtml = ctx.outline.length ? ctx.outline.map(
     (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
@@ -442,7 +442,7 @@ function buildFidelityHtml(ir, options = {}) {
     title,
     lang,
     qaEndpoint: options.qaEndpoint || null,
-    aiEndpoint: options.aiEndpoint === void 0 ? "https://itavtools.lovable.app/api/public/docaccess/ask" : options.aiEndpoint || null,
+    aiEndpoint: options.aiEndpoint || null,
     knowledge: options.knowledge || options.documentContext || options.siteContext || null,
     feedbackEndpoint: options.feedbackEndpoint || null,
     feedbackEmail: options.feedbackEmail || null,
@@ -877,7 +877,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="true" aria-labelledby="fx-lang-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close translation">&#10005;</button>
   <h2 id="fx-lang-h">Translate this document</h2>
-  <p class="fx-lang-note">Translation into 250+ languages, including the accessible transcript, scanned content and question answers.</p>
+  <p class="fx-lang-note">Translation uses the configured AI endpoint; no third-party translation library is loaded by this SDK.</p>
   ${priority.length ? `<h3>Languages spoken in our service area</h3><ul>${priority.map((l) => `<li>${esc(l.label)}${l.share ? ` \u2014 ${esc(l.share)}` : ""}</li>`).join("")}</ul>` : ""}
   <div id="google_translate_element"></div>
   <h3>AI translation of the accessible transcript</h3>
@@ -1136,6 +1136,7 @@ ${backendDataScripts}
     }
     function renderOriginal(){
       if(pdfLoaded||pdfLoading) return; pdfLoading=true;
+      if(!pdfJsUrl){ pdfLoading=false; opStatus('Original PDF rendering requires a local pdfJsUrl option.'); return; }
       opStatus('Rendering the original PDF\u2026');
       import(pdfJsUrl).then(function(pdfjs){
         pdfjs.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.mjs$/,'pdf.worker$1.mjs');
@@ -1240,23 +1241,11 @@ ${backendDataScripts}
         var el=document.getElementById(id); if(el) ho.observe(el); }); });
   }
 
-  // ---- translation (250+ languages) ----------------------------------
+  // ---- translation -----------------------------------------------------
   var langBtn=document.getElementById('fx-lang-open');
   if(langBtn){
-    var translateLoaded=false;
     langBtn.onclick=function(){
       showDialog('fx-lang');
-      if(translateLoaded) return; translateLoaded=true;
-      window.googleTranslateElementInit=function(){
-        try{ new window.google.translate.TranslateElement(
-          {pageLanguage:${JSON.stringify(lang)},autoDisplay:false},'google_translate_element'); }
-        catch(err){ document.getElementById('google_translate_element').textContent=
-          'Translation service is unavailable offline.'; } };
-      var s=document.createElement('script');
-      s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
-      s.onerror=function(){ document.getElementById('google_translate_element').textContent=
-        'Translation service could not be loaded. Check your connection and try again.'; };
-      document.head.appendChild(s);
     };
   }
 

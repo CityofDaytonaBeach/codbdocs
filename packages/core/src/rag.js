@@ -912,38 +912,6 @@ export class EmbeddingProvider {
 }
 
 /**
- * OpenAI embedding provider.
- */
-export class OpenAIEmbeddingProvider extends EmbeddingProvider {
-  constructor(apiKey, options = {}) {
-    super('openai', options.model || 'text-embedding-3-small', options.dimensions || 1536);
-    this.apiKey = apiKey;
-    this.baseUrl = options.baseUrl || 'https://api.openai.com/v1';
-  }
-  
-  async embed(texts) {
-    const response = await fetch(`${this.baseUrl}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        input: texts,
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Embedding failed: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    return data.data.map(d => d.embedding);
-  }
-}
-
-/**
  * Local embedding provider (uses a small model in-browser).
  */
 export class LocalEmbeddingProvider extends EmbeddingProvider {

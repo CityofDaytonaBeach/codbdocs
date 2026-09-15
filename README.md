@@ -251,15 +251,12 @@ The key insight from the review.txt design document:
 
 ### When You Still Want Embeddings
 
-CodbDocs provides embedding providers for when you need them:
+CodbDocs provides serverless embedding hooks for when you need them:
 
 ```javascript
-// Use OpenAI embeddings if you need semantic similarity
-const embeddings = new OpenAIEmbeddingProvider('your-api-key');
-const ragOutput = await graph.toRAGWithEmbeddings(embeddings);
-
-// Or use the built-in local placeholder (not a real model)
+// Use the built-in local placeholder (not a real model)
 const local = new LocalEmbeddingProvider();
+const ragOutput = await graph.toRAGWithEmbeddings(local);
 ```
 
 But the point is: **you don't need them to get good results.** The model-free pipeline handles most document queries.
@@ -699,14 +696,10 @@ const max = graph.max({ entityType: 'currency' });
 ### Embedding-Based RAG (When You Need Semantic Similarity)
 
 ```javascript
-import { OpenAIEmbeddingProvider, LocalEmbeddingProvider } from '@codbdocs/core';
+import { LocalEmbeddingProvider, CustomEmbeddingProvider } from '@codbdocs/core';
 
-// OpenAI embeddings
-const embeddings = new OpenAIEmbeddingProvider('your-api-key', {
-  model: 'text-embedding-3-small',
-  dimensions: 1536,
-});
-
+// Local embeddings (no API needed)
+const embeddings = new LocalEmbeddingProvider({ dimensions: 384 });
 const ragOutput = await graph.toRAGWithEmbeddings(embeddings, {
   chunkStrategy: 'semantic',
   includeMetadata: true,
@@ -717,12 +710,8 @@ const ragOutput = await graph.toRAGWithEmbeddings(embeddings, {
 // {
 //   id: 'page_1_chunk_0',
 //   text: '...',
-//   embedding: [0.123, -0.456, ...]  // 1536-dimensional vector
+//   embedding: [0.123, -0.456, ...]  // 384-dimensional vector
 // }
-
-// Local embeddings (no API needed)
-const localEmbeddings = new LocalEmbeddingProvider({ dimensions: 384 });
-const ragLocal = await graph.toRAGWithEmbeddings(localEmbeddings);
 ```
 
 ### Smart Chunking
@@ -769,7 +758,7 @@ a.click();
 ### Complete RAG Example
 
 ```javascript
-import CodbDocs, { OpenAIEmbeddingProvider } from '@codbdocs/core';
+import CodbDocs, { LocalEmbeddingProvider } from '@codbdocs/core';
 
 // Load and analyze
 const doc = await CodbDocs.load(file);
@@ -779,7 +768,7 @@ const graph = await doc.prepare();
 const answer = graph.askEnhanced("What are the key budget items?");
 
 // Embedding-based RAG (for vector database storage)
-const embeddings = new OpenAIEmbeddingProvider('your-api-key');
+const embeddings = new LocalEmbeddingProvider({ dimensions: 384 });
 const ragOutput = await graph.toRAGWithEmbeddings(embeddings, {
   chunkStrategy: 'semantic',
   chunkSize: 1000,
