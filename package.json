@@ -9,5 +9,9 @@
   "scripts": {
     "test:visual": "node test/visual/compare-pdf-html.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "pngjs": "^7.0.0"
+  }
 }
