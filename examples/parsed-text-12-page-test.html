@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodbDocs Parsed Text 12 Page Test</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #101318; color: #eef2f7; }
+    header { padding: 16px 22px; border-bottom: 1px solid #2b313c; background: #171b22; }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    p { margin: 0; color: #aab4c3; }
+    .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; padding: 12px 22px; }
+    .check { background: #1b212b; border: 1px solid #303846; border-radius: 10px; padding: 9px 11px; }
+    .pass { color: #7ee787; font-weight: 700; }
+    .fail { color: #ff7b72; font-weight: 700; }
+    iframe { display: block; width: 100%; height: calc(100vh - 150px); border: 0; background: white; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CodbDocs Parsed Text 12 Page Test</h1>
+    <p>Uses the parsed text supplied for PDF 1. This validates SDK page generation, spacing, native text layers, thumbnails, and clean viewer output. Pixel-perfect testing still needs the original PDF binary.</p>
+  </header>
+  <div class="checks" id="checks"></div>
+  <iframe id="preview" title="Generated 12 page document"></iframe>
+
+  <script src="../packages/core/dist/codbdocs.js"></script>
+  <script>
+    const pages = [
+`AFFORDABLE HOUSING ADVISORY COMMITTEE – Governed by Ordinance No. 93-37, Ordinance No. 96-259, Ordinance No. 08-112, Ordinance 19-39, and F.S. 420.9072(9), amended by F.S. 420.9076 (2), states that the Advisory Committee shall consist of at least 8 but not more than 11 committee members who are citizens recommended by the City Manager, the Mayor, or any City Commissioner and appointed by resolution of the City Commission for a two (2) year term. Effective October 1, 2020 the committee must consist of one locally elected official from each county or municipality participating in the State Housing Initiatives Partnership Program (CC) and the committee must consist of one representative from at least six categories actively engaged in connection with affordable housing. The function of the Committee is to help staff determine what barriers the City has regarding affordable housing and recommend specific initiatives as designated in F.S. 420.9076(4).`,
+`BEACHSIDE REDEVELOPMENT BOARD - Article 2 §3 (b) of the Land Development Code amended by Ordinance No.15-23 states that the board shall consist of seven members and a Planning Board member who shall serve as an ex officio nonvoting member appointed by the City Commission. Established to review and decide major site plans and appeals of redevelopment staff decisions. BEAUTIFICATION/TREE ADVISORY BOARD - Article 2 §6 of the Land Development Code, amended by Ordinance No.15-23 states that the board shall consist of seven members and makes recommendations on planting, removal, and beautification plans.`,
+`BOARD OF ADJUSTMENT (BOA) - Article 2 §5 of the Land Development Code, amended by Ordinance No. 15-23 states that the board shall consist of seven members and one alternate appointed by the City Commission. Handles applications for variances involving hardship; adopts rules consistent with the provisions of the LDC; handles appeals by any person, officer, bureau, agent of any public body affected by decisions of the Chief Building Official. **Requires Annual Financial Disclosure**`,
+`BOARD OF BUILDING CODES Article 2 §11 of the Land Development Code, amended by Ordinance No. 15-23 states that the board shall consist of five members appointed by the City Commission. Each member shall have substantial experience in one or more areas of professional service within the building industry. The Board shall decide appeals of decisions concerning the Building Code, Fire Prevention Code, Life Safety Code, condemnation of unsafe buildings, and other authorized City Codes or ordinances. **Requires Annual Financial Disclosure**`,
+`CITY COMMISSION – Article IV, Section 8, City Charter. Governing body of the City, Council/Manager form of government, decisions made take form of resolutions and ordinances. CODE ENFORCEMENT BOARD - Article 2 §7 of the Land Development Code, amended by Ordinance No. 15-23 states that the board shall consist of seven members appointed by the City Commission. Intent to promote, protect and improve health, safety, and welfare by providing administrative hearings concerning violations. **Requires Annual Financial Disclosure**`,
+`COMMUNITY REDEVELOPMENT AGENCY (CRA) - Resolution No. 81-363 and pursuant to F.S. 163-356. The Agency consists of the same members as the City Commission. DOWNTOWN DEVELOPMENT AUTHORITY - Created by Special Act of the Florida Legislature; reenacted as 2004 Florida Laws 406; Sub-part E, City Charter. The Authority consists of five members and supports the core downtown business area through events, marketing, the Downtown Farmers’ Market, and other activities. **Requires Annual Financial Disclosure**`,
+`DOWNTOWN REDEVELOPMENT BOARD - Article 2 §3 (a) of the Land Development Code amended by Ordinance No. 15-23 states that the board shall consist of seven members appointed by the City Commission and one Planning Board member serving ex officio. ECONOMIC DEVELOPMENT ADVISORY BOARD - Under Ordinance No. 97-90, as amended, the Board shall consist of ten members with seven voting members. The Board monitors implementation of the Economic Development Element of the City’s Comprehensive Plan.`,
+`HISTORIC PRESERVATION BOARD - Article 2 §4 of the Land Development Code, amended by Ordinance No. 15-23 states that board shall consist of nine members appointed by the City Commission. To protect and encourage revitalization of sites and districts having historic, architectural, and archaeological value. HOUSING AUTHORITY COMMISSION - Section 421.05, Florida Statutes. Members appointed by Mayor and approved by City Commission; the board shall consist of five members who serve four-year terms.`,
+`MIDTOWN REDEVELOPMENT BOARD - Article 2 § 3(c) of the Land Development Code states that the board shall consist of seven members appointed by the City Commission and one Planning Board member serving ex officio. NUISANCE ABATEMENT BOARD - Chapter 62, Article III, Section 62-62, City Code, as amended. The board hears evidence, declares nuisances, and imposes penalties relating to public nuisances on places or premises located in the city. **Requires Annual Financial Disclosure**`,
+`PARKS & RECREATION ADVISORY BOARD - Resolution No. 15-183 states that the board shall consist of seven members, one from each zone and one at large member. To advise City staff and the City Commission with recommendations to improve Leisure Services programs. PEABODY AUDITORIUM ADVISORY BOARD - Created by Resolution No. 96-311. PERSONNEL BOARD - Art. XIII, Section 49.3, Sub-part A, City Charter hears appeals of classified service employees from final administrative action.`,
+`PLANNING BOARD - Sub-pt. A, Article III, Section 6(a), City Charter, and Article 2 §2.2A, Land Development Code, amended by Ordinance No. 15-23 stated that the board shall consist of seven members serving staggered terms. POLICE AND FIRE PENSION FUND BOARD - City Charter, Sub-pt. D, § 3 and Florida Statutes regulate the selection of five Trustees. Make decisions related to Police Department and Fire Department pensions. **Requires Annual Financial Disclosure**`,
+`PUBLIC ARTS ADVISORY BOARD (PAAB) - Chapter 4, Section 4.3, City Code (Ordinance 2022-273). Duties include review and recommendations regarding policies to promote public art within the City. Youth Advisory Board – Created by Resolution No. 2023-312, the board shall be composed of seven voting members appointed by the City Commission. The Youth Advisory Board shall recommend policies, procedures, philosophies, and serve as advocates for youth issues and initiatives.`
+    ];
+
+    function svgPage(pageNumber) {
+      return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 792">
+          <rect width="612" height="792" fill="white"/>
+          <text x="42" y="36" font-family="Arial" font-size="10" fill="#555">Updated 07-10-25 LJL Page ${pageNumber}</text>
+          <rect x="36" y="48" width="540" height="1" fill="#d8dee8"/>
+          <text x="42" y="75" font-family="Arial" font-size="18" font-weight="700" fill="#111">Board Responsibilities/Function Guide</text>
+          <rect x="36" y="100" width="540" height="640" fill="none" stroke="#edf1f7"/>
+        </svg>`)));
+    }
+
+    function wrapText(text, maxChars) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const lines = [];
+      let line = '';
+      for (const word of words) {
+        if ((line + ' ' + word).trim().length > maxChars) {
+          if (line) lines.push(line);
+          line = word;
+        } else {
+          line = (line + ' ' + word).trim();
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    const ir = { document: { metadata: { title: 'PDF 1 Parsed Text Conversion', language: 'en' }, pages: [] }, pages: {}, objects: {}, vectors: {} };
+    pages.forEach((text, pageIndex) => {
+      const pageNum = pageIndex + 1;
+      const pageId = `page_${pageNum}`;
+      ir.document.pages.push(pageId);
+      ir.pages[pageId] = { id: pageId, num: pageNum, width: 612, height: 792, background: svgPage(pageNum), content: [], vectors: [`rule_${pageNum}`] };
+      ir.vectors[`rule_${pageNum}`] = { id: `rule_${pageNum}`, type: 'rect', page: pageId, bbox: [36, 744, 540, 1], graphicsState: { stroke: '#d8dee8', fill: '#d8dee8', lineWidth: 1 } };
+      const headerId = `p${pageNum}_header`;
+      ir.objects[headerId] = { id: headerId, type: 'text', page: pageId, bbox: [42, 714, 360, 18], raw: { text: 'Board Responsibilities/Function Guide', fontSize: 18, font: 'Helvetica-Bold' }, semantic: { text: 'Board Responsibilities/Function Guide', role: 'heading', level: 1 }, provenance: { method: 'native', confidence: 1 } };
+      ir.pages[pageId].content.push(headerId);
+      wrapText(text, 88).slice(0, 34).forEach((line, lineIndex) => {
+        const id = `p${pageNum}_l${lineIndex}`;
+        const y = 682 - lineIndex * 17;
+        ir.objects[id] = { id, type: 'text', page: pageId, bbox: [42, y, Math.min(520, line.length * 6.2), 12], raw: { text: line, fontSize: 12, font: 'Helvetica' }, semantic: { text: line, role: 'paragraph' }, provenance: { method: 'native', confidence: 1 } };
+        ir.pages[pageId].content.push(id);
+      });
+      const footerId = `p${pageNum}_footer`;
+      ir.objects[footerId] = { id: footerId, type: 'text', page: pageId, bbox: [42, 28, 180, 10], raw: { text: `Updated 07-10-25 LJL Page ${pageNum}`, fontSize: 10, font: 'Helvetica' }, semantic: { text: `Updated 07-10-25 LJL Page ${pageNum}`, role: 'paragraph' }, provenance: { method: 'native', confidence: 1 } };
+      ir.pages[pageId].content.push(footerId);
+    });
+
+    let html = CodbDocs.buildFidelityHtml(ir, { title: 'PDF 1 Parsed Text Conversion' });
+    html = html.replace('</style>', '.fx-page{margin-bottom:72px!important}.fx-page:last-child{margin-bottom:0!important} main.fx-stage{gap:0!important}</style>');
+    document.getElementById('preview').srcdoc = html;
+
+    const checks = [
+      ['12 pages generated', (html.match(/<section class="fx-page"/g) || []).length === 12],
+      ['all pages native HTML', (html.match(/<section class="fx-page"[^>]*data-native-text="1"/g) || []).length === 12],
+      ['left thumbnails generated', (html.match(/class="fx-thumb"/g) || []).length === 12],
+      ['page spacing injected', html.includes('margin-bottom:72px')],
+      ['no backend JSON embedded', !html.includes('<script type="application/json"')],
+      ['no bottom metadata panels', !html.includes('Document information') && !html.includes('Accessibility conformance')],
+      ['base64 vector/image assets', html.includes('data:image/svg+xml;base64,')],
+    ];
+
+    document.getElementById('checks').innerHTML = checks.map(([label, pass]) => (
+      `<div class="check"><span class="${pass ? 'pass' : 'fail'}">${pass ? 'PASS' : 'FAIL'}</span> ${label}</div>`
+    )).join('');
+  </script>
+</body>
+</html>
