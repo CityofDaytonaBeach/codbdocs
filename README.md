@@ -20,6 +20,27 @@ https://github.com/CityofDaytonaBeach/codbdocs/blob/main/packages/core/src/index
 
 Load PDF.js first, then import the CodbDocs ES module from jsDelivr. OCR is optional and only runs when you also load Tesseract.js.
 
+### Interactive PDF forms
+
+`buildAccessibleHtml()` preserves AcroForm text fields, passwords, multiline fields, checkboxes, radio groups, dropdowns, list boxes, buttons, and signature status in the generated HTML. Field values stay synchronized between PDF view and reflow view.
+
+```javascript
+const { html, data, ir } = await buildAccessibleHtml(pdfFile, {
+  includeForms: true,
+});
+
+// In the generated HTML page:
+const values = window.CodbDocsForms.getValues();
+window.CodbDocsForms.setValues({ full_name: 'Ada Resident' });
+window.CodbDocsForms.reset();
+
+document.addEventListener('codbdocs:formchange', event => {
+  console.log(event.detail.name, event.detail.value, event.detail.values);
+});
+```
+
+The Download menu includes a completed-form JSON file. Downloading the accessible HTML also preserves the current control values. Embedded PDF JavaScript is not executed, and the SDK does not write edited values back into the original PDF file.
+
 ```
 CodbDocs
    │

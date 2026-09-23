@@ -835,12 +835,19 @@ function renderAccessibleFormField(obj, ir, opts) {
   const { dataAttr } = opts;
   const fieldType = obj.semantic?.fieldType || 'text';
   const fieldName = obj.semantic?.fieldName || obj.accessibility?.label || '';
-  const fieldId = obj.id || `field-${fieldName}`;
+  const fieldId = String(obj.id || `field-${fieldName}`).replace(/[^A-Za-z0-9_-]/g, '-');
   const label = obj.accessibility?.label || fieldName;
-  const value = obj.semantic?.value || '';
+  const value = obj.semantic?.value ?? '';
+  const values = Array.isArray(value) ? value.map(String) : [String(value)];
   const required = obj.accessibility?.required || false;
+  const readOnly = obj.accessibility?.readOnly || obj.raw?.readOnly || false;
+  const hidden = obj.raw?.hidden || false;
   const description = obj.accessibility?.description || '';
   const error = obj.accessibility?.error || '';
+
+  if (hidden) {
+    return `    <input type="hidden" name="${escapeHTML(fieldName)}" value="${escapeHTML(values[0])}"${dataAttr}>\n`;
+  }
 
   let html = `    <div class="form-field"${dataAttr}>\n`;
 
@@ -859,29 +866,42 @@ function renderAccessibleFormField(obj, ir, opts) {
     description ? `${fieldId}-desc` : '',
     error ? `${fieldId}-error` : '',
   ].filter(Boolean).join(' ');
+  const common = ` id="${escapeHTML(fieldId)}" name="${escapeHTML(fieldName)}"` +
+    (required ? ' required aria-required="true"' : '') +
+    (ariaDesc ? ` aria-describedby="${escapeHTML(ariaDesc)}"` : '');
 
   switch (fieldType) {
     case 'checkbox':
-      html += `      <input type="checkbox" id="${fieldId}" name="${escapeHTML(fieldName)}"${value === 'true' ? ' checked' : ''}${required ? ' required' : ''}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ''}>\n`;
+      html += `      <input type="checkbox"${common} value="${escapeHTML(obj.semantic?.optionValue || obj.raw?.optionValue || 'On')}"${obj.semantic?.checked || obj.raw?.checked ? ' checked' : ''}${readOnly ? ' disabled aria-readonly="true"' : ''}>\n`;
       break;
     case 'radio':
-      html += `      <input type="radio" id="${fieldId}" name="${escapeHTML(fieldName)}"${value ? ' checked' : ''}${required ? ' required' : ''}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ''}>\n`;
+      html += `      <input type="radio"${common} value="${escapeHTML(obj.semantic?.optionValue || obj.raw?.optionValue || 'On')}"${obj.semantic?.checked || obj.raw?.checked ? ' checked' : ''}${readOnly ? ' disabled aria-readonly="true"' : ''}>\n`;
       break;
     case 'dropdown':
-      html += `      <select id="${fieldId}" name="${escapeHTML(fieldName)}"${required ? ' required' : ''}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ''}>\n`;
+    case 'listbox':
+      html += `      <select${common}${obj.semantic?.multiple ? ' multiple' : ''}${fieldType === 'listbox' ? ` size="${Math.min(8, Math.max(2, obj.semantic?.options?.length || 2))}"` : ''}${readOnly ? ' disabled aria-readonly="true"' : ''}>\n`;
       const options = obj.semantic?.options || [];
       for (const opt of options) {
         const optVal = typeof opt === 'string' ? opt : opt?.value || '';
         const optLabel = typeof opt === 'string' ? opt : opt?.label || optVal;
-        html += `        <option value="${escapeHTML(optVal)}"${optVal === value ? ' selected' : ''}>${escapeHTML(optLabel)}</option>\n`;
+        html += `        <option value="${escapeHTML(optVal)}"${values.includes(String(optVal)) ? ' selected' : ''}>${escapeHTML(optLabel)}</option>\n`;
       }
       html += '      </select>\n';
       break;
     case 'textarea':
-      html += `      <textarea id="${fieldId}" name="${escapeHTML(fieldName)}" rows="4"${required ? ' required' : ''}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ''}>${escapeHTML(value)}</textarea>\n`;
+      html += `      <textarea${common} rows="4"${readOnly ? ' readonly aria-readonly="true"' : ''}${obj.semantic?.maxLength ? ` maxlength="${Number(obj.semantic.maxLength)}"` : ''}>${escapeHTML(values[0])}</textarea>\n`;
+      break;
+    case 'password':
+      html += `      <input type="password"${common} value="${escapeHTML(values[0])}"${readOnly ? ' readonly aria-readonly="true"' : ''}${obj.semantic?.maxLength ? ` maxlength="${Number(obj.semantic.maxLength)}"` : ''}>\n`;
+      break;
+    case 'button':
+      html += `      <button type="button"${common} disabled>${escapeHTML(label)}</button>\n`;
+      break;
+    case 'signature':
+      html += `      <output${common}>${escapeHTML(values[0] || 'Unsigned')}</output>\n`;
       break;
     default:
-      html += `      <input type="text" id="${fieldId}" name="${escapeHTML(fieldName)}" value="${escapeHTML(value)}"${required ? ' required' : ''}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ''}>\n`;
+      html += `      <input type="text"${common} value="${escapeHTML(values[0])}"${readOnly ? ' readonly aria-readonly="true"' : ''}${obj.semantic?.maxLength ? ` maxlength="${Number(obj.semantic.maxLength)}"` : ''}>\n`;
       break;
   }
 

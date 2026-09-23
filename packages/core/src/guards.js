@@ -12,6 +12,9 @@ function normalizeIR(ir) {
   }
   if (!ir.pages || typeof ir.pages !== "object") ir.pages = {};
   if (!ir.objects || typeof ir.objects !== "object") ir.objects = {};
+  if (!ir.forms || typeof ir.forms !== "object") ir.forms = { fields: [], byName: {} };
+  if (!Array.isArray(ir.forms.fields)) ir.forms.fields = [];
+  if (!ir.forms.byName || typeof ir.forms.byName !== "object") ir.forms.byName = {};
   if (!ir.document || typeof ir.document !== "object") ir.document = {};
   if (!ir.document.metadata || typeof ir.document.metadata !== "object") ir.document.metadata = {};
   if (!Array.isArray(ir.document.pages)) {
@@ -26,6 +29,7 @@ function normalizeIR(ir) {
     if (!page) continue;
     if (!Array.isArray(page.content)) page.content = [];
     if (!Array.isArray(page.annotations)) page.annotations = [];
+    if (!Array.isArray(page.forms)) page.forms = [];
   }
   return ir;
 }

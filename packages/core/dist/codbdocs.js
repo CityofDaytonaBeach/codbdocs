@@ -35,7 +35,6 @@ var CodbDocs = (() => {
     EmbeddingProvider: () => EmbeddingProvider,
     EntityTypes: () => EntityTypes,
     LocalEmbeddingProvider: () => LocalEmbeddingProvider,
-    OpenAIEmbeddingProvider: () => OpenAIEmbeddingProvider,
     PDFCreator: () => PDFCreator,
     PageContentGraph: () => PageContentGraph,
     QueryIntent: () => QueryIntent,
@@ -177,12 +176,28 @@ var CodbDocs = (() => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
+  function bytesToBase64(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.slice(i, i + 32768));
+    if (typeof btoa === "function") return btoa(bin);
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let out = "";
+    for (let i = 0; i < bin.length; i += 3) {
+      const a = bin.charCodeAt(i), b = bin.charCodeAt(i + 1), c = bin.charCodeAt(i + 2);
+      out += alphabet[a >> 2] + alphabet[(a & 3) << 4 | b >> 4] + (Number.isNaN(b) ? "=" : alphabet[(b & 15) << 2 | c >> 6]) + (Number.isNaN(c) ? "=" : alphabet[c & 63]);
+    }
+    return out;
+  }
   function textToBase64(text) {
     if (typeof TextEncoder !== "undefined") return bytesToBase64(new TextEncoder().encode(String(text)));
     const encoded = unescape(encodeURIComponent(String(text)));
     const bytes = new Uint8Array(encoded.length);
     for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
     return bytesToBase64(bytes);
+  }
+  function jsonScript(id, value) {
+    return `<script type="application/json" id="${esc(id)}">${JSON.stringify(value == null ? null : value).replace(/<\//g, "<\\/")}<\/script>`;
   }
   function embeddedImageSrc(src) {
     src = String(src || "");
@@ -297,11 +312,73 @@ var CodbDocs = (() => {
     ctx.elements.push({ ...el, id });
     return id;
   }
+  function formFieldData(o) {
+    return { ...o && o.raw || {}, ...o && o.semantic || {} };
+  }
+  function renderFormControl(o, view, pageHeight) {
+    const field = formFieldData(o);
+    const type = String(field.fieldType || "text");
+    const name = String(field.fieldName || field.name || o.id || "field");
+    const label = String(o.accessibility && o.accessibility.label || field.label || name);
+    const description = String(o.accessibility && o.accessibility.description || field.description || "");
+    const value = field.value == null ? "" : field.value;
+    const values = Array.isArray(value) ? value.map(String) : [String(value)];
+    const id = `fx-form-${String(o.id || name).replace(/[^A-Za-z0-9_-]/g, "-")}-${view}`;
+    const required = Boolean(o.accessibility && o.accessibility.required || field.required);
+    const readOnly = Boolean(o.accessibility && o.accessibility.readOnly || field.readOnly);
+    const defaultData = encodeURIComponent(JSON.stringify(value));
+    const optionValue = String(field.optionValue || "On");
+    const attrs = ` id="${esc(id)}" name="${esc(name)}__${esc(view)}" class="fx-form-input" data-form-name="${esc(name)}" data-form-type="${esc(type)}" data-form-view="${esc(view)}" data-form-option="${esc(optionValue)}" data-form-default="${esc(defaultData)}" aria-label="${esc(label)}"` + (required ? ` required aria-required="true"` : "") + (readOnly && ["text", "password", "textarea"].includes(type) ? ` readonly aria-readonly="true"` : "") + (readOnly && !["text", "password", "textarea"].includes(type) ? ` disabled aria-readonly="true"` : "");
+    if (field.hidden) return `<input type="hidden"${attrs} value="${esc(values[0])}">`;
+    let control = "";
+    if (type === "checkbox" || type === "radio") {
+      control = `<input type="${type}"${attrs} value="${esc(optionValue)}"${field.checked ? ' checked data-default-checked="true"' : ""}>`;
+    } else if (type === "dropdown" || type === "listbox") {
+      const choices = Array.isArray(field.options) ? field.options : [];
+      const options = choices.map((option) => {
+        const optionValue2 = String(option && typeof option === "object" ? option.value != null ? option.value : option.label || "" : option || "");
+        const optionLabel = String(option && typeof option === "object" ? option.label != null ? option.label : optionValue2 : optionValue2);
+        return `<option value="${esc(optionValue2)}"${values.includes(optionValue2) ? " selected" : ""}>${esc(optionLabel)}</option>`;
+      }).join("");
+      control = `<select${attrs}${field.multiple ? " multiple" : ""}${type === "listbox" ? ` size="${Math.min(8, Math.max(2, choices.length || 2))}"` : ""}>${options}</select>`;
+    } else if (type === "textarea") {
+      control = `<textarea${attrs}${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>${esc(values[0])}</textarea>`;
+    } else if (type === "button") {
+      control = `<button type="button"${attrs} disabled title="Embedded PDF actions are not run in HTML">${esc(label)}</button>`;
+    } else if (type === "signature") {
+      control = `<output${attrs.replace('class="fx-form-input"', 'class="fx-form-input fx-form-signature"')}>${esc(values[0] || "Unsigned")}</output>`;
+    } else {
+      control = `<input type="${type === "password" ? "password" : "text"}"${attrs} value="${esc(values[0])}"${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>`;
+    }
+    if (view === "pdf") {
+      const [x = 0, y = 0, w = 0, h = 0] = Array.isArray(o.bbox) ? o.bbox : [];
+      return `<div class="fx-pdf-field fx-pdf-field-${esc(type)}" data-form-container="${esc(name)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px"><label class="fx-status" for="${esc(id)}">${esc(label)}</label>${control}</div>`;
+    }
+    if (type === "checkbox" || type === "radio") {
+      return `<div class="fx-reflow-field fx-reflow-choice" data-form-container="${esc(name)}">${control}<label for="${esc(id)}">${esc(label)}</label>${description ? `<small>${esc(description)}</small>` : ""}</div>`;
+    }
+    return `<div class="fx-reflow-field" data-form-container="${esc(name)}"><label for="${esc(id)}">${esc(label)}${required ? ` <span aria-hidden="true">*</span>` : ""}</label>${control}${description ? `<small>${esc(description)}</small>` : ""}</div>`;
+  }
   function renderTextLayer(ir, page, ctx, pageNum) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
     const pageHeight = num(page.height, 792);
     let html = "";
     for (const o of pageObjects(ir, page)) {
+      if (o.type === "form_field") {
+        const field = formFieldData(o);
+        const label = String(o.accessibility && o.accessibility.label || field.label || field.fieldName || field.name || "Form field");
+        const elId2 = pushElement(ctx, {
+          id: String(o.id || ""),
+          page: pageNum,
+          kind: "form",
+          label,
+          text: `${label}: ${Array.isArray(field.value) ? field.value.join(", ") : field.value || ""}`,
+          detail: { fieldType: field.fieldType || "text", fieldName: field.fieldName || field.name || "", required: Boolean(field.required) }
+        });
+        ctx.index.push({ p: pageNum, role: "form", t: label });
+        html += renderFormControl(o, "pdf", pageHeight).replace('class="fx-pdf-field', `data-el="${esc(elId2)}" class="fx-pdf-field`);
+        continue;
+      }
       if (o.type === "image") {
         const src = (_a = o.raw) == null ? void 0 : _a.src;
         const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
@@ -435,24 +512,76 @@ var CodbDocs = (() => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
     return `<img class="fx-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase64(svg)}">`;
   }
+  function reflowPageObjects(ir, page, pageHeight) {
+    const objects = pageObjects(ir, page);
+    const fields = objects.filter((o) => o.type === "form_field").sort((a, b) => {
+      const topDiff = cssTop(pageHeight, a.bbox, num(a.bbox && a.bbox[3])) - cssTop(pageHeight, b.bbox, num(b.bbox && b.bbox[3]));
+      return Math.abs(topDiff) > 2 ? topDiff : num(a.bbox && a.bbox[0]) - num(b.bbox && b.bbox[0]);
+    });
+    if (!fields.length) return objects;
+    const ordered = objects.filter((o) => o.type !== "form_field");
+    fields.forEach((field) => {
+      const fieldTop = cssTop(pageHeight, field.bbox, num(field.bbox && field.bbox[3]));
+      const index = ordered.findIndex((o) => Array.isArray(o.bbox) && cssTop(pageHeight, o.bbox, num(o.bbox[3])) > fieldTop + 2);
+      ordered.splice(index < 0 ? ordered.length : index, 0, field);
+    });
+    return ordered;
+  }
   function hasNativeText(page, ir) {
     return pageObjects(ir, page).some((o) => {
       if (!o || o.type !== "text" || !objText(o).trim()) return false;
-      const method = String((o.provenance && o.provenance.method) || (o.raw && (o.raw.source || o.raw.textSource)) || "native").toLowerCase();
+      const method = String(o.provenance && o.provenance.method || o.raw && (o.raw.source || o.raw.textSource) || "native").toLowerCase();
       return method !== "ocr" && method !== "fusion";
     });
   }
   function renderReflow(ir, page, headingIds, ctx) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+    const pageHeight = num(page == null ? void 0 : page.height, 792);
     let html = "";
     let openList = false;
     let hCursor = 0;
-    for (const o of pageObjects(ir, page)) {
+    let pending = [];
+    const joinRuns = (runs) => runs.reduce((out, run) => {
+      const clean = String(run.text || "").replace(/\s+/g, " ").trim();
+      if (!clean) return out;
+      if (!out) return clean;
+      return /[-\u2010-\u2015]$/.test(out) ? out.replace(/[-\u2010-\u2015]$/, "") + clean : `${out} ${clean}`;
+    }, "");
+    const flushParagraph = () => {
+      const text = joinRuns(pending);
+      if (text) html += `<p>${esc(text)}</p>`;
+      pending = [];
+    };
+    const pushParagraphRun = (o, text) => {
+      const bbox = Array.isArray(o.bbox) ? o.bbox : [];
+      const fontSize = num(o.raw == null ? void 0 : o.raw.fontSize, 12) || 12;
+      const top = cssTop(pageHeight, bbox, fontSize);
+      const left = num(bbox[0]);
+      const last = pending[pending.length - 1];
+      if (last) {
+        const gap = Math.abs(top - last.top);
+        const indentShift = Math.abs(left - last.left);
+        const startsSection = /^[A-Z][A-Z0-9 &/(),.'\u2019-]{8,}\s[-\u2013\u2014]/.test(String(text).trim());
+        if (startsSection && gap > Math.max(14, fontSize * 1.2) || gap > Math.max(18, fontSize * 1.85) || indentShift > 72) flushParagraph();
+      }
+      pending.push({ text, top, left, fontSize });
+    };
+    for (const o of reflowPageObjects(ir, page, pageHeight)) {
+      if (o.type === "form_field") {
+        flushParagraph();
+        if (openList) {
+          html += "</ul>";
+          openList = false;
+        }
+        html += renderFormControl(o, "reflow", pageHeight);
+        continue;
+      }
       const inferredLevel = ctx.inferred.get(o.id);
       const declared = (_a = o.semantic) == null ? void 0 : _a.role;
       const role = o.type === "image" ? "image" : inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
       const text = objText(o);
       if (role === "list-item") {
+        flushParagraph();
         if (!openList) {
           html += "<ul>";
           openList = true;
@@ -465,6 +594,7 @@ var CodbDocs = (() => {
         openList = false;
       }
       if (o.type === "image") {
+        flushParagraph();
         const src = (_b = o.raw) == null ? void 0 : _b.src;
         const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
         const long = ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || "";
@@ -476,12 +606,14 @@ var CodbDocs = (() => {
       if (o.type === "table" || Array.isArray((_i = o.raw) == null ? void 0 : _i.rows)) {
         const t = tableParts(o);
         if (t.rows) {
+          flushParagraph();
           const tid = esc((_j = o.id) != null ? _j : "");
           html += `<div class="fx-tablewrap" data-el="${tid}" tabindex="0" role="group" aria-label="Data table">${t.html}<button type="button" class="fx-desc-btn" data-explain="${tid}">Explain this table with AI</button><p class="fx-desc-out" data-explain="${tid}" role="status" aria-live="polite" hidden></p></div>`;
           continue;
         }
       }
       if (o.type === "vector" || o.type === "path" || o.type === "shape") {
+        flushParagraph();
         const vid = esc((_k = o.id) != null ? _k : "");
         html += `<figure class="fx-vector" data-el="${vid}"><figcaption>${esc(
           ((_l = o.semantic) == null ? void 0 : _l.caption) || ((_m = o.accessibility) == null ? void 0 : _m.alt) || "Vector drawing"
@@ -490,43 +622,22 @@ var CodbDocs = (() => {
       }
       if (!text.trim()) continue;
       if (role === "heading") {
+        flushParagraph();
         const level = Math.min(6, Math.max(1, num((_n = o.semantic) == null ? void 0 : _n.level, inferredLevel != null ? inferredLevel : 2)));
         const hid = headingIds[hCursor++];
         html += `<h${level}${hid ? ` id="fx-rh-${hid}"` : ""}>${esc(text)}</h${level}>`;
       } else if (o.type === "link") {
+        flushParagraph();
         html += `<p><a href="${esc(((_o = o.raw) == null ? void 0 : _o.href) || ((_p = o.raw) == null ? void 0 : _p.url) || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
       } else {
-        html += `<p>${esc(text)}</p>`;
+        pushParagraphRun(o, text);
       }
     }
+    flushParagraph();
     if (openList) html += "</ul>";
     return html || '<p class="fx-empty">No extractable text on this page.</p>';
   }
-  function auditPanel(audit, remediations) {
-    var _a, _b;
-    if (!audit) return "";
-    const issues = Array.isArray(audit.issues) ? audit.issues : [];
-    const rows = issues.slice(0, 200).map(
-      (i) => `<tr><td>${esc(i.severity || "info")}</td><td>${esc(i.wcag || "")}</td><td>${esc(i.message || i.type || "")}</td></tr>`
-    ).join("");
-    const plan = Array.isArray(remediations) ? remediations.slice(0, 100).map((r) => `<li>${esc(r.description || r.action || JSON.stringify(r))}</li>`).join("") : "";
-    return `
-  <section id="fx-a11y" class="fx-panel" aria-labelledby="fx-a11y-h">
-    <h2 id="fx-a11y-h">Accessibility report</h2>
-    <p class="fx-score"><strong>Score:</strong> ${esc((_a = audit.score) != null ? _a : "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc((_b = audit.level) != null ? _b : "\u2014")} \xB7 <strong>Issues:</strong> ${issues.length}</p>
-    ${rows ? `<table class="fx-table"><caption>WCAG 2.1 findings</caption><thead><tr><th scope="col">Severity</th><th scope="col">Criterion</th><th scope="col">Finding</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No WCAG issues detected.</p>"}
-    ${plan ? `<h3>Remediation plan</h3><ol>${plan}</ol>` : ""}
-  </section>`;
-  }
-  function tagPanel(tags) {
-    if (!tags) return "";
-    return `
-  <section id="fx-tags" class="fx-panel" aria-labelledby="fx-tags-h">
-    <h2 id="fx-tags-h">Document tags</h2>
-    <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
-  </section>`;
-  }
-  var PDFJS_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+  var PDFJS_URL = null;
   var CONFORMANCE = [
     "WCAG 2.1 Level A",
     "WCAG 2.1 Level AA",
@@ -557,6 +668,8 @@ var CodbDocs = (() => {
     const showDataControls = options.showDataControls === true;
     const initialView = options.view === "reflow" ? "reflow" : "fidelity";
     const ctx = newDocCtx();
+    const formFields = pages.flatMap((pageId) => pageObjects(ir, ir.pages && ir.pages[pageId] || {})).filter((o) => o.type === "form_field");
+    const hasForms = formFields.length > 0;
     if (options.inferHeadings !== false) ctx.inferred = inferHeadingLevels(ir);
     let thumbs = "";
     let body = "";
@@ -592,8 +705,8 @@ var CodbDocs = (() => {
       )}</div>
     </section>`;
     });
-    const rag = null;
-    const translate = options.translate !== false;
+    const rag = options.rag || null;
+    const translate = options.translate === true;
     const priority = (_i = options.priorityLanguages) != null ? _i : [];
     const outlineHtml = ctx.outline.length ? ctx.outline.map(
       (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
@@ -603,7 +716,7 @@ var CodbDocs = (() => {
       title,
       lang,
       qaEndpoint: options.qaEndpoint || null,
-      aiEndpoint: options.aiEndpoint === void 0 ? "https://itavtools.lovable.app/api/public/docaccess/ask" : options.aiEndpoint || null,
+      aiEndpoint: options.aiEndpoint || null,
       knowledge: options.knowledge || options.documentContext || options.siteContext || null,
       feedbackEndpoint: options.feedbackEndpoint || null,
       feedbackEmail: options.feedbackEmail || null,
@@ -625,6 +738,24 @@ var CodbDocs = (() => {
       headings: ctx.outline.length,
       figures: ctx.figures,
       vectors: ctx.vectors,
+      pages: pages.map((pageId, index) => {
+        var _a2, _b2;
+        const page = (_a2 = ir.pages) == null ? void 0 : _a2[pageId];
+        const pageText = ctx.index.filter((e) => e.p === index + 1).map((e) => e.t).join(" ");
+        return {
+          page: index + 1,
+          label: ((_b2 = page == null ? void 0 : page.labels) == null ? void 0 : _b2.print) || `Page ${index + 1}`,
+          width: num(page == null ? void 0 : page.width, 612),
+          height: num(page == null ? void 0 : page.height, 792),
+          hasRaster: Boolean(page == null ? void 0 : page.background),
+          summary: pageText.replace(/\s+/g, " ").trim().slice(0, 420),
+          accessibility: {
+            hasText: Boolean(pageText.trim()),
+            language: (page == null ? void 0 : page.language) || lang,
+            screenReaderText: pageText
+          }
+        };
+      }),
       accessibility: options.audit ? {
         score: (_j = options.audit.score) != null ? _j : null,
         level: (_k = options.audit.level) != null ? _k : null,
@@ -646,6 +777,17 @@ var CodbDocs = (() => {
         var _a2;
         return { id: e.id, page: e.page, label: e.label, ...(_a2 = e.detail) != null ? _a2 : {} };
       }),
+      forms: formFields.map((o) => {
+        const field = formFieldData(o);
+        return {
+          id: o.id || null,
+          name: field.fieldName || field.name || "",
+          label: o.accessibility && o.accessibility.label || field.label || field.fieldName || field.name || "Form field",
+          type: field.fieldType || "text",
+          required: Boolean(o.accessibility && o.accessibility.required || field.required),
+          readOnly: Boolean(o.accessibility && o.accessibility.readOnly || field.readOnly)
+        };
+      }),
       capabilities: [
         "ask",
         "summarize",
@@ -654,12 +796,28 @@ var CodbDocs = (() => {
         "translate",
         "retrieve",
         "speak",
+        "forms",
         "elements",
         "explainElement",
         "explainPage"
-      ]
+      ],
+      aiContract: {
+        version: "1.0",
+        globalObject: "window.CodbDocsAI",
+        readyEvent: "codbdocs:ready",
+        methods: ["retrieve", "ask", "summarize", "describe", "altText", "translate", "speak", "elements", "explainElement", "explainPage"],
+        guidance: "Use retrieve() for grounded passages, then ask() or your own AI endpoint with returned page citations. Use pages[].accessibility.screenReaderText for ADA and screen-reader workflows."
+      }
     };
-    const backendDataScripts = "";
+    const backendDataScripts = [
+      jsonScript("codbdocs-config", config2),
+      jsonScript("codbdocs-index", ctx.index),
+      jsonScript("codbdocs-outline", ctx.outline),
+      jsonScript("codbdocs-rag", rag),
+      jsonScript("codbdocs-knowledge", knowledgePack),
+      jsonScript("codbdocs-elements", ctx.elements),
+      jsonScript("codbdocs-forms", knowledgePack.forms)
+    ].join("\n");
     return `<!DOCTYPE html>
 <html lang="${esc(lang)}" data-view="${initialView}">
 <head>
@@ -734,13 +892,35 @@ main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:
 .fx-img{position:absolute;object-fit:contain;z-index:1}
 .fx-link{position:absolute;display:block;color:transparent;overflow:hidden;border-bottom:1px solid transparent}
 .fx-link:hover,.fx-link:focus{border-bottom-color:var(--accent-2);background:rgba(20,115,230,.12)}
+.fx-pdf-field{position:absolute;z-index:4;display:block;overflow:visible}
+.fx-pdf-field input:not([type=checkbox]):not([type=radio]),.fx-pdf-field select,.fx-pdf-field textarea,
+.fx-pdf-field button,.fx-pdf-field output{display:block;width:100%;height:100%;min-width:0;margin:0;padding:1px 3px;
+  border:1px solid #6b7280;border-radius:1px;background:#fff;color:#111;font:10px Arial,sans-serif;line-height:1.15}
+.fx-pdf-field textarea{resize:none}
+.fx-pdf-field input[type=checkbox],.fx-pdf-field input[type=radio]{display:block;width:100%;height:100%;margin:0;accent-color:#1473e6}
+.fx-pdf-field input:focus,.fx-pdf-field select:focus,.fx-pdf-field textarea:focus{outline:2px solid #1473e6;outline-offset:1px}
+.fx-form-signature{align-items:center;color:#4b5563;background:#f3f4f6!important}
 .fx-reflow{display:none}
 html[data-view=reflow] .fx-canvas{display:none}
-html[data-view=reflow] .fx-page{width:min(52rem,100%);height:auto;margin-bottom:3rem}
+html[data-view=reflow] .fx-page{width:min(58rem,100%);height:auto;margin-bottom:3rem}
 html[data-view=reflow] .fx-reflow{display:block;background:#fff;padding:2.75rem 3.25rem;border-radius:12px;
-  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 10px 30px rgba(15,20,30,.12);line-height:1.7;font-size:1.05rem;color:#16181a}
+  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 10px 30px rgba(15,20,30,.12);line-height:1.72;font-size:1.04rem;color:#16181a;
+  text-wrap:pretty;overflow-wrap:break-word;hyphens:auto}
+html[data-view=reflow] .fx-reflow p{margin:.35rem 0 1rem;max-width:72ch}
+html[data-view=reflow] .fx-reflow p+p{margin-top:.2rem}
 html[data-view=reflow] .fx-reflow h1,html[data-view=reflow] .fx-reflow h2,html[data-view=reflow] .fx-reflow h3{line-height:1.25;letter-spacing:-.01em}
 html[data-view=reflow] .fx-reflow img{max-width:100%;height:auto}
+.fx-reflow-field{display:grid;gap:.35rem;margin:.9rem 0 1.15rem;max-width:42rem}
+.fx-reflow-field>label{font-weight:650;line-height:1.35}
+.fx-reflow-field input:not([type=checkbox]):not([type=radio]),.fx-reflow-field select,.fx-reflow-field textarea,
+.fx-reflow-field button,.fx-reflow-field output{width:100%;min-height:2.6rem;border:1px solid #9ba3ad;border-radius:6px;
+  padding:.55rem .65rem;background:#fff;color:#16181a;font:inherit;line-height:1.35}
+.fx-reflow-field textarea{min-height:7rem;resize:vertical}
+.fx-reflow-field small{color:#5a6068;line-height:1.4}
+.fx-reflow-choice{grid-template-columns:auto minmax(0,1fr);align-items:start}
+.fx-reflow-choice input{width:1.2rem;height:1.2rem;margin:.18rem 0 0;accent-color:#1473e6}
+.fx-reflow-choice small{grid-column:2}
+.fx-reflow-field :disabled,.fx-reflow-field [readonly]{background:#f0f2f4;color:#4b5563}
 html.fx-contrast body,html.fx-contrast .fx-reflow,html.fx-contrast main.fx-stage{background:#000;color:#fff}
 html.fx-contrast .fx-raster{filter:invert(1) hue-rotate(180deg)}
 html.fx-contrast .fx-reflow a{color:#ffd400}
@@ -810,9 +990,12 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-switch input:checked{background:var(--accent-2)}
 .fx-switch input:checked::after{transform:translateX(13px)}
 .fx-switch label{cursor:pointer;font-size:.76rem;white-space:nowrap}
-.fx-original{max-width:1100px;margin:0 auto 24px;padding:16px}
+.fx-original{width:100%;max-width:1100px;margin:0 auto 24px;padding:16px}
 .fx-original iframe{width:100%;height:82vh;border:0;background:#fff;border-radius:10px;
   box-shadow:0 0 0 1px rgba(0,0,0,.08),0 10px 30px rgba(15,20,30,.14)}
+.fx-op-page{display:grid;justify-items:center;margin:0 auto 1.25rem;overflow:auto}
+.fx-op-page canvas{display:block;max-width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 8px 22px rgba(15,20,30,.12)}
+.fx-op-num{font-size:.78rem;color:#5a6068;margin:.25rem 0 .4rem}
 .fx-outline{list-style:none;margin:0;padding:0}
 .fx-outline li{margin:0}
 .fx-ol-item{display:flex;width:100%;gap:.75rem;justify-content:space-between;align-items:baseline;
@@ -873,7 +1056,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   .fx-shell{display:block;min-height:auto}.fx-rail{display:none}
   main.fx-stage{padding:1rem;gap:2rem;overflow-x:hidden}
   .fx-page{max-width:100%;overflow:visible}
-  .fx-canvas{max-width:100%;height:auto;transform-origin:top center}
+  .fx-canvas{max-width:none;height:var(--ph);transform-origin:top left}
   .fx-drawer{top:0;width:100%;max-width:none}.fx-dialog{width:calc(100vw - 1rem);max-height:92vh;padding:1.25rem}
 }
 @media (max-width:520px){
@@ -888,7 +1071,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 <a class="fx-skip" href="#fx-content">Skip to document content</a>
 <header class="fx-bar" role="banner">
   <div class="fx-brand">
-    <span class="fx-brand-mark" aria-hidden="true">DA</span>
+    <span class="fx-brand-mark" aria-hidden="true">CD</span>
     <h1>${esc(title)}</h1>
   </div>
   <nav class="fx-group" aria-label="Page navigation">
@@ -992,13 +1175,13 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   <button type="button" class="fx-dialog-close" data-close aria-label="Close content explorer">&#10005;</button>
   <h2 id="fx-ex-h">Explore every part of this document</h2>
   <p class="fx-lang-note">Every heading, paragraph, list, link, image, chart, vector drawing and table is listed
-    here. Choose an item to jump to it, hear it read aloud, or have the AI explain it in plain language.</p>
+    here, including interactive form fields. Choose an item to jump to it, hear it read aloud, or have the AI explain it in plain language.</p>
   <div class="fx-field">
     <label for="fx-ex-filter">Find an item</label>
     <input id="fx-ex-filter" type="search" placeholder="e.g. budget table, logo, deadline">
   </div>
   <div class="fx-ex-tabs" role="group" aria-label="Filter by type" id="fx-ex-tabs">
-    ${["all", "heading", "text", "list", "table", "image", "chart", "vector", "link"].map(
+    ${["all", "heading", "text", "list", "form", "table", "image", "chart", "vector", "link"].map(
       (k) => `<button type="button" data-kind="${k}" aria-pressed="${k === "all"}">${k === "all" ? "Everything" : k.charAt(0).toUpperCase() + k.slice(1) + "s"}</button>`
     ).join("")}
   </div>
@@ -1010,7 +1193,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="true" aria-labelledby="fx-lang-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close translation">&#10005;</button>
   <h2 id="fx-lang-h">Translate this document</h2>
-  <p class="fx-lang-note">Translation into 250+ languages, including the accessible transcript, scanned content and question answers.</p>
+  <p class="fx-lang-note">Translation uses the configured AI endpoint; no third-party translation library is loaded by this SDK.</p>
   ${priority.length ? `<h3>Languages spoken in our service area</h3><ul>${priority.map((l) => `<li>${esc(l.label)}${l.share ? ` \u2014 ${esc(l.share)}` : ""}</li>`).join("")}</ul>` : ""}
   <div id="google_translate_element"></div>
   <h3>AI translation of the accessible transcript</h3>
@@ -1034,6 +1217,7 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
     ${options.originalUrl ? `<li><a href="${esc(options.originalUrl)}" download target="_blank" rel="noopener">Original document${options.originalName ? ` (${esc(options.originalName)})` : ""}</a></li>` : ""}
     <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
     <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
+    ${hasForms ? `<li><button type="button" class="fx-primary" id="fx-dl-forms">Completed form data (JSON)</button></li>` : ""}
     ${showDataControls && rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
     ${showDataControls ? `<li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>` : ""}
 
@@ -1092,10 +1276,11 @@ ${backendDataScripts}
   if(sel) sel.onchange=function(){ goto(Number(sel.value)); };
   document.getElementById('fx-zoom-in').onclick=function(){ setZoom(zoom+.15); };
   document.getElementById('fx-zoom-out').onclick=function(){ setZoom(zoom-.15); };
-  document.getElementById('fx-fit').onclick=function(){
+  function fitWidth(){
     var p=pages[current-1]; if(!p) return;
     var w=parseFloat(getComputedStyle(p).getPropertyValue('--pw'))||612;
-    var avail=document.querySelector('.fx-stage').clientWidth-48; setZoom(avail/w); };
+    var avail=document.querySelector('.fx-stage').clientWidth-48; setZoom(avail/w); }
+  document.getElementById('fx-fit').onclick=fitWidth;
   document.getElementById('fx-print').onclick=function(){ window.print(); };
   function setView(v){ root.dataset.view=v;
     document.getElementById('fx-view-fidelity').setAttribute('aria-pressed', String(v==='fidelity'));
@@ -1142,7 +1327,7 @@ ${backendDataScripts}
     if(!out.length){
       [].forEach.call(document.querySelectorAll('.fx-page'),function(page,pi){
         [].forEach.call(page.querySelectorAll('.fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3'),function(el,ei){
-          var t=(el.textContent||'').replace(/\s+/g,' ').trim();
+          var t=(el.textContent||'').replace(/s+/g,' ').trim();
           if(t.length>=20) out.push({id:'d'+pi+'-'+ei,p:Number(page.dataset.page)||pi+1,t:t,src:'dom'});
         });
       });
@@ -1269,9 +1454,11 @@ ${backendDataScripts}
     }
     function renderOriginal(){
       if(pdfLoaded||pdfLoading) return; pdfLoading=true;
+      if(!pdfSrc){ pdfLoading=false; opStatus('No original PDF is embedded in this document.'); return; }
       opStatus('Rendering the original PDF\u2026');
-      import(pdfJsUrl).then(function(pdfjs){
-        pdfjs.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.mjs$/,'pdf.worker$1.mjs');
+      var pdfjsReady=window.pdfjsLib ? Promise.resolve(window.pdfjsLib) : (pdfJsUrl ? import(pdfJsUrl) : Promise.reject(new Error('PDF.js is not loaded.')));
+      pdfjsReady.then(function(pdfjs){
+        if(pdfJsUrl&&pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.mjs$/,'pdf.worker$1.mjs');
         var bytes=toBytes(pdfSrc);
         var task=bytes?pdfjs.getDocument({data:bytes}):pdfjs.getDocument(pdfSrc);
         return task.promise;
@@ -1280,11 +1467,14 @@ ${backendDataScripts}
         var chain=Promise.resolve();
         for(var n=1;n<=doc.numPages;n++)(function(n){
           chain=chain.then(function(){ return doc.getPage(n); }).then(function(page){
-            var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/page.getViewport({scale:1}).width);
+            var base=page.getViewport({scale:1});
+            var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/base.width);
+            var cssVp=page.getViewport({scale:scale});
             var vp=page.getViewport({scale:scale*(window.devicePixelRatio||1)});
             var wrap=document.createElement('div'); wrap.className='fx-op-page';
             var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
             var cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height;
+            cv.style.width=cssVp.width+'px'; cv.style.height=cssVp.height+'px';
             cv.setAttribute('role','img'); cv.setAttribute('aria-label','Original PDF page '+n);
             wrap.appendChild(lab); wrap.appendChild(cv); if(host) host.appendChild(wrap);
             return page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
@@ -1294,7 +1484,7 @@ ${backendDataScripts}
           opStatus('Original PDF \u2014 '+doc.numPages+' page'+(doc.numPages===1?'':'s')+' rendered with pdf.js.'); });
       }).catch(function(err){
         pdfLoading=false;
-        opStatus('The original PDF could not be rendered here ('+(err&&err.message||err)+'). Use Download to open the file.');
+        opStatus('The original PDF could not be rendered here ('+(err&&err.message||err)+').');
       });
     }
     pdfToggle.addEventListener('change',function(){
@@ -1313,6 +1503,93 @@ ${backendDataScripts}
   var outline=readJson('codbdocs-outline')||[], ragData=readJson('codbdocs-rag');
   var knowledge=readJson('codbdocs-knowledge')||{};
   var elements=readJson('codbdocs-elements')||[];
+  var formDefinitions=readJson('codbdocs-forms')||[];
+
+  // ---- interactive PDF forms -------------------------------------------
+  var formInputs=[].slice.call(document.querySelectorAll('.fx-form-input'));
+  function formControls(name){ return formInputs.filter(function(el){ return el.dataset.formName===name; }); }
+  function formNames(){ var seen={}; return formInputs.map(function(el){ return el.dataset.formName; })
+    .filter(function(name){ if(!name||seen[name]) return false; seen[name]=true; return true; }); }
+  function preferredControl(controls){
+    return controls.filter(function(el){ return el.dataset.formView==='pdf'; })[0]||controls[0]||null;
+  }
+  function getFormValue(name){
+    var controls=formControls(name); if(!controls.length) return null;
+    var type=controls[0].dataset.formType||controls[0].type||'text';
+    if(type==='radio'){
+      var checked=controls.filter(function(el){ return el.checked; })[0];
+      return checked?checked.value:null;
+    }
+    if(type==='checkbox'){
+      var byOption={}, selected=[];
+      controls.forEach(function(el){ var option=el.dataset.formOption||el.value||'On';
+        if(!byOption[option]) byOption[option]=el; else if(el.checked) byOption[option]=el; });
+      Object.keys(byOption).forEach(function(option){ if(byOption[option].checked) selected.push(option); });
+      return Object.keys(byOption).length<=1?(selected[0]||null):selected;
+    }
+    var control=preferredControl(controls); if(!control) return null;
+    if(control.tagName==='SELECT'&&control.multiple){
+      return [].slice.call(control.options).filter(function(opt){ return opt.selected; }).map(function(opt){ return opt.value; });
+    }
+    if(control.tagName==='OUTPUT') return control.textContent||'';
+    return control.value;
+  }
+  function getFormValues(){ var out={}; formNames().forEach(function(name){ out[name]=getFormValue(name); }); return out; }
+  function announceFormChange(name){
+    var detail={name:name,value:getFormValue(name),values:getFormValues()};
+    document.dispatchEvent(new CustomEvent('codbdocs:formchange',{detail:detail}));
+  }
+  function syncFormControl(source){
+    var name=source.dataset.formName; if(!name) return;
+    var type=source.dataset.formType||source.type||'text';
+    formControls(name).forEach(function(target){
+      if(target===source) return;
+      if(type==='radio') target.checked=source.checked&&target.dataset.formOption===source.dataset.formOption;
+      else if(type==='checkbox'&&target.dataset.formOption===source.dataset.formOption) target.checked=source.checked;
+      else if(target.tagName==='SELECT'&&target.multiple){
+        var selected=[].slice.call(source.options).filter(function(opt){ return opt.selected; }).map(function(opt){ return opt.value; });
+        [].slice.call(target.options).forEach(function(opt){ opt.selected=selected.indexOf(opt.value)!==-1; });
+      } else if('value' in target) target.value=source.value;
+      else if(target.tagName==='OUTPUT') target.textContent=source.textContent;
+    });
+    announceFormChange(name);
+  }
+  function setFormValues(values, silent){
+    Object.keys(values||{}).forEach(function(name){
+      var controls=formControls(name), next=values[name];
+      controls.forEach(function(el){
+        var type=el.dataset.formType||el.type||'text', option=el.dataset.formOption||el.value;
+        if(type==='radio') el.checked=String(next)==String(option);
+        else if(type==='checkbox') el.checked=next===true||String(next)==String(option)||(Array.isArray(next)&&next.map(String).indexOf(String(option))!==-1);
+        else if(el.tagName==='SELECT'&&el.multiple){ var list=Array.isArray(next)?next.map(String):[String(next)];
+          [].slice.call(el.options).forEach(function(opt){ opt.selected=list.indexOf(String(opt.value))!==-1; }); }
+        else if(el.tagName==='OUTPUT') el.textContent=next==null?'':String(next);
+        else el.value=next==null?'':String(next);
+      });
+      if(!silent) announceFormChange(name);
+    });
+    return getFormValues();
+  }
+  function resetFormValues(){
+    formInputs.forEach(function(el){
+      var type=el.dataset.formType||el.type||'text';
+      if(type==='radio'||type==='checkbox') el.checked=el.dataset.defaultChecked==='true';
+      else if(el.tagName==='SELECT') [].slice.call(el.options).forEach(function(opt){ opt.selected=opt.defaultSelected; });
+      else { var value=''; try{ value=JSON.parse(decodeURIComponent(el.dataset.formDefault||'')); }catch(e){}
+        value=Array.isArray(value)?value[0]||'':value; if(el.tagName==='OUTPUT') el.textContent=value||'Unsigned'; else el.value=value==null?'':String(value); }
+    });
+    formNames().forEach(announceFormChange); return getFormValues();
+  }
+  formInputs.forEach(function(el){
+    el.addEventListener('input',function(){ syncFormControl(el); });
+    el.addEventListener('change',function(){ syncFormControl(el); });
+  });
+  window.CodbDocsForms={
+    definitions:formDefinitions,
+    getValues:getFormValues,
+    setValues:setFormValues,
+    reset:resetFormValues
+  };
 
 
   // ---- accessible dialogs (focus trap, Escape to close) ---------------
@@ -1370,23 +1647,11 @@ ${backendDataScripts}
         var el=document.getElementById(id); if(el) ho.observe(el); }); });
   }
 
-  // ---- translation (250+ languages) ----------------------------------
+  // ---- translation -----------------------------------------------------
   var langBtn=document.getElementById('fx-lang-open');
   if(langBtn){
-    var translateLoaded=false;
     langBtn.onclick=function(){
       showDialog('fx-lang');
-      if(translateLoaded) return; translateLoaded=true;
-      window.googleTranslateElementInit=function(){
-        try{ new window.google.translate.TranslateElement(
-          {pageLanguage:${JSON.stringify(lang)},autoDisplay:false},'google_translate_element'); }
-        catch(err){ document.getElementById('google_translate_element').textContent=
-          'Translation service is unavailable offline.'; } };
-      var s=document.createElement('script');
-      s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
-      s.onerror=function(){ document.getElementById('google_translate_element').textContent=
-        'Translation service could not be loaded. Check your connection and try again.'; };
-      document.head.appendChild(s);
     };
   }
 
@@ -1692,12 +1957,23 @@ ${backendDataScripts}
     say('Download started: '+name);
   }
   var base=(cfg.title||'document').replace(/[^A-Za-z0-9._-]+/g,'-').slice(0,80)||'document';
+  function reflectFormState(){
+    formInputs.forEach(function(el){
+      if(el.type==='checkbox'||el.type==='radio'){
+        if(el.checked) el.setAttribute('checked',''); else el.removeAttribute('checked');
+      } else if(el.tagName==='SELECT'){
+        [].slice.call(el.options).forEach(function(opt){ if(opt.selected) opt.setAttribute('selected',''); else opt.removeAttribute('selected'); });
+      } else if(el.tagName==='TEXTAREA') el.textContent=el.value;
+      else if(el.tagName==='OUTPUT') el.textContent=el.textContent||'';
+      else el.setAttribute('value',el.value||'');
+    });
+  }
   var dh=document.getElementById('fx-dl-html');
-  if(dh) dh.onclick=function(){ download(base+'-accessible.html',
+  if(dh) dh.onclick=function(){ reflectFormState(); download(base+'-accessible.html',
     '<!DOCTYPE html>'+document.documentElement.outerHTML,'text/html;charset=utf-8'); };
   var dt=document.getElementById('fx-dl-txt');
   if(dt) dt.onclick=function(){ download(base+'-transcript.txt',
-    index.map(function(e){ return e.t; }).join('\\n\\n')); };
+    transcriptText()); };
   var dk=document.getElementById('fx-dl-know');
   if(dk) dk.onclick=function(){ download(base+'-ai-knowledge.json',
     JSON.stringify({knowledge:knowledge,outline:outline,transcript:transcriptText()},null,2),'application/json'); };
@@ -1705,6 +1981,9 @@ ${backendDataScripts}
   var dj=document.getElementById('fx-dl-json');
   if(dj) dj.onclick=function(){ download(base+'-data.json',
     JSON.stringify(ragData,null,2),'application/json'); };
+  var df=document.getElementById('fx-dl-forms');
+  if(df) df.onclick=function(){ download(base+'-form-data.json',
+    JSON.stringify({document:cfg.title||null,values:getFormValues()},null,2),'application/json'); };
 
   // ---- accessibility feedback loop -------------------------------------
   var fbForm=document.getElementById('fx-fb-form'), fbOut=document.getElementById('fx-fb-result');
@@ -1732,7 +2011,9 @@ ${backendDataScripts}
     }
   });
 
-  setZoom(1); goto(1);
+  if(window.matchMedia&&window.matchMedia('(max-width:900px)').matches) fitWidth();
+  else setZoom(1);
+  goto(1);
 })();
 <\/script>
 </body>
@@ -1812,10 +2093,7 @@ ${backendDataScripts}
   }
   function detectFlow(rows) {
     if (rows.length < 2) return "single";
-    const leftEdges = rows.map((r) => {
-      var _a;
-      return ((_a = r[0]) == null ? void 0 : _a.x) || 0;
-    });
+    const leftEdges = rows.map((r) => r[0]?.x || 0);
     const variance = leftEdges.reduce((s, x) => s + Math.pow(x - leftEdges[0], 2), 0) / leftEdges.length;
     if (variance < 100) return "left-aligned";
     if (variance < 500) return "mixed";
@@ -1836,7 +2114,6 @@ ${backendDataScripts}
     return structures;
   }
   function detectTables(rows, pageSize) {
-    var _a;
     const tables = [];
     let tableStart = -1;
     for (let i = 0; i < rows.length; i++) {
@@ -1857,7 +2134,7 @@ ${backendDataScripts}
       if (tableStart !== -1 && i - tableStart >= 2) {
         tables.push({
           type: "table",
-          y: ((_a = rows[tableStart][0]) == null ? void 0 : _a.y) || 0,
+          y: rows[tableStart][0]?.y || 0,
           startY: tableStart,
           endY: i - 1,
           rowCount: i - tableStart,
@@ -1869,7 +2146,6 @@ ${backendDataScripts}
     return tables;
   }
   function detectLists(rows) {
-    var _a;
     const lists = [];
     const bulletPattern = /^[\u2022\u2023\u25E6\u2043\u2219\-\*\u25AA\u25AB\u25FB\u25FC]\s/;
     const numberPattern = /^(\d+[\.\)]\s|[a-z][\.\)]\s|[ivxIVX]+[\.\)]\s)/;
@@ -1890,7 +2166,7 @@ ${backendDataScripts}
           lists.push({
             type: "list",
             listType,
-            y: ((_a = rows[listStart][0]) == null ? void 0 : _a.y) || 0,
+            y: rows[listStart][0]?.y || 0,
             itemCount: i - listStart,
             startIndex: listStart,
             endIndex: i - 1
@@ -1903,7 +2179,6 @@ ${backendDataScripts}
     return lists;
   }
   function detectFormFields(rows) {
-    var _a;
     const fields = [];
     const fieldPattern = /^([A-Z][A-Za-z\s]{2,30}):\s*/;
     for (const row of rows) {
@@ -1913,7 +2188,7 @@ ${backendDataScripts}
         fields.push({
           type: "formField",
           label: match[1].trim(),
-          y: ((_a = row[0]) == null ? void 0 : _a.y) || 0,
+          y: row[0]?.y || 0,
           hasValue: text.length > match[0].length + 1
         });
       }
@@ -1921,7 +2196,6 @@ ${backendDataScripts}
     return fields;
   }
   function detectParagraphs(rows) {
-    var _a;
     const paragraphs = [];
     let paraStart = -1;
     for (let i = 0; i < rows.length; i++) {
@@ -1934,7 +2208,7 @@ ${backendDataScripts}
         if (paraStart !== -1 && i - paraStart >= 2) {
           paragraphs.push({
             type: "paragraph",
-            y: ((_a = rows[paraStart][0]) == null ? void 0 : _a.y) || 0,
+            y: rows[paraStart][0]?.y || 0,
             lineCount: i - paraStart
           });
         }
@@ -2958,13 +3232,12 @@ ${backendDataScripts}
 
   // packages/core/src/query.js
   function executeQuery(contentGraph, query, graph = null) {
-    var _a, _b;
     if (graph && graph.planQuery && graph.hybridSearch) {
       const plan = graph.planQuery(query);
       const results2 = graph.hybridSearch(query, { maxResults: 20 });
       return {
-        type: ((_a = plan.intent) == null ? void 0 : _a.type) || "text-search",
-        label: ((_b = plan.intent) == null ? void 0 : _b.type) || "text matches",
+        type: plan.intent?.type || "text-search",
+        label: plan.intent?.type || "text matches",
         plan,
         results: results2,
         query,
@@ -3020,10 +3293,7 @@ ${backendDataScripts}
     if (type === EntityTypes.PERSON) {
       const people = [...new Set(resultsArray.map((r) => r.value))];
       answer = `Found ${people.length} person(s): ${people.join(", ")}`;
-      evidence = resultsArray.map((r) => {
-        var _a;
-        return { text: r.value, page: r.page, bbox: r.bbox, role: (_a = r.metadata) == null ? void 0 : _a.role };
-      });
+      evidence = resultsArray.map((r) => ({ text: r.value, page: r.page, bbox: r.bbox, role: r.metadata?.role }));
     }
     if (type === EntityTypes.ORGANIZATION) {
       const orgs = [...new Set(resultsArray.map((r) => r.value))];
@@ -3056,16 +3326,10 @@ ${backendDataScripts}
     }
     if (type === BlockTypes.TABLE) {
       answer = `Found ${resultsArray.length} table(s) in the document.`;
-      evidence = resultsArray.map((r) => {
-        var _a;
-        return { text: (_a = r.text) == null ? void 0 : _a.substring(0, 50), page: r.page, bbox: r.bbox };
-      });
+      evidence = resultsArray.map((r) => ({ text: r.text?.substring(0, 50), page: r.page, bbox: r.bbox }));
     }
     if (type === BlockTypes.FORM_FIELD) {
-      const fields = resultsArray.map((r) => {
-        var _a, _b;
-        return ((_a = r.metadata) == null ? void 0 : _a.label) || ((_b = r.text) == null ? void 0 : _b.substring(0, 30));
-      });
+      const fields = resultsArray.map((r) => r.metadata?.label || r.text?.substring(0, 30));
       answer = `Found ${resultsArray.length} form field(s): ${fields.join(", ")}`;
       evidence = resultsArray.map((r) => ({ text: r.text, page: r.page, bbox: r.bbox }));
     }
@@ -3084,24 +3348,23 @@ ${backendDataScripts}
     return { answer, confidence, evidence };
   }
   function formatSummaryAnswer(summary) {
-    var _a, _b, _c, _d, _e, _f, _g;
     let answer = `Document Summary:
 `;
-    answer += `- ${((_a = summary.blockTypes) == null ? void 0 : _a[BlockTypes.HEADING]) || 0} headings
+    answer += `- ${summary.blockTypes?.[BlockTypes.HEADING] || 0} headings
 `;
-    answer += `- ${((_b = summary.blockTypes) == null ? void 0 : _b[BlockTypes.PARAGRAPH]) || 0} paragraphs
+    answer += `- ${summary.blockTypes?.[BlockTypes.PARAGRAPH] || 0} paragraphs
 `;
     answer += `- ${summary.tableCount || 0} tables
 `;
-    answer += `- ${((_c = summary.entityTypes) == null ? void 0 : _c[EntityTypes.DATE]) || 0} dates
+    answer += `- ${summary.entityTypes?.[EntityTypes.DATE] || 0} dates
 `;
-    answer += `- ${((_d = summary.entityTypes) == null ? void 0 : _d[EntityTypes.CURRENCY]) || 0} monetary values
+    answer += `- ${summary.entityTypes?.[EntityTypes.CURRENCY] || 0} monetary values
 `;
-    answer += `- ${((_e = summary.entityTypes) == null ? void 0 : _e[EntityTypes.PERSON]) || 0} people
+    answer += `- ${summary.entityTypes?.[EntityTypes.PERSON] || 0} people
 `;
-    answer += `- ${((_f = summary.entityTypes) == null ? void 0 : _f[EntityTypes.PHONE]) || 0} phone numbers
+    answer += `- ${summary.entityTypes?.[EntityTypes.PHONE] || 0} phone numbers
 `;
-    answer += `- ${((_g = summary.entityTypes) == null ? void 0 : _g[EntityTypes.EMAIL]) || 0} emails
+    answer += `- ${summary.entityTypes?.[EntityTypes.EMAIL] || 0} emails
 `;
     return answer;
   }
@@ -3133,7 +3396,6 @@ ${backendDataScripts}
 
   // packages/core/src/rag.js
   async function extractImages(page, options = {}) {
-    var _a;
     const {
       format = "png",
       quality = 0.92,
@@ -3170,13 +3432,13 @@ ${backendDataScripts}
           continue;
         }
         if (fn === OPS.transform && Array.isArray(args) && args.length >= 6) {
-          ctm = multiplyMatrix2(ctm, args.slice(0, 6));
+          ctm = multiplyMatrix(ctm, args.slice(0, 6));
           continue;
         }
         if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
           const imgName = args[0];
           try {
-            if (typeof ((_a = page.objs) == null ? void 0 : _a.has) === "function" && !page.objs.has(imgName)) {
+            if (typeof page.objs?.has === "function" && !page.objs.has(imgName)) {
               continue;
             }
             const imgData = await new Promise((resolve, reject) => {
@@ -3265,29 +3527,6 @@ ${backendDataScripts}
       console.warn("[codbdocs] Image extraction failed:", e.message);
     }
     return images;
-  }
-  function multiplyMatrix2(m1, m2) {
-    const [a1, b1, c1, d1, e1, f1] = m1;
-    const [a2, b2, c2, d2, e2, f2] = m2;
-    return [
-      a1 * a2 + c1 * b2,
-      b1 * a2 + d1 * b2,
-      a1 * c2 + c1 * d2,
-      b1 * c2 + d1 * d2,
-      a1 * e2 + c1 * f2 + e1,
-      b1 * e2 + d1 * f2 + f1
-    ];
-  }
-  function imageBBoxFromCTM(ctm, pageHeight) {
-    const [a, b, c, d, e, f] = ctm;
-    const corners = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) => [a * x + c * y + e, b * x + d * y + f]);
-    const xs = corners.map((p) => p[0]);
-    const ys = corners.map((p) => p[1]);
-    const x = Math.min(...xs);
-    const yPdf = Math.min(...ys);
-    const width = Math.max(...xs) - x;
-    const height = Math.max(...ys) - yPdf;
-    return { x, y: yPdf, width, height, cssTop: pageHeight ? Math.max(0, pageHeight - yPdf - height) : yPdf };
   }
   async function extractAllImages(pdf, options = {}) {
     const allImages = [];
@@ -3466,7 +3705,6 @@ ${backendDataScripts}
     return chunks;
   }
   function createChunks(graph, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
     const {
       strategy = ChunkStrategies.SEMANTIC,
       chunkSize = 1e3,
@@ -3478,24 +3716,24 @@ ${backendDataScripts}
     } = options;
     const chunks = [];
     const summary = graph.getSummary();
-    const headings = ((_a = graph.layout) == null ? void 0 : _a.getAllHeadings()) || [];
-    const tables = ((_b = graph.structure) == null ? void 0 : _b.getTables()) || [];
+    const headings = graph.layout?.getAllHeadings() || [];
+    const tables = graph.structure?.getTables() || [];
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const pageText = ((_c = graph.text) == null ? void 0 : _c.getPageText(pageNum)) || "";
-      const pageClassification = ((_d = graph.classifications) == null ? void 0 : _d[pageNum - 1]) || null;
-      const pageHeadings = ((_e = graph.layout) == null ? void 0 : _e.getHeadings(pageNum)) || [];
-      const pageTables = ((_f = graph.structure) == null ? void 0 : _f.getTables(pageNum)) || [];
-      const pageForms = ((_g = graph.structure) == null ? void 0 : _g.getForms(pageNum)) || [];
-      const pageLists = ((_h = graph.structure) == null ? void 0 : _h.getLists(pageNum)) || [];
+      const pageText = graph.text?.getPageText(pageNum) || "";
+      const pageClassification = graph.classifications?.[pageNum - 1] || null;
+      const pageHeadings = graph.layout?.getHeadings(pageNum) || [];
+      const pageTables = graph.structure?.getTables(pageNum) || [];
+      const pageForms = graph.structure?.getForms(pageNum) || [];
+      const pageLists = graph.structure?.getLists(pageNum) || [];
       const pageMetadata = {
-        dates: ((_i = graph.metadata) == null ? void 0 : _i.getDates(pageNum)) || [],
-        phones: ((_j = graph.metadata) == null ? void 0 : _j.getPhones(pageNum)) || [],
-        emails: ((_k = graph.metadata) == null ? void 0 : _k.getEmails(pageNum)) || [],
-        addresses: ((_l = graph.metadata) == null ? void 0 : _l.getAddresses(pageNum)) || [],
-        amounts: ((_m = graph.metadata) == null ? void 0 : _m.getAmounts(pageNum)) || []
+        dates: graph.metadata?.getDates(pageNum) || [],
+        phones: graph.metadata?.getPhones(pageNum) || [],
+        emails: graph.metadata?.getEmails(pageNum) || [],
+        addresses: graph.metadata?.getAddresses(pageNum) || [],
+        amounts: graph.metadata?.getAmounts(pageNum) || []
       };
-      const contentBlocks = ((_o = (_n = graph._contentGraph) == null ? void 0 : _n.blocks) == null ? void 0 : _o.filter((b) => b.page === pageNum)) || [];
-      const contentEntities = ((_q = (_p = graph._contentGraph) == null ? void 0 : _p.entities) == null ? void 0 : _q.filter((e) => e.page === pageNum)) || [];
+      const contentBlocks = graph._contentGraph?.blocks?.filter((b) => b.page === pageNum) || [];
+      const contentEntities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
       let pageChunks = [];
       switch (strategy) {
         case ChunkStrategies.FIXED:
@@ -3540,7 +3778,7 @@ ${backendDataScripts}
             pageNumber: pageNum,
             pageCount: summary.pageCount,
             classification: pageClassification,
-            documentType: ((_r = graph.getDocumentType) == null ? void 0 : _r.call(graph)) || null,
+            documentType: graph.getDocumentType?.() || null,
             headings: pageHeadings.map((h) => h.text),
             hasTables: pageTables.length > 0,
             hasForms: pageForms.length > 0,
@@ -3565,9 +3803,8 @@ ${backendDataScripts}
     return chunks;
   }
   function buildCrossPageContext(graph) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const context = {
-      documentType: ((_a = graph.getDocumentType) == null ? void 0 : _a.call(graph)) || null,
+      documentType: graph.getDocumentType?.() || null,
       globalEntities: [],
       entityRelationships: [],
       topicFlow: [],
@@ -3582,9 +3819,9 @@ ${backendDataScripts}
     const summary = graph.getSummary();
     const entityMap = /* @__PURE__ */ new Map();
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const entities = ((_c = (_b = graph._contentGraph) == null ? void 0 : _b.entities) == null ? void 0 : _c.filter((e) => e.page === pageNum)) || [];
+      const entities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
       for (const entity of entities) {
-        const key = `${entity.type}:${(_d = entity.text) == null ? void 0 : _d.toLowerCase()}`;
+        const key = `${entity.type}:${entity.text?.toLowerCase()}`;
         if (entityMap.has(key)) {
           entityMap.get(key).occurrences.push({
             page: pageNum,
@@ -3607,11 +3844,8 @@ ${backendDataScripts}
     context.globalEntities = Array.from(entityMap.values());
     const pageEntityMap = /* @__PURE__ */ new Map();
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const entities = ((_f = (_e = graph._contentGraph) == null ? void 0 : _e.entities) == null ? void 0 : _f.filter((e) => e.page === pageNum)) || [];
-      pageEntityMap.set(pageNum, entities.map((e) => {
-        var _a2;
-        return `${e.type}:${(_a2 = e.text) == null ? void 0 : _a2.toLowerCase()}`;
-      }));
+      const entities = graph._contentGraph?.entities?.filter((e) => e.page === pageNum) || [];
+      pageEntityMap.set(pageNum, entities.map((e) => `${e.type}:${e.text?.toLowerCase()}`));
     }
     const relationshipMap = /* @__PURE__ */ new Map();
     for (const [pageNum, entities] of pageEntityMap) {
@@ -3636,7 +3870,7 @@ ${backendDataScripts}
     let topicStart = 1;
     for (let i = 0; i < classifications.length; i++) {
       const classification = classifications[i];
-      const pageType = (classification == null ? void 0 : classification.type) || "unknown";
+      const pageType = classification?.type || "unknown";
       if (pageType !== currentTopic) {
         if (currentTopic) {
           context.topicFlow.push({
@@ -3658,21 +3892,21 @@ ${backendDataScripts}
         pageCount: classifications.length - topicStart + 1
       });
     }
-    const allHeadings = ((_g = graph.layout) == null ? void 0 : _g.getAllHeadings()) || [];
+    const allHeadings = graph.layout?.getAllHeadings() || [];
     context.documentStructure.sections = allHeadings.map((h, i) => ({
       ...h,
       index: i,
       nextPageHeading: i + 1 < allHeadings.length ? allHeadings[i + 1] : null
     }));
     for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-      const tables = ((_h = graph.structure) == null ? void 0 : _h.getTables(pageNum)) || [];
-      const forms = ((_i = graph.structure) == null ? void 0 : _i.getForms(pageNum)) || [];
-      const lists = ((_j = graph.structure) == null ? void 0 : _j.getLists(pageNum)) || [];
+      const tables = graph.structure?.getTables(pageNum) || [];
+      const forms = graph.structure?.getForms(pageNum) || [];
+      const lists = graph.structure?.getLists(pageNum) || [];
       context.documentStructure.tables.push(...tables.map((t) => ({ ...t, page: pageNum })));
       context.documentStructure.forms.push(...forms.map((f) => ({ ...f, page: pageNum })));
       context.documentStructure.lists.push(...lists.map((l) => ({ ...l, page: pageNum })));
     }
-    const fullText = ((_l = (_k = graph.text) == null ? void 0 : _k.pages) == null ? void 0 : _l.map((p) => p.text).join(" ")) || "";
+    const fullText = graph.text?.pages?.map((p) => p.text).join(" ") || "";
     const crossPagePatterns = [
       /(?:continued|cont)\.?\s+(?:on\s+)?page\s+(\d+)/gi,
       /(?:see|refer\s+to)\s+page\s+(\d+)/gi,
@@ -3695,7 +3929,6 @@ ${backendDataScripts}
     return context;
   }
   function createRAGOutput(graph, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     const {
       chunkStrategy = ChunkStrategies.SEMANTIC,
       chunkSize = 1e3,
@@ -3708,7 +3941,7 @@ ${backendDataScripts}
       embeddingProvider = null
     } = options;
     const summary = graph.getSummary();
-    const documentType = ((_a = graph.getDocumentType) == null ? void 0 : _a.call(graph)) || null;
+    const documentType = graph.getDocumentType?.() || null;
     const chunks = createChunks(graph, {
       strategy: chunkStrategy,
       chunkSize,
@@ -3730,17 +3963,17 @@ ${backendDataScripts}
       },
       // Document metadata
       document: {
-        type: (documentType == null ? void 0 : documentType.type) || "unknown",
-        confidence: (documentType == null ? void 0 : documentType.confidence) || 0,
+        type: documentType?.type || "unknown",
+        confidence: documentType?.confidence || 0,
         pageCount: summary.pageCount,
         wordCount: summary.wordCount,
         headings: summary.headings,
         metadata: summary.metadata,
-        summary: summarizeRagText(((_c = (_b = graph.text) == null ? void 0 : _b.pages) == null ? void 0 : _c.map((p) => p.text).join(" ")) || ""),
+        summary: summarizeRagText(graph.text?.pages?.map((p) => p.text).join(" ") || ""),
         accessibility: {
-          screenReaderFriendly: Boolean((_e = (_d = graph.text) == null ? void 0 : _d.pages) == null ? void 0 : _e.some((p) => p.text && p.text.trim())),
-          hasSearchableText: Boolean((_g = (_f = graph.text) == null ? void 0 : _f.pages) == null ? void 0 : _g.some((p) => p.source === "native" || p.source === "fusion")),
-          hasOcrText: Boolean((_i = (_h = graph.text) == null ? void 0 : _h.pages) == null ? void 0 : _i.some((p) => p.source === "ocr" || p.source === "fusion"))
+          screenReaderFriendly: Boolean(graph.text?.pages?.some((p) => p.text && p.text.trim())),
+          hasSearchableText: Boolean(graph.text?.pages?.some((p) => p.source === "native" || p.source === "fusion")),
+          hasOcrText: Boolean(graph.text?.pages?.some((p) => p.source === "ocr" || p.source === "fusion"))
         }
       },
       // Content chunks for vector DB
@@ -3754,9 +3987,9 @@ ${backendDataScripts}
         chunkType: chunk.type
       })),
       // Global entities
-      entities: (context == null ? void 0 : context.globalEntities) || [],
+      entities: context?.globalEntities || [],
       // Entity relationships
-      relationships: (context == null ? void 0 : context.entityRelationships) || [],
+      relationships: context?.entityRelationships || [],
       // Document structure
       structure: {
         headings: summary.headings,
@@ -3765,26 +3998,23 @@ ${backendDataScripts}
         lists: summary.listCount
       },
       // Topic flow
-      topicFlow: (context == null ? void 0 : context.topicFlow) || [],
+      topicFlow: context?.topicFlow || [],
       // Cross-page references
-      crossPageReferences: (context == null ? void 0 : context.crossPageReferences) || [],
+      crossPageReferences: context?.crossPageReferences || [],
       // Full text for context
-      fullText: ((_k = (_j = graph.text) == null ? void 0 : _j.pages) == null ? void 0 : _k.map((p) => p.text).join("\n\n")) || "",
+      fullText: graph.text?.pages?.map((p) => p.text).join("\n\n") || "",
       // Page-by-page text
-      pages: ((_m = (_l = graph.text) == null ? void 0 : _l.pages) == null ? void 0 : _m.map((p) => {
-        var _a2;
-        return {
-          pageNumber: p.pageNum,
-          text: p.text,
-          summary: summarizeRagText(p.text),
-          source: p.source,
-          classification: ((_a2 = graph.classifications) == null ? void 0 : _a2[p.pageNum - 1]) || null,
-          accessibility: {
-            textSource: p.source || null,
-            hasText: Boolean(p.text && p.text.trim()),
-            screenReaderText: p.text || ""
-          }
-        };
+      pages: graph.text?.pages?.map((p) => ({
+        pageNumber: p.pageNum,
+        text: p.text,
+        summary: summarizeRagText(p.text),
+        source: p.source,
+        classification: graph.classifications?.[p.pageNum - 1] || null,
+        accessibility: {
+          textSource: p.source || null,
+          hasText: Boolean(p.text && p.text.trim()),
+          screenReaderText: p.text || ""
+        }
       })) || []
     };
     if (includeImages) {
@@ -3793,7 +4023,7 @@ ${backendDataScripts}
     if (includeVectors) {
       ragOutput.vectors = [];
       for (let pageNum = 1; pageNum <= summary.pageCount; pageNum++) {
-        const pageVectors = ((_n = graph.getVectors) == null ? void 0 : _n.call(graph, pageNum)) || [];
+        const pageVectors = graph.getVectors?.(pageNum) || [];
         ragOutput.vectors.push(...pageVectors.map((v) => ({
           ...v,
           pageNumber: pageNum
@@ -3814,6 +4044,40 @@ ${backendDataScripts}
     }
     return ragOutput;
   }
+  function multiplyMatrix(m1, m2) {
+    const [a1, b1, c1, d1, e1, f1] = m1;
+    const [a2, b2, c2, d2, e2, f2] = m2;
+    return [
+      a1 * a2 + c1 * b2,
+      b1 * a2 + d1 * b2,
+      a1 * c2 + c1 * d2,
+      b1 * c2 + d1 * d2,
+      a1 * e2 + c1 * f2 + e1,
+      b1 * e2 + d1 * f2 + f1
+    ];
+  }
+  function imageBBoxFromCTM(ctm, pageHeight) {
+    const [a, b, c, d, e, f] = ctm;
+    const corners = [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1]
+    ].map(([x2, y]) => [a * x2 + c * y + e, b * x2 + d * y + f]);
+    const xs = corners.map((p) => p[0]);
+    const ys = corners.map((p) => p[1]);
+    const x = Math.min(...xs);
+    const yPdf = Math.min(...ys);
+    const width = Math.max(...xs) - x;
+    const height = Math.max(...ys) - yPdf;
+    return {
+      x,
+      y: yPdf,
+      width,
+      height,
+      cssTop: pageHeight ? Math.max(0, pageHeight - yPdf - height) : yPdf
+    };
+  }
   function summarizeRagText(text, limit = 420) {
     const clean = String(text || "").replace(/\s+/g, " ").trim();
     if (!clean) return "";
@@ -3833,31 +4097,6 @@ ${backendDataScripts}
     async embedQuery(text) {
       const results = await this.embed([text]);
       return results[0];
-    }
-  };
-  var OpenAIEmbeddingProvider = class extends EmbeddingProvider {
-    constructor(apiKey, options = {}) {
-      super("openai", options.model || "text-embedding-3-small", options.dimensions || 1536);
-      this.apiKey = apiKey;
-      this.baseUrl = options.baseUrl || "https://api.openai.com/v1";
-    }
-    async embed(texts) {
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: this.model,
-          input: texts
-        })
-      });
-      if (!response.ok) {
-        throw new Error(`Embedding failed: ${response.statusText}`);
-      }
-      const data = await response.json();
-      return data.data.map((d) => d.embedding);
     }
   };
   var LocalEmbeddingProvider = class extends EmbeddingProvider {
@@ -3939,47 +4178,42 @@ ${backendDataScripts}
     return String(text || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/^([#>*+\-]|\d+\.)\s*/gm, "\\$&");
   }
   function buildRAGContext(ir, contentGraph) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
     const pages = (ir.document.pages || []).map((pageId) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g, _h, _i, _j, _k, _l, _m, _a3, _b3;
       const page = ir.pages[pageId];
       if (!page) return null;
       const blocks = [];
       const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean);
       for (const obj of objects) {
-        if (obj.type === "text" && ((_a2 = obj.semantic) == null ? void 0 : _a2.text)) {
+        if (obj.type === "text" && obj.semantic?.text) {
           blocks.push({
             type: obj.semantic.role || "text",
             text: obj.semantic.text,
             bbox: obj.bbox || null,
-            fontSize: ((_b2 = obj.raw) == null ? void 0 : _b2.fontSize) || null,
-            font: ((_c2 = obj.raw) == null ? void 0 : _c2.font) || null,
-            color: ((_d2 = obj.raw) == null ? void 0 : _d2.color) || null
+            fontSize: obj.raw?.fontSize || null,
+            font: obj.raw?.font || null,
+            color: obj.raw?.color || null
           });
         } else if (obj.type === "image") {
           blocks.push({
             type: "image",
-            alt: ((_e2 = obj.accessibility) == null ? void 0 : _e2.alt) || ((_f2 = obj.semantic) == null ? void 0 : _f2.caption) || "",
-            caption: ((_g = obj.semantic) == null ? void 0 : _g.caption) || "",
+            alt: obj.accessibility?.alt || obj.semantic?.caption || "",
+            caption: obj.semantic?.caption || "",
             bbox: obj.bbox || null,
-            width: ((_h = obj.raw) == null ? void 0 : _h.width) || null,
-            height: ((_i = obj.raw) == null ? void 0 : _i.height) || null
+            width: obj.raw?.width || null,
+            height: obj.raw?.height || null
           });
         } else if (obj.type === "link") {
           blocks.push({
             type: "link",
-            text: ((_j = obj.semantic) == null ? void 0 : _j.text) || "",
-            url: ((_k = obj.raw) == null ? void 0 : _k.url) || null,
-            dest: ((_l = obj.raw) == null ? void 0 : _l.dest) || null,
+            text: obj.semantic?.text || "",
+            url: obj.raw?.url || null,
+            dest: obj.raw?.dest || null,
             bbox: obj.bbox || null
           });
         }
       }
-      const text = objects.filter((o) => {
-        var _a3;
-        return o.type === "text" && ((_a3 = o.semantic) == null ? void 0 : _a3.text);
-      }).map((o) => o.semantic.text).join(" ");
-      const pageEntities = contentGraph ? ((_m = (contentGraph.pages || []).find((pg) => pg.page === page.num)) == null ? void 0 : _m.entities) || [] : [];
+      const text = objects.filter((o) => o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
+      const pageEntities = contentGraph ? (contentGraph.pages || []).find((pg) => pg.page === page.num)?.entities || [] : [];
       return {
         page: page.num,
         size: { width: page.width, height: page.height },
@@ -3988,9 +4222,9 @@ ${backendDataScripts}
         blocks,
         entities: pageEntities,
         accessibility: {
-          hasTaggedStructure: Boolean((_a3 = ir.structure) == null ? void 0 : _a3[pageId]),
+          hasTaggedStructure: Boolean(ir.structure?.[pageId]),
           readingOrderItems: Array.isArray(page.readingOrder) ? page.readingOrder.length : 0,
-          language: page.language || ((_b3 = ir.document.metadata) == null ? void 0 : _b3.language) || null,
+          language: page.language || ir.document.metadata?.language || null,
           textQuality: page.textQuality || null
         },
         fidelity: {
@@ -4028,10 +4262,10 @@ ${backendDataScripts}
           accessibility: ["accessibility", "pages[].accessibility"]
         }
       },
-      source: ((_a = ir.document.metadata) == null ? void 0 : _a.title) || "PDF document",
-      title: ((_b = ir.document.metadata) == null ? void 0 : _b.title) || null,
-      author: ((_c = ir.document.metadata) == null ? void 0 : _c.author) || null,
-      createdAt: ((_d = ir.document.metadata) == null ? void 0 : _d.creationDate) || ((_e = ir.document.metadata) == null ? void 0 : _e.modDate) || null,
+      source: ir.document.metadata?.title || "PDF document",
+      title: ir.document.metadata?.title || null,
+      author: ir.document.metadata?.author || null,
+      createdAt: ir.document.metadata?.creationDate || ir.document.metadata?.modDate || null,
       documentType: content.documentType || ir.document.type || null,
       pageCount: (ir.document.pages || []).length,
       pages,
@@ -4044,16 +4278,13 @@ ${p.text}`).join("\n\n"),
       relationships: content.allRelationships || [],
       metadata: ir.document.metadata || {},
       accessibility: {
-        language: ((_g = ir.document.metadata) == null ? void 0 : _g.language) || null,
-        taggedPages: pages.filter((p) => {
-          var _a2;
-          return (_a2 = p.accessibility) == null ? void 0 : _a2.hasTaggedStructure;
-        }).length,
+        language: ir.document.metadata?.language || null,
+        taggedPages: pages.filter((p) => p.accessibility?.hasTaggedStructure).length,
         pageCount: pages.length,
         screenReaderFriendly: pages.some((p) => p.text && p.text.trim())
       },
       security: ir.document.security ? summarizeSecurity(ir.document.security) : null,
-      outline: ((_h = ir.document.navigation) == null ? void 0 : _h.outline) || []
+      outline: ir.document.navigation?.outline || []
     };
   }
   function summarizeText(text, limit = 320) {
@@ -4074,10 +4305,7 @@ ${p.text}`).join("\n\n"),
     return out;
   }
   function flowLines(objects, { lineTolerance = 1 } = {}) {
-    const texts = objects.filter((o) => {
-      var _a;
-      return o && o.type === "text" && ((_a = o.semantic) == null ? void 0 : _a.text);
-    }).map((o) => {
+    const texts = objects.filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => {
       const b = o.bbox || [0, 0, 0, 0];
       return { o, x: b[0], y: b[1], w: b[2], h: b[3] || 0, cy: b[1] + (b[3] || 0) / 2 };
     });
@@ -4105,10 +4333,9 @@ ${p.text}`).join("\n\n"),
     return paragraphs;
   }
   function toMarkdown(ir, contentGraph) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const out = [];
-    const title = ((_a = ir.document.metadata) == null ? void 0 : _a.title) || "Document";
-    const author = ((_b = ir.document.metadata) == null ? void 0 : _b.author) || "";
+    const title = ir.document.metadata?.title || "Document";
+    const author = ir.document.metadata?.author || "";
     out.push(`# ${title}`);
     if (author) out.push(`
 _By ${author}_`);
@@ -4129,8 +4356,8 @@ _By ${author}_`);
         }
       };
       for (const obj of objects) {
-        const role = ((_c = obj.semantic) == null ? void 0 : _c.role) || "text";
-        if (obj.type === "text" && ((_d = obj.semantic) == null ? void 0 : _d.text)) {
+        const role = obj.semantic?.role || "text";
+        if (obj.type === "text" && obj.semantic?.text) {
           const text = String(obj.semantic.text).replace(/\s+/g, " ").trim();
           if (!text) continue;
           switch (role) {
@@ -4149,16 +4376,16 @@ _By ${author}_`);
           }
         } else if (obj.type === "image") {
           flush();
-          const alt = ((_e = obj.accessibility) == null ? void 0 : _e.alt) || ((_f = obj.semantic) == null ? void 0 : _f.caption) || "Image";
-          out.push(`![${mdEscape(alt)}](${((_g = obj.raw) == null ? void 0 : _g.src) ? "" : ""})`);
-          if ((_h = obj.semantic) == null ? void 0 : _h.caption) {
+          const alt = obj.accessibility?.alt || obj.semantic?.caption || "Image";
+          out.push(`![${mdEscape(alt)}](${obj.raw?.src ? "" : ""})`);
+          if (obj.semantic?.caption) {
             out.push(`*${mdEscape(obj.semantic.caption)}*`);
           }
           out.push("");
         } else if (obj.type === "link") {
           flush();
-          const text = ((_i = obj.semantic) == null ? void 0 : _i.text) || ((_j = obj.raw) == null ? void 0 : _j.url) || "link";
-          const href = ((_k = obj.raw) == null ? void 0 : _k.url) || ((_l = obj.raw) == null ? void 0 : _l.href) || "#";
+          const text = obj.semantic?.text || obj.raw?.url || "link";
+          const href = obj.raw?.url || obj.raw?.href || "#";
           out.push(`[${mdEscape(text)}](${href})`);
           out.push("");
         } else if (role === "separator") {
@@ -4175,10 +4402,7 @@ _By ${author}_`);
     const pages = (ir.document.pages || []).map((pageId) => {
       const page = ir.pages[pageId];
       if (!page) return null;
-      const objs = (page.content || []).map((id) => ir.objects[id]).filter((o) => {
-        var _a, _b;
-        return o && (o.type === "text" || o.type === "link") && (((_a = o.semantic) == null ? void 0 : _a.text) || ((_b = o.raw) == null ? void 0 : _b.url));
-      });
+      const objs = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && (o.type === "text" || o.type === "link") && (o.semantic?.text || o.raw?.url));
       const paragraphs = flowLines(objs).map((par) => par.join(" "));
       return { page: page.num, text: paragraphs.join("\n\n") };
     }).filter(Boolean);
@@ -4190,7 +4414,6 @@ ${p.text}`).join("\n\n")
     };
   }
   function toFullJSON(ir, contentGraph) {
-    var _a, _b, _c, _d;
     const pages = (ir.document.pages || []).map((pageId) => {
       const page = ir.pages[pageId];
       if (!page) return null;
@@ -4203,42 +4426,33 @@ ${p.text}`).join("\n\n")
         cropBox: page.cropBox || null,
         labels: page.labels || null,
         background: page.background || null,
-        textObjects: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text").map((o) => {
-          var _a2, _b2, _c2, _d2, _e, _f, _g;
-          return {
-            id: o.id,
-            text: ((_a2 = o.semantic) == null ? void 0 : _a2.text) || "",
-            role: ((_b2 = o.semantic) == null ? void 0 : _b2.role) || "text",
-            level: ((_c2 = o.semantic) == null ? void 0 : _c2.level) || null,
-            bbox: o.bbox || null,
-            font: ((_d2 = o.raw) == null ? void 0 : _d2.font) || null,
-            fontSize: ((_e = o.raw) == null ? void 0 : _e.fontSize) || null,
-            color: ((_f = o.raw) == null ? void 0 : _f.color) || null,
-            transform: ((_g = o.raw) == null ? void 0 : _g.transform) || null
-          };
-        }),
-        images: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "image").map((o) => {
-          var _a2, _b2, _c2, _d2, _e;
-          return {
-            id: o.id,
-            bbox: o.bbox || null,
-            width: ((_a2 = o.raw) == null ? void 0 : _a2.width) || null,
-            height: ((_b2 = o.raw) == null ? void 0 : _b2.height) || null,
-            alt: ((_c2 = o.accessibility) == null ? void 0 : _c2.alt) || "",
-            caption: ((_d2 = o.semantic) == null ? void 0 : _d2.caption) || "",
-            src: ((_e = o.raw) == null ? void 0 : _e.src) || null
-          };
-        }),
-        links: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "link").map((o) => {
-          var _a2, _b2, _c2;
-          return {
-            id: o.id,
-            bbox: o.bbox || null,
-            text: ((_a2 = o.semantic) == null ? void 0 : _a2.text) || "",
-            url: ((_b2 = o.raw) == null ? void 0 : _b2.url) || null,
-            dest: ((_c2 = o.raw) == null ? void 0 : _c2.dest) || null
-          };
-        }),
+        textObjects: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text").map((o) => ({
+          id: o.id,
+          text: o.semantic?.text || "",
+          role: o.semantic?.role || "text",
+          level: o.semantic?.level || null,
+          bbox: o.bbox || null,
+          font: o.raw?.font || null,
+          fontSize: o.raw?.fontSize || null,
+          color: o.raw?.color || null,
+          transform: o.raw?.transform || null
+        })),
+        images: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "image").map((o) => ({
+          id: o.id,
+          bbox: o.bbox || null,
+          width: o.raw?.width || null,
+          height: o.raw?.height || null,
+          alt: o.accessibility?.alt || "",
+          caption: o.semantic?.caption || "",
+          src: o.raw?.src || null
+        })),
+        links: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "link").map((o) => ({
+          id: o.id,
+          bbox: o.bbox || null,
+          text: o.semantic?.text || "",
+          url: o.raw?.url || null,
+          dest: o.raw?.dest || null
+        })),
         vectors: (page.vectors || []).map((id) => ir.vectors[id]).filter(Boolean),
         annotations: page.annotations || [],
         markedContent: page.markedContent || [],
@@ -4250,13 +4464,13 @@ ${p.text}`).join("\n\n")
       version: ir.version || "1.0",
       document: {
         id: ir.document.id || null,
-        title: ((_a = ir.document.metadata) == null ? void 0 : _a.title) || null,
-        author: ((_b = ir.document.metadata) == null ? void 0 : _b.author) || null,
-        type: (contentGraph == null ? void 0 : contentGraph.documentType) || ir.document.type || null,
+        title: ir.document.metadata?.title || null,
+        author: ir.document.metadata?.author || null,
+        type: contentGraph?.documentType || ir.document.type || null,
         metadata: ir.document.metadata || {},
         security: ir.document.security || {},
-        outline: ((_c = ir.document.navigation) == null ? void 0 : _c.outline) || [],
-        labels: ((_d = ir.document.navigation) == null ? void 0 : _d.labels) || []
+        outline: ir.document.navigation?.outline || [],
+        labels: ir.document.navigation?.labels || []
       },
       pageCount: pages.length,
       pages
@@ -4274,11 +4488,10 @@ ${p.text}`).join("\n\n")
     return payload;
   }
   function byReadingOrder(a, b) {
-    var _a, _b, _c, _d;
-    const ay = ((_a = a.bbox) == null ? void 0 : _a[1]) || 0;
-    const by = ((_b = b.bbox) == null ? void 0 : _b[1]) || 0;
+    const ay = a.bbox?.[1] || 0;
+    const by = b.bbox?.[1] || 0;
     if (Math.abs(ay - by) > 10) return by - ay;
-    return (((_c = a.bbox) == null ? void 0 : _c[0]) || 0) - (((_d = b.bbox) == null ? void 0 : _d[0]) || 0);
+    return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
   }
 
   // packages/core/src/viewer.js
@@ -4707,6 +4920,30 @@ ${p.text}`).join("\n\n")
   }
 
   // packages/core/src/pdfir.js
+  function bytesToBase642(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.slice(i, i + 32768));
+    if (typeof btoa === "function") return btoa(bin);
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let out = "";
+    for (let i = 0; i < bin.length; i += 3) {
+      const a = bin.charCodeAt(i), b = bin.charCodeAt(i + 1), c = bin.charCodeAt(i + 2);
+      out += alphabet[a >> 2] + alphabet[(a & 3) << 4 | b >> 4] + (Number.isNaN(b) ? "=" : alphabet[(b & 15) << 2 | c >> 6]) + (Number.isNaN(c) ? "=" : alphabet[c & 63]);
+    }
+    return out;
+  }
+  function textToBase642(text) {
+    if (typeof TextEncoder !== "undefined") return bytesToBase642(new TextEncoder().encode(String(text)));
+    const encoded = unescape(encodeURIComponent(String(text)));
+    const bytes = new Uint8Array(encoded.length);
+    for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
+    return bytesToBase642(bytes);
+  }
+  function embeddedImageSrc2(src) {
+    src = String(src || "");
+    return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : "";
+  }
   function createIR() {
     return {
       version: "1.0",
@@ -4730,7 +4967,7 @@ ${p.text}`).join("\n\n")
       concepts: {},
       images: {},
       tables: {},
-      forms: {},
+      forms: { fields: [], byName: {} },
       annotations: {},
       vectors: {},
       resources: {},
@@ -4759,7 +4996,6 @@ ${p.text}`).join("\n\n")
     return ir.pages[pageId];
   }
   function addTextObject(ir, pageId, data) {
-    var _a;
     const id = generateId("text");
     ir.objects[id] = {
       id,
@@ -4788,19 +5024,16 @@ ${p.text}`).join("\n\n")
       },
       bbox: data.bbox || null
     };
-    (_a = ir.pages[pageId]) == null ? void 0 : _a.content.push(id);
+    ir.pages[pageId]?.content.push(id);
     return ir.objects[id];
   }
   function materializeOCRObject(ir, pageId, { text, source, confidence, pageSize } = {}) {
     const body = (text || "").replace(/\s+/g, " ").trim();
     if (!body) return null;
     const page = ir.pages[pageId];
-    const hasTextObjects = ((page == null ? void 0 : page.content) || []).some((id) => {
-      var _a;
-      return ((_a = ir.objects[id]) == null ? void 0 : _a.type) === "text";
-    });
+    const hasTextObjects = (page?.content || []).some((id) => ir.objects[id]?.type === "text");
     if (hasTextObjects) return null;
-    const size = pageSize || { width: (page == null ? void 0 : page.width) || 0, height: (page == null ? void 0 : page.height) || 0 };
+    const size = pageSize || { width: page?.width || 0, height: page?.height || 0 };
     const obj = addTextObject(ir, pageId, {
       text: body,
       bbox: [0, 0, size.width, size.height],
@@ -4819,7 +5052,6 @@ ${p.text}`).join("\n\n")
     return obj;
   }
   function addVectorObject(ir, pageId, data) {
-    var _a;
     const id = generateId("vec");
     ir.vectors[id] = {
       id,
@@ -4851,11 +5083,10 @@ ${p.text}`).join("\n\n")
         confidence: 1
       }
     };
-    (_a = ir.pages[pageId]) == null ? void 0 : _a.vectors.push(id);
+    ir.pages[pageId]?.vectors.push(id);
     return ir.vectors[id];
   }
   function addObject(ir, pageId, data) {
-    var _a;
     const id = generateId(data.type || "obj");
     ir.objects[id] = {
       id,
@@ -4867,8 +5098,118 @@ ${p.text}`).join("\n\n")
       provenance: data.provenance || { method: "native", confidence: 1 },
       bbox: data.bbox || null
     };
-    (_a = ir.pages[pageId]) == null ? void 0 : _a.content.push(id);
+    ir.pages[pageId]?.content.push(id);
     return ir.objects[id];
+  }
+  function humanizeFieldName(name) {
+    return String(name || "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[._\-]+/g, " ").replace(/\s+/g, " ").trim().replace(/^./, (char) => char.toUpperCase());
+  }
+  function normalizeFieldOptions(options) {
+    return (Array.isArray(options) ? options : []).map((option) => {
+      if (option && typeof option === "object") {
+        const value = option.exportValue ?? option.value ?? option.displayValue ?? option.label ?? "";
+        const label = option.displayValue ?? option.label ?? option.exportValue ?? option.value ?? "";
+        return { value: String(value), label: String(label) };
+      }
+      return { value: String(option ?? ""), label: String(option ?? "") };
+    });
+  }
+  function normalizeFieldValue(value) {
+    if (Array.isArray(value)) return value.map((item) => String(item ?? ""));
+    return value == null ? "" : String(value);
+  }
+  function normalizeFieldRect(rect) {
+    if (!Array.isArray(rect) || rect.length < 4) return null;
+    const x1 = Number(rect[0]) || 0;
+    const y1 = Number(rect[1]) || 0;
+    const x2 = Number(rect[2]) || 0;
+    const y2 = Number(rect[3]) || 0;
+    return [Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)];
+  }
+  function normalizeFormField(field, pageNumber = null) {
+    if (!field || field.subtype && field.subtype !== "Widget" && field.type !== "form_field") return null;
+    const pdfType = String(field.fieldType || field.type || "").toLowerCase();
+    let fieldType = "text";
+    if (pdfType === "tx" || pdfType === "text") {
+      fieldType = field.password ? "password" : field.multiLine ? "textarea" : "text";
+    } else if (pdfType === "ch" || pdfType === "choice" || pdfType === "combobox" || pdfType === "listbox") {
+      fieldType = field.combo || pdfType === "combobox" ? "dropdown" : "listbox";
+    } else if (pdfType === "btn" || pdfType === "button" || pdfType === "checkbox" || pdfType === "radiobutton") {
+      fieldType = field.pushButton ? "button" : field.radioButton || pdfType === "radiobutton" ? "radio" : "checkbox";
+    } else if (pdfType === "sig" || pdfType === "signature") {
+      fieldType = "signature";
+    }
+    const fieldName = String(field.fieldName || field.name || field.id || "field");
+    const optionValue = String(field.buttonValue ?? field.exportValue ?? field.optionValue ?? "On");
+    const value = normalizeFieldValue(field.fieldValue ?? field.value);
+    const defaultValue = normalizeFieldValue(field.defaultFieldValue ?? field.defaultValue);
+    const scalarValue = Array.isArray(value) ? value[0] ?? "" : value;
+    const checked = fieldType === "radio" ? scalarValue === optionValue : fieldType === "checkbox" ? Boolean(scalarValue && scalarValue !== "Off" && (scalarValue === optionValue || /^(true|yes|on|1|x)$/i.test(scalarValue))) : false;
+    const baseLabel = String(field.alternativeText || field.alternateFieldName || field.label || humanizeFieldName(fieldName));
+    const label = fieldType === "radio" && optionValue && !baseLabel.toLowerCase().includes(optionValue.toLowerCase()) ? `${baseLabel}: ${humanizeFieldName(optionValue)}` : baseLabel;
+    return {
+      id: field.id || null,
+      page: pageNumber ?? (Number.isInteger(field.page) ? field.page + 1 : null),
+      name: fieldName,
+      label,
+      description: String(field.contents || field.description || ""),
+      fieldType,
+      pdfFieldType: field.fieldType || field.type || null,
+      value,
+      defaultValue,
+      optionValue,
+      checked,
+      defaultChecked: fieldType === "radio" ? String(Array.isArray(defaultValue) ? defaultValue[0] ?? "" : defaultValue) === optionValue : fieldType === "checkbox" ? Boolean(defaultValue && defaultValue !== "Off") : false,
+      options: normalizeFieldOptions(field.options),
+      multiple: Boolean(field.multiSelect),
+      required: Boolean(field.required),
+      readOnly: Boolean(field.readOnly),
+      hidden: Boolean(field.hidden),
+      maxLength: Number.isFinite(Number(field.maxLen ?? field.maxLength)) ? Number(field.maxLen ?? field.maxLength) : null,
+      rect: Array.isArray(field.rect) ? field.rect.map(Number) : null,
+      bbox: normalizeFieldRect(field.rect),
+      actions: field.actions || null,
+      url: field.url || null
+    };
+  }
+  function registerFormField(ir, pageId, field, pageNumber = null) {
+    const normalized = normalizeFormField(field, pageNumber);
+    if (!normalized) return null;
+    const obj = addObject(ir, pageId, {
+      type: "form_field",
+      raw: { ...normalized },
+      semantic: {
+        role: "form_field",
+        fieldType: normalized.fieldType,
+        fieldName: normalized.name,
+        value: normalized.value,
+        defaultValue: normalized.defaultValue,
+        optionValue: normalized.optionValue,
+        checked: normalized.checked,
+        defaultChecked: normalized.defaultChecked,
+        options: normalized.options,
+        multiple: normalized.multiple,
+        maxLength: normalized.maxLength
+      },
+      accessibility: {
+        role: "form",
+        label: normalized.label,
+        description: normalized.description,
+        required: normalized.required,
+        readOnly: normalized.readOnly
+      },
+      bbox: normalized.bbox,
+      provenance: { method: "annotation", confidence: 1 }
+    });
+    if (!ir.forms || typeof ir.forms !== "object") ir.forms = { fields: [], byName: {} };
+    if (!Array.isArray(ir.forms.fields)) ir.forms.fields = [];
+    if (!ir.forms.byName || typeof ir.forms.byName !== "object") ir.forms.byName = {};
+    const record = { ...normalized, objectId: obj.id, pageId };
+    ir.forms.fields.push(record);
+    if (!Array.isArray(ir.forms.byName[normalized.name])) ir.forms.byName[normalized.name] = [];
+    ir.forms.byName[normalized.name].push(obj.id);
+    if (ir.pages[pageId] && !ir.pages[pageId].forms.includes(obj.id)) ir.pages[pageId].forms.push(obj.id);
+    return obj;
   }
   async function extractVectors(page) {
     const opList = await page.getOperatorList();
@@ -4883,7 +5224,7 @@ ${p.text}`).join("\n\n")
     let currentClip = null;
     let pathPoints = [];
     let pathStart = null;
-    const FN = (pdfjsLib == null ? void 0 : pdfjsLib.OPS) || {};
+    const FN = pdfjsLib?.OPS || {};
     for (let i = 0; i < opList.fnArray.length; i++) {
       const fn = opList.fnArray[i];
       const args = opList.argsArray[i];
@@ -5041,7 +5382,6 @@ ${p.text}`).join("\n\n")
     return null;
   }
   function auditAccessibility(ir) {
-    var _a, _b, _c, _d, _e;
     const issues = [];
     let score = 100;
     for (const pageId of ir.document.pages) {
@@ -5050,7 +5390,7 @@ ${p.text}`).join("\n\n")
       const pageNum = parseInt(pageId.split("_")[1]);
       for (const objId of page.content) {
         const obj = ir.objects[objId];
-        if ((obj == null ? void 0 : obj.type) === "image" && !((_a = obj.accessibility) == null ? void 0 : _a.alt)) {
+        if (obj?.type === "image" && !obj.accessibility?.alt) {
           issues.push({
             type: "missing_alt_text",
             page: pageNum,
@@ -5062,10 +5402,7 @@ ${p.text}`).join("\n\n")
           score -= 5;
         }
       }
-      const headings = page.content.map((id) => ir.objects[id]).filter((obj) => {
-        var _a2;
-        return ((_a2 = obj == null ? void 0 : obj.semantic) == null ? void 0 : _a2.role) === "heading";
-      });
+      const headings = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading");
       let prevLevel = 0;
       for (const heading of headings) {
         const level = heading.semantic.level || 1;
@@ -5084,13 +5421,10 @@ ${p.text}`).join("\n\n")
       }
       for (const vecId of page.vectors || []) {
         const vec = ir.vectors[vecId];
-        if (((_b = vec == null ? void 0 : vec.semantic) == null ? void 0 : _b.role) === "table_border") {
-          const nearbyTexts = page.content.map((id) => ir.objects[id]).filter((obj) => (obj == null ? void 0 : obj.bbox) && isNear(vec.bbox, obj.bbox));
+        if (vec?.semantic?.role === "table_border") {
+          const nearbyTexts = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.bbox && isNear(vec.bbox, obj.bbox));
           const hasHeader = nearbyTexts.some(
-            (t) => {
-              var _a2, _b2;
-              return ((_a2 = t.raw) == null ? void 0 : _a2.fontSize) > 12 || ((_b2 = t.semantic) == null ? void 0 : _b2.role) === "heading";
-            }
+            (t) => t.raw?.fontSize > 12 || t.semantic?.role === "heading"
           );
           if (!hasHeader) {
             issues.push({
@@ -5106,7 +5440,7 @@ ${p.text}`).join("\n\n")
         }
       }
       if (page.content.length > 5) {
-        const sorted = [...page.content].map((id) => ir.objects[id]).filter((obj) => obj == null ? void 0 : obj.bbox).sort((a, b) => a.bbox[1] - b.bbox[1]);
+        const sorted = [...page.content].map((id) => ir.objects[id]).filter((obj) => obj?.bbox).sort((a, b) => a.bbox[1] - b.bbox[1]);
         for (let i = 1; i < sorted.length; i++) {
           const prev = sorted[i - 1];
           const curr = sorted[i];
@@ -5125,10 +5459,10 @@ ${p.text}`).join("\n\n")
       }
       for (const objId of page.content) {
         const obj = ir.objects[objId];
-        if ((obj == null ? void 0 : obj.type) === "text" && ((_c = obj.raw) == null ? void 0 : _c.color)) {
+        if (obj?.type === "text" && obj.raw?.color) {
         }
       }
-      if (!((_d = ir.document.metadata) == null ? void 0 : _d.language)) {
+      if (!ir.document.metadata?.language) {
         issues.push({
           type: "missing_language",
           page: 1,
@@ -5138,7 +5472,7 @@ ${p.text}`).join("\n\n")
         });
         score -= 3;
       }
-      if (!((_e = ir.document.metadata) == null ? void 0 : _e.title)) {
+      if (!ir.document.metadata?.title) {
         issues.push({
           type: "missing_title",
           page: 1,
@@ -5160,7 +5494,6 @@ ${p.text}`).join("\n\n")
     };
   }
   function generateAccessibilityTree(ir) {
-    var _a, _b, _c, _d;
     const tree = { type: "Document", children: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
@@ -5170,14 +5503,14 @@ ${p.text}`).join("\n\n")
         const obj = ir.objects[objId];
         if (!obj) continue;
         const node = {
-          type: ((_a = obj.accessibility) == null ? void 0 : _a.role) || mapRole((_b = obj.semantic) == null ? void 0 : _b.role),
+          type: obj.accessibility?.role || mapRole(obj.semantic?.role),
           properties: {},
           children: []
         };
-        if ((_c = obj.semantic) == null ? void 0 : _c.text) {
+        if (obj.semantic?.text) {
           node.children.push({ type: "Text", content: obj.semantic.text });
         }
-        if (((_d = obj.semantic) == null ? void 0 : _d.role) === "heading") {
+        if (obj.semantic?.role === "heading") {
           node.properties.level = obj.semantic.level || 1;
         }
         pageNode.children.push(node);
@@ -5207,7 +5540,6 @@ ${p.text}`).join("\n\n")
     return Math.sqrt(Math.pow(cx1 - cx2, 2) + Math.pow(cy1 - cy2, 2)) < threshold;
   }
   function exportHTML(ir, options = {}) {
-    var _a, _b, _c;
     const {
       mode = "visual",
       // 'visual' | 'accessible' | 'intelligent' | 'selectable'
@@ -5215,10 +5547,10 @@ ${p.text}`).join("\n\n")
     } = options;
     const ragPayload = buildRAGPayload(ir);
     const viewer = generateViewerChrome(ragPayload);
-    let html = '<!DOCTYPE html>\n<html lang="' + (((_a = ir.document.metadata) == null ? void 0 : _a.language) || "en") + '">\n<head>\n';
+    let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || "en") + '">\n<head>\n';
     html += '<meta charset="UTF-8">\n';
     html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
-    html += "<title>" + escapeHTML2(((_b = ir.document.metadata) == null ? void 0 : _b.title) || "Document") + "</title>\n";
+    html += "<title>" + escapeHTML2(ir.document.metadata?.title || "Document") + "</title>\n";
     html += generateVisualStyles(ir);
     html += generateAccessibleStyles();
     html += viewer.styles;
@@ -5237,7 +5569,7 @@ ${p.text}`).join("\n\n")
       if (!page) continue;
       const nativeText = pageHasNativeText(page, ir);
       const attrs = (includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "") + ` data-native-text="${nativeText ? "1" : "0"}"`;
-      const pageLabel = ((_c = page.labels) == null ? void 0 : _c.print) || `Page ${page.num}`;
+      const pageLabel = page.labels?.print || `Page ${page.num}`;
       html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML2(pageLabel)}" role="region">
 `;
       html += renderPageVectorLayer(page, ir);
@@ -5261,22 +5593,20 @@ ${p.text}`).join("\n\n")
     html += "</div>\n";
     html += "</div>\n";
     html += "</main>\n";
-    // Backend/search context is intentionally not embedded in viewer HTML.
     html += viewer.script;
     html += "</body>\n</html>";
     return html;
   }
   function renderPageImages(page, ir, attrs) {
-    var _a, _b, _c;
     let html = "";
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj || obj.type !== "image") continue;
-      const src = embeddedImageSrc((_a = obj.raw) == null ? void 0 : _a.src);
+      const src = embeddedImageSrc2(obj.raw?.src);
       if (!src) continue;
       const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
       const top = cssTop2(page, y, h);
-      const alt = escapeHTML2(((_b = obj.accessibility) == null ? void 0 : _b.alt) || ((_c = obj.semantic) == null ? void 0 : _c.caption) || "Image");
+      const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
       html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
       html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${top}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
 `;
@@ -5286,47 +5616,45 @@ ${p.text}`).join("\n\n")
   function buildRAGPayload(ir) {
     return buildRAGContext(ir, null);
   }
-  function renderPageVectorLayer(page, ir) {
-    var _a, _b, _c;
-    if (!Array.isArray(page.vectors) || !page.vectors.length) return "";
-    let body = "";
-    for (const vecId of page.vectors) {
-      const vec = ir.vectors[vecId];
-      if (!vec) continue;
-      const stroke = escapeHTML2(((_a = vec.graphicsState) == null ? void 0 : _a.stroke) || "#000");
-      const fill = escapeHTML2(((_b = vec.graphicsState) == null ? void 0 : _b.fill) || "none");
-      const width = Number((_c = vec.graphicsState) == null ? void 0 : _c.lineWidth) || 1;
-      if (vec.type === "rect" && Array.isArray(vec.bbox)) {
-        const [x = 0, y = 0, w = 0, h = 0] = vec.bbox;
-        body += `<rect x="${Number(x) || 0}" y="${Number(y) || 0}" width="${Math.abs(Number(w) || 0)}" height="${Math.abs(Number(h) || 0)}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
-      } else if (vec.type === "path" && Array.isArray(vec.points)) {
-        let d = "";
-        for (const p of vec.points) {
-          if (p.op === "moveTo") d += `M${Number(p.x) || 0} ${Number(p.y) || 0} `;
-          else if (p.op === "lineTo") d += `L${Number(p.x) || 0} ${Number(p.y) || 0} `;
-          else if (p.op === "curveTo") d += `C${Number(p.x1) || 0} ${Number(p.y1) || 0} ${Number(p.x2) || 0} ${Number(p.y2) || 0} ${Number(p.x3) || 0} ${Number(p.y3) || 0} `;
-          else if (p.op === "closePath") d += "Z ";
-        }
-        if (d.trim()) body += `<path d="${escapeHTML2(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
-      }
+  function formFieldMarkup(obj, page, positioned = true) {
+    const field = { ...obj.raw || {}, ...obj.semantic || {} };
+    const type = field.fieldType || "text";
+    const name = field.fieldName || field.name || obj.id || "field";
+    const label = obj.accessibility?.label || field.label || humanizeFieldName(name);
+    const value = field.value ?? "";
+    const values = Array.isArray(value) ? value.map(String) : [String(value ?? "")];
+    const id = `pdf-form-${obj.id}`;
+    const readOnly = obj.accessibility?.readOnly || field.readOnly;
+    const required = obj.accessibility?.required || field.required;
+    const common = ` id="${escapeHTML2(id)}" name="${escapeHTML2(name)}" aria-label="${escapeHTML2(label)}"` + (required ? ' required aria-required="true"' : "") + (readOnly && !["text", "password", "textarea"].includes(type) ? ' disabled aria-readonly="true"' : "") + (readOnly && ["text", "password", "textarea"].includes(type) ? ' readonly aria-readonly="true"' : "");
+    if (field.hidden) return `<input type="hidden"${common} value="${escapeHTML2(values[0])}">`;
+    let control = "";
+    if (type === "checkbox" || type === "radio") {
+      control = `<input type="${type}"${common} value="${escapeHTML2(field.optionValue || "On")}"${field.checked ? " checked" : ""}>`;
+    } else if (type === "dropdown" || type === "listbox") {
+      const options = (field.options || []).map((option) => {
+        const optionValue = String(option?.value ?? option ?? "");
+        const optionLabel = String(option?.label ?? optionValue);
+        return `<option value="${escapeHTML2(optionValue)}"${values.includes(optionValue) ? " selected" : ""}>${escapeHTML2(optionLabel)}</option>`;
+      }).join("");
+      control = `<select${common}${field.multiple ? " multiple" : ""}${type === "listbox" ? ` size="${Math.min(8, Math.max(2, (field.options || []).length || 2))}"` : ""}>${options}</select>`;
+    } else if (type === "textarea") {
+      control = `<textarea${common}${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ""}>${escapeHTML2(values[0])}</textarea>`;
+    } else if (type === "button") {
+      control = `<button type="button"${common} disabled>${escapeHTML2(label)}</button>`;
+    } else if (type === "signature") {
+      control = `<output${common} class="pdf-signature">${escapeHTML2(values[0] || "Unsigned")}</output>`;
+    } else {
+      control = `<input type="${type === "password" ? "password" : "text"}"${common} value="${escapeHTML2(values[0])}"${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ""}>`;
     }
-    if (!body) return "";
-    const w = Number(page.width) || 0;
-    const h = Number(page.height) || 0;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
-    return `<img class="pdf-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase64(svg)}">\n`;
-  }
-  function pageHasNativeText(page, ir) {
-    return (page.content || []).some((id) => {
-      var _a, _b, _c, _d, _e;
-      const obj = ir.objects[id];
-      if (!obj || obj.type !== "text" || !((_a = obj.semantic) == null ? void 0 : _a.text)) return false;
-      const method = String(((_b = obj.provenance) == null ? void 0 : _b.method) || ((_c = obj.raw) == null ? void 0 : _c.source) || ((_d = obj.raw) == null ? void 0 : _d.textSource) || "native").toLowerCase();
-      return method !== "ocr" && method !== "fusion";
-    });
+    const data = ` data-pdf-object="${escapeHTML2(obj.id)}" data-form-name="${escapeHTML2(name)}"`;
+    if (!positioned) return `<div class="pdf-form-field"${data}><label for="${escapeHTML2(id)}">${escapeHTML2(label)}</label>${control}</div>
+`;
+    const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+    return `<div class="pdf-form-field pdf-form-field-positioned"${data} style="left:${Number(x) || 0}px;top:${cssTop2(page, y, h)}px;width:${Number(w) || 0}px;height:${Number(h) || 0}px"><label class="pdf-sr-only" for="${escapeHTML2(id)}">${escapeHTML2(label)}</label>${control}</div>
+`;
   }
   function renderPageVisual(page, ir, attrs) {
-    var _a, _b, _c, _d, _e, _f, _g;
     let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + "px;height:" + (page.height || 0) + 'px;">\n';
     for (const objId of page.content) {
       const obj = ir.objects[objId];
@@ -5334,13 +5662,13 @@ ${p.text}`).join("\n\n")
       if (obj.type === "text") {
         const bbox = obj.bbox || [];
         const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || ((_a = obj.raw) == null ? void 0 : _a.fontSize) || 12)}px;font-size:${((_a = obj.raw) == null ? void 0 : _a.fontSize) || 12}px;${style}">${escapeHTML2(((_b = obj.semantic) == null ? void 0 : _b.text) || "")}</div>
+        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic?.text || "")}</div>
 `;
       } else if (obj.type === "image") {
         const bbox = obj.bbox || [];
-        const src = embeddedImageSrc(((_c = obj.raw) == null ? void 0 : _c.src) || "");
+        const src = embeddedImageSrc2(obj.raw?.src || "");
         if (src) {
-          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(((_d = obj.accessibility) == null ? void 0 : _d.alt) || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(obj.accessibility?.alt || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
         } else {
           html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
@@ -5348,8 +5676,8 @@ ${p.text}`).join("\n\n")
         }
       } else if (obj.type === "link") {
         const bbox = obj.bbox || [];
-        const href = escapeHTML2(((_e = obj.raw) == null ? void 0 : _e.href) || "#");
-        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(((_f = obj.semantic) == null ? void 0 : _f.text) || ((_g = obj.raw) == null ? void 0 : _g.url) || "link")}</a>
+        const href = escapeHTML2(obj.raw?.href || "#");
+        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
 `;
       }
     }
@@ -5357,64 +5685,64 @@ ${p.text}`).join("\n\n")
     return html;
   }
   function renderPagePositionedText(page, ir, attrs) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
     let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj) continue;
       const dataAttr = includeDataAttributes(objId, attrs);
       const bbox = obj.bbox || [];
-      if (obj.type === "text" && ((_a = obj.semantic) == null ? void 0 : _a.text)) {
+      if (obj.type === "text" && obj.semantic?.text) {
         const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || ((_b = obj.raw) == null ? void 0 : _b.fontSize) || 12)}px;font-size:${((_b = obj.raw) == null ? void 0 : _b.fontSize) || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
+        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
 `;
       } else if (obj.type === "image") {
-        const src = embeddedImageSrc(((_c = obj.raw) == null ? void 0 : _c.src) || "");
-        const alt = escapeHTML2(((_d = obj.accessibility) == null ? void 0 : _d.alt) || ((_e = obj.semantic) == null ? void 0 : _e.caption) || "Image");
+        const src = embeddedImageSrc2(obj.raw?.src || "");
+        const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
         if (src) {
           html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
 `;
         }
       } else if (obj.type === "link") {
-        const href = escapeHTML2(((_f = obj.raw) == null ? void 0 : _f.href) || "#");
-        const text = escapeHTML2(((_g = obj.semantic) == null ? void 0 : _g.text) || ((_h = obj.raw) == null ? void 0 : _h.url) || "link");
+        const href = escapeHTML2(obj.raw?.href || "#");
+        const text = escapeHTML2(obj.semantic?.text || obj.raw?.url || "link");
         html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>
 `;
+      } else if (obj.type === "form_field") {
+        html += formFieldMarkup(obj, page, true);
       }
     }
     html += "</div>\n";
     return html;
   }
   function renderPageAccessible(page, ir, attrs, mode) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
     for (const objId of page.content) {
       const obj = ir.objects[objId];
       if (!obj) continue;
       const dataAttr = includeDataAttributes(objId, attrs);
-      const role = ((_a = obj.semantic) == null ? void 0 : _a.role) || "paragraph";
+      const role = obj.semantic?.role || "paragraph";
       if (obj.type === "image") {
-        const alt = ((_b = obj.accessibility) == null ? void 0 : _b.alt) || ((_c = obj.semantic) == null ? void 0 : _c.caption) || (mode === "intelligent" ? "AI-generated description" : "Image");
-        const src = embeddedImageSrc(((_d = obj.raw) == null ? void 0 : _d.src) || "");
+        const alt = obj.accessibility?.alt || obj.semantic?.caption || (mode === "intelligent" ? "AI-generated description" : "Image");
+        const src = embeddedImageSrc2(obj.raw?.src || "");
         html += `<figure${dataAttr}>
 `;
         if (src) html += `<img src="${escapeHTML2(src)}" alt="${escapeHTML2(alt)}" loading="lazy">
 `;
-        if ((_e = obj.semantic) == null ? void 0 : _e.caption) html += `<figcaption>${escapeHTML2(obj.semantic.caption)}</figcaption>
+        if (obj.semantic?.caption) html += `<figcaption>${escapeHTML2(obj.semantic.caption)}</figcaption>
 `;
-        if (mode === "intelligent" && ((_f = obj.provenance) == null ? void 0 : _f.method) === "vision") {
+        if (mode === "intelligent" && obj.provenance?.method === "vision") {
           html += `<small class="ai-generated">AI-generated description</small>
 `;
         }
         html += "</figure>\n";
       } else if (role === "heading") {
-        const level = ((_g = obj.semantic) == null ? void 0 : _g.level) || 2;
-        html += `<h${level}${dataAttr}>${escapeHTML2(((_h = obj.semantic) == null ? void 0 : _h.text) || "")}</h${level}>
+        const level = obj.semantic?.level || 2;
+        html += `<h${level}${dataAttr}>${escapeHTML2(obj.semantic?.text || "")}</h${level}>
 `;
       } else if (role === "table") {
         html += `<table${dataAttr}>
 `;
-        html += `<caption>${escapeHTML2(((_i = obj.semantic) == null ? void 0 : _i.caption) || "Table")}</caption>
+        html += `<caption>${escapeHTML2(obj.semantic?.caption || "Table")}</caption>
 `;
         html += "</table>\n";
       } else if (role === "list") {
@@ -5422,10 +5750,12 @@ ${p.text}`).join("\n\n")
 `;
         html += "</ul>\n";
       } else if (obj.type === "link") {
-        const href = escapeHTML2(((_j = obj.raw) == null ? void 0 : _j.href) || "#");
-        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML2(((_k = obj.semantic) == null ? void 0 : _k.text) || ((_l = obj.raw) == null ? void 0 : _l.url) || "link")}</a>
+        const href = escapeHTML2(obj.raw?.href || "#");
+        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
 `;
-      } else if (obj.type === "text" && ((_m = obj.semantic) == null ? void 0 : _m.text)) {
+      } else if (obj.type === "form_field") {
+        html += formFieldMarkup(obj, page, true);
+      } else if (obj.type === "text" && obj.semantic?.text) {
         const style = textRunStyle(obj);
         html += `<p${dataAttr}${style ? ' style="' + style + '"' : ""}>${escapeHTML2(obj.semantic.text)}</p>
 `;
@@ -5434,7 +5764,7 @@ ${p.text}`).join("\n\n")
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
       if (!vec) continue;
-      if (((_n = vec.semantic) == null ? void 0 : _n.role) === "separator") {
+      if (vec.semantic?.role === "separator") {
         html += `<hr${attrs} data-pdf-vector="${vecId}">
 `;
       }
@@ -5443,20 +5773,19 @@ ${p.text}`).join("\n\n")
     return html;
   }
   function textRunStyle(obj) {
-    var _a, _b;
     let style = "";
-    const font = (_a = obj.raw) == null ? void 0 : _a.font;
+    const font = obj.raw?.font;
     if (font) {
       style += `font-family:${sanitizeFontName(font)}, system-ui, sans-serif;`;
     }
-    const color = (_b = obj.raw) == null ? void 0 : _b.color;
+    const color = obj.raw?.color;
     if (color) {
       style += `color:${escapeCSSColor(color)};`;
     }
     return style;
   }
   function cssTop2(page, y, height = 0) {
-    const pageHeight = Number((page == null ? void 0 : page.height) || 0);
+    const pageHeight = Number(page?.height) || 0;
     const yy = Number(y) || 0;
     const hh = Number(height) || 0;
     return Math.max(0, pageHeight - yy - hh);
@@ -5466,31 +5795,6 @@ ${p.text}`).join("\n\n")
   }
   function escapeCSSColor(color) {
     return String(color).replace(/[^0-9A-Za-z#.,()% ]/g, "");
-  }
-  function renderVectorVisual(vec, attrs) {
-    var _a, _b, _c, _d, _e, _f;
-    if (!vec.bbox) return "";
-    if (vec.type === "rect") {
-      const style = `position:absolute;left:${vec.bbox[0]}px;top:${vec.bbox[1]}px;width:${vec.bbox[2]}px;height:${vec.bbox[3]}px;`;
-      const stroke = ((_a = vec.graphicsState) == null ? void 0 : _a.stroke) ? `border:1px solid ${vec.graphicsState.stroke};` : "";
-      const fill = ((_b = vec.graphicsState) == null ? void 0 : _b.fill) ? `background:${vec.graphicsState.fill};` : "";
-      return `<div class="pdf-rect"${attrs} data-pdf-vector="${vec.id}" style="${style}${stroke}${fill}"></div>
-`;
-    }
-    if (vec.type === "path" && ((_c = vec.points) == null ? void 0 : _c.length) > 0) {
-      let d = "";
-      for (const pt of vec.points) {
-        if (pt.op === "moveTo") d += `M${pt.x},${pt.y}`;
-        else if (pt.op === "lineTo") d += `L${pt.x},${pt.y}`;
-        else if (pt.op === "curveTo") d += `C${pt.x1},${pt.y1} ${pt.x2},${pt.y2} ${pt.x3},${pt.y3}`;
-        else if (pt.op === "closePath") d += "Z";
-      }
-      const stroke = ((_d = vec.graphicsState) == null ? void 0 : _d.stroke) || "#000";
-      const fill = ((_e = vec.graphicsState) == null ? void 0 : _e.fill) || "none";
-      return `<svg class="pdf-path"${attrs} data-pdf-vector="${vec.id}" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;"><path d="${d}" stroke="${stroke}" fill="${fill}" stroke-width="${((_f = vec.graphicsState) == null ? void 0 : _f.lineWidth) || 1}"/></svg>
-`;
-    }
-    return "";
   }
   function includeDataAttributes(objId, attrs) {
     return attrs ? `${attrs} data-pdf-object="${objId}"` : ` data-pdf-object="${objId}"`;
@@ -5518,9 +5822,57 @@ ${p.text}`).join("\n\n")
     body[data-codbdocs-view="text"] .pdf-page[data-native-text="0"] .pdf-text { color: #111 !important; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
+    .pdf-form-field-positioned { position: absolute; z-index: 5; }
+    .pdf-form-field-positioned input:not([type="checkbox"]):not([type="radio"]),
+    .pdf-form-field-positioned select,
+    .pdf-form-field-positioned textarea,
+    .pdf-form-field-positioned button,
+    .pdf-form-field-positioned output { box-sizing: border-box; width: 100%; height: 100%; min-width: 0; margin: 0; font: inherit; }
+    .pdf-form-field-positioned input[type="checkbox"],
+    .pdf-form-field-positioned input[type="radio"] { width: 100%; height: 100%; margin: 0; }
+    .pdf-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .pdf-signature { display: flex; align-items: center; padding: 2px 4px; border: 1px solid #777; background: #f7f7f7; }
     .ai-generated { color: #999; font-style: italic; }
   </style>
 `;
+  }
+  function renderPageVectorLayer(page, ir) {
+    if (!Array.isArray(page.vectors) || !page.vectors.length) return "";
+    let body = "";
+    for (const vecId of page.vectors) {
+      const vec = ir.vectors[vecId];
+      if (!vec) continue;
+      const stroke = escapeHTML2(vec.graphicsState?.stroke || "#000");
+      const fill = escapeHTML2(vec.graphicsState?.fill || "none");
+      const width = Number(vec.graphicsState?.lineWidth) || 1;
+      if (vec.type === "rect" && Array.isArray(vec.bbox)) {
+        const [x = 0, y = 0, w2 = 0, h2 = 0] = vec.bbox;
+        body += `<rect x="${Number(x) || 0}" y="${Number(y) || 0}" width="${Math.abs(Number(w2) || 0)}" height="${Math.abs(Number(h2) || 0)}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+      } else if (vec.type === "path" && Array.isArray(vec.points)) {
+        let d = "";
+        for (const p of vec.points) {
+          if (p.op === "moveTo") d += `M${Number(p.x) || 0} ${Number(p.y) || 0} `;
+          else if (p.op === "lineTo") d += `L${Number(p.x) || 0} ${Number(p.y) || 0} `;
+          else if (p.op === "curveTo") d += `C${Number(p.x1) || 0} ${Number(p.y1) || 0} ${Number(p.x2) || 0} ${Number(p.y2) || 0} ${Number(p.x3) || 0} ${Number(p.y3) || 0} `;
+          else if (p.op === "closePath") d += "Z ";
+        }
+        if (d.trim()) body += `<path d="${escapeHTML2(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+      }
+    }
+    if (!body) return "";
+    const w = Number(page.width) || 0;
+    const h = Number(page.height) || 0;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
+    return `<img class="pdf-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase642(svg)}">
+`;
+  }
+  function pageHasNativeText(page, ir) {
+    return (page.content || []).some((id) => {
+      const obj = ir.objects[id];
+      if (!obj || obj.type !== "text" || !obj.semantic?.text) return false;
+      const method = String(obj.provenance?.method || obj.raw?.source || obj.raw?.textSource || "native").toLowerCase();
+      return method !== "ocr" && method !== "fusion";
+    });
   }
   function generateAccessibleStyles() {
     return `<style>
@@ -5581,7 +5933,7 @@ ${p.text}`).join("\n\n")
   }
   async function extractAnnotations(page) {
     try {
-      const annotations = await page.getAnnotations();
+      const annotations = await page.getAnnotations({ intent: "display" });
       if (!annotations || annotations.length === 0) return [];
       return annotations.map((ann) => ({
         id: ann.id,
@@ -5596,10 +5948,30 @@ ${p.text}`).join("\n\n")
         creationDate: ann.creationDate,
         flags: ann.flags,
         // Form-specific
+        fieldName: ann.fieldName,
         fieldType: ann.fieldType,
         fieldValue: ann.fieldValue,
+        defaultFieldValue: ann.defaultFieldValue,
+        alternativeText: ann.alternativeText,
+        fieldFlags: ann.fieldFlags,
+        readOnly: ann.readOnly,
+        required: ann.required,
+        hidden: ann.hidden,
+        maxLen: ann.maxLen,
+        multiLine: ann.multiLine,
+        password: ann.password,
+        comb: ann.comb,
+        doNotScroll: ann.doNotScroll,
+        combo: ann.combo,
+        multiSelect: ann.multiSelect,
+        checkBox: ann.checkBox,
+        radioButton: ann.radioButton,
+        pushButton: ann.pushButton,
+        buttonValue: ann.buttonValue,
+        exportValue: ann.exportValue,
         buttonWidgetType: ann.buttonWidgetType,
         options: ann.options,
+        actions: ann.actions,
         // Link-specific
         url: ann.url,
         dest: ann.dest,
@@ -5645,7 +6017,6 @@ ${p.text}`).join("\n\n")
     return typeMap[subtype] || subtype || "unknown";
   }
   function detectReadingOrder(ir, pageNum) {
-    var _a, _b;
     const pageId = `page_${pageNum}`;
     const page = ir.pages[pageId];
     if (!page) return [];
@@ -5657,7 +6028,7 @@ ${p.text}`).join("\n\n")
           id: objId,
           type: obj.type,
           bbox: obj.bbox,
-          text: ((_a = obj.semantic) == null ? void 0 : _a.text) || "",
+          text: obj.semantic?.text || "",
           // Calculate center point for sorting
           centerX: obj.bbox[0] + obj.bbox[2] / 2,
           centerY: obj.bbox[1] + obj.bbox[3] / 2
@@ -5666,7 +6037,7 @@ ${p.text}`).join("\n\n")
     }
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
-      if (vec && vec.bbox && ((_b = vec.semantic) == null ? void 0 : _b.role)) {
+      if (vec && vec.bbox && vec.semantic?.role) {
         objects.push({
           id: vecId,
           type: "vector",
@@ -5697,16 +6068,16 @@ ${p.text}`).join("\n\n")
     return `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`;
   }
   function escapeHTML2(str) {
-    if (!str) return "";
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    if (str == null) return "";
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
   // packages/core/src/extended.js
   async function extractDocumentMetadata(pdf) {
     try {
       const metadata = await pdf.getMetadata();
-      const info = (metadata == null ? void 0 : metadata.info) || {};
-      const metadataObj = (metadata == null ? void 0 : metadata.metadata) || null;
+      const info = metadata?.info || {};
+      const metadataObj = metadata?.metadata || null;
       let xmp = null;
       if (metadataObj) {
         try {
@@ -5715,15 +6086,15 @@ ${p.text}`).join("\n\n")
         }
       }
       return {
-        title: info.Title || (xmp == null ? void 0 : xmp.title) || null,
-        author: info.Author || (xmp == null ? void 0 : xmp.author) || null,
-        subject: info.Subject || (xmp == null ? void 0 : xmp.subject) || null,
-        keywords: info.Keywords ? info.Keywords.split(/[,;]+/).map((k) => k.trim()) : (xmp == null ? void 0 : xmp.keywords) || [],
-        creator: info.Creator || (xmp == null ? void 0 : xmp.creator) || null,
-        producer: info.Producer || (xmp == null ? void 0 : xmp.producer) || null,
-        creationDate: info.CreationDate || (xmp == null ? void 0 : xmp.creationDate) || null,
-        modificationDate: info.ModDate || (xmp == null ? void 0 : xmp.modificationDate) || null,
-        language: info.Language || (xmp == null ? void 0 : xmp.language) || null,
+        title: info.Title || xmp?.title || null,
+        author: info.Author || xmp?.author || null,
+        subject: info.Subject || xmp?.subject || null,
+        keywords: info.Keywords ? info.Keywords.split(/[,;]+/).map((k) => k.trim()) : xmp?.keywords || [],
+        creator: info.Creator || xmp?.creator || null,
+        producer: info.Producer || xmp?.producer || null,
+        creationDate: info.CreationDate || xmp?.creationDate || null,
+        modificationDate: info.ModDate || xmp?.modificationDate || null,
+        language: info.Language || xmp?.language || null,
         trapped: info.Trapped || null,
         custom: xmp || {}
       };
@@ -6042,19 +6413,17 @@ ${p.text}`).join("\n\n")
     return "Decorative image";
   }
   function inferHeadingStructure(ir) {
-    var _a;
     const headings = [];
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (((_a = obj.semantic) == null ? void 0 : _a.role) === "heading") {
+      if (obj.semantic?.role === "heading") {
         headings.push({ id, level: obj.semantic.level, text: obj.semantic.text });
       }
     }
     return headings;
   }
   function inferDocumentTitle(ir) {
-    var _a;
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (((_a = obj.semantic) == null ? void 0 : _a.role) === "heading" && obj.semantic.level === 1) {
+      if (obj.semantic?.role === "heading" && obj.semantic.level === 1) {
         return obj.semantic.text;
       }
     }
@@ -6278,7 +6647,6 @@ ${p.text}`).join("\n\n")
     return null;
   }
   function extractGraphicsState(opList) {
-    var _a, _b, _c;
     const states = [];
     let currentState = createGraphicsState();
     const stateStack = [];
@@ -6310,31 +6678,31 @@ ${p.text}`).join("\n\n")
         currentState.lineWidth = args ? args[0] : 1;
       } else if (fn === OPS.setLineCap || fn === 23) {
         const caps = ["butt", "round", "square"];
-        currentState.lineCap = caps[args == null ? void 0 : args[0]] || "butt";
+        currentState.lineCap = caps[args?.[0]] || "butt";
       } else if (fn === OPS.setLineJoin || fn === 24) {
         const joins = ["miter", "round", "bevel"];
-        currentState.lineJoin = joins[args == null ? void 0 : args[0]] || "miter";
+        currentState.lineJoin = joins[args?.[0]] || "miter";
       } else if (fn === OPS.setMiterLimit || fn === 25) {
-        currentState.miterLimit = (args == null ? void 0 : args[0]) || 10;
+        currentState.miterLimit = args?.[0] || 10;
       } else if (fn === OPS.setDash || fn === 26) {
-        currentState.dash = (args == null ? void 0 : args[0]) || [];
-        currentState.dashPhase = (args == null ? void 0 : args[1]) || 0;
+        currentState.dash = args?.[0] || [];
+        currentState.dashPhase = args?.[1] || 0;
       } else if (fn === OPS.clip || fn === 28 || fn === OPS.eoClip || fn === 29) {
         currentState.clip = {
           path: [...currentState.clipPath],
           rule: fn === OPS.eoClip || fn === 29 ? "even-odd" : "winding"
         };
       } else if (fn === OPS.setFillAlpha || fn === 44) {
-        currentState.fillOpacity = (_a = args == null ? void 0 : args[0]) != null ? _a : 1;
+        currentState.fillOpacity = args?.[0] ?? 1;
       } else if (fn === OPS.setStrokeAlpha || fn === 45) {
-        currentState.strokeOpacity = (_b = args == null ? void 0 : args[0]) != null ? _b : 1;
+        currentState.strokeOpacity = args?.[0] ?? 1;
       } else if (fn === OPS.setGState || fn === 57) {
       } else if (fn === OPS.setBlendMode || fn === 58) {
-        currentState.blendMode = parseBlendMode(args == null ? void 0 : args[0]);
+        currentState.blendMode = parseBlendMode(args?.[0]);
       } else if (fn === OPS.setRenderingIntent || fn === 59) {
-        currentState.renderingIntent = (args == null ? void 0 : args[0]) || "RelativeColorimetric";
+        currentState.renderingIntent = args?.[0] || "RelativeColorimetric";
       } else if (fn === OPS.setOverprint || fn === 60) {
-        currentState.overprint = (_c = args == null ? void 0 : args[0]) != null ? _c : false;
+        currentState.overprint = args?.[0] ?? false;
       }
       states.push({
         index: i,
@@ -6389,7 +6757,6 @@ ${p.text}`).join("\n\n")
      * @returns {Promise<Uint8Array>} PDF bytes
      */
     async create(ir, options = {}) {
-      var _a, _b;
       const {
         level = 2,
         // 1=content, 2=semantic, 3=visual
@@ -6419,7 +6786,7 @@ ${p.text}`).join("\n\n")
         count: 0
       };
       pdf.body[catalogId].pages = pagesId;
-      if (includeMetadata && ((_a = ir.document) == null ? void 0 : _a.metadata)) {
+      if (includeMetadata && ir.document?.metadata) {
         const metaId = this.nextObjectId();
         pdf.body[metaId] = {
           type: "metadata",
@@ -6459,7 +6826,7 @@ ${p.text}`).join("\n\n")
             pageObj.annotations.push(annId);
           }
         }
-        if (includeStructure && ((_b = ir.structure) == null ? void 0 : _b[pageId]) && level >= 2) {
+        if (includeStructure && ir.structure?.[pageId] && level >= 2) {
           const structId = this.nextObjectId();
           pdf.body[structId] = {
             type: "struct_tree",
@@ -6468,10 +6835,10 @@ ${p.text}`).join("\n\n")
           pageObj.structParents = structId;
         }
         pdf.body[newPageId] = pageObj;
-        pagesId.kids.push(newPageId);
+        pdf.body[pagesId].kids.push(newPageId);
         this.pages.push(newPageId);
       }
-      pagesId.count = this.pages.length;
+      pdf.body[pagesId].count = this.pages.length;
       pdf.trailer = {
         root: catalogId,
         info: null,
@@ -6483,7 +6850,6 @@ ${p.text}`).join("\n\n")
      * Build page resources dictionary.
      */
     buildPageResources(pageData, ir) {
-      var _a;
       const resources = {
         font: {},
         xObject: {},
@@ -6492,12 +6858,9 @@ ${p.text}`).join("\n\n")
         extGState: {}
       };
       const fonts = /* @__PURE__ */ new Set();
-      const pageObjects2 = (pageData.content || []).map((id) => {
-        var _a2;
-        return (_a2 = ir.objects) == null ? void 0 : _a2[id];
-      }).filter(Boolean);
+      const pageObjects2 = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean);
       for (const obj of pageObjects2) {
-        if ((_a = obj.raw) == null ? void 0 : _a.font) {
+        if (obj.raw?.font) {
           fonts.add(obj.raw.font);
         }
       }
@@ -6516,19 +6879,15 @@ ${p.text}`).join("\n\n")
      * Build content stream for a page.
      */
     buildContentStream(pageData, ir, level) {
-      var _a, _b, _c, _d, _e;
       const commands = [];
-      const objects = (pageData.content || []).map((id) => {
-        var _a2;
-        return (_a2 = ir.objects) == null ? void 0 : _a2[id];
-      }).filter(Boolean);
+      const objects = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean);
       const sortedObjects = level >= 2 ? this.sortByReadingOrder(objects, pageData) : objects;
       for (const obj of sortedObjects) {
-        if (obj.type === "text" && ((_a = obj.raw) == null ? void 0 : _a.text)) {
+        if (obj.type === "text" && obj.raw?.text) {
           const text = obj.raw.text;
           const fontSize = obj.raw.fontSize || 12;
-          const x = ((_b = obj.bbox) == null ? void 0 : _b[0]) || 0;
-          const y = ((_c = obj.bbox) == null ? void 0 : _c[1]) || 0;
+          const x = obj.bbox?.[0] || 0;
+          const y = obj.bbox?.[1] || 0;
           const fontRef = this.findFontRef(obj.raw.font, pageData, ir);
           commands.push(`q`);
           if (level >= 3 && obj.raw.transform) {
@@ -6536,7 +6895,7 @@ ${p.text}`).join("\n\n")
             commands.push(`${t[0]} ${t[1]} ${t[2]} ${t[3]} ${t[4]} ${t[5]} cm`);
           }
           commands.push(`/${fontRef} ${fontSize} Tf`);
-          if ((_d = obj.semantic) == null ? void 0 : _d.color) {
+          if (obj.semantic?.color) {
             const c = obj.semantic.color;
             commands.push(`${c[0]} ${c[1]} ${c[2]} rg`);
           }
@@ -6547,7 +6906,7 @@ ${p.text}`).join("\n\n")
       }
       if (level >= 3) {
         for (const vecId of pageData.vectors || []) {
-          const vec = (_e = ir.vectors) == null ? void 0 : _e[vecId];
+          const vec = ir.vectors?.[vecId];
           if (vec) {
             this.addVectorCommands(commands, vec);
           }
@@ -6560,11 +6919,10 @@ ${p.text}`).join("\n\n")
      */
     sortByReadingOrder(objects, pageData) {
       return [...objects].sort((a, b) => {
-        var _a, _b, _c, _d;
-        const ay = ((_a = a.bbox) == null ? void 0 : _a[1]) || 0;
-        const by = ((_b = b.bbox) == null ? void 0 : _b[1]) || 0;
+        const ay = a.bbox?.[1] || 0;
+        const by = b.bbox?.[1] || 0;
         if (Math.abs(ay - by) > 10) return ay - by;
-        return (((_c = a.bbox) == null ? void 0 : _c[0]) || 0) - (((_d = b.bbox) == null ? void 0 : _d[0]) || 0);
+        return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
       });
     }
     /**
@@ -6577,18 +6935,17 @@ ${p.text}`).join("\n\n")
      * Add vector drawing commands.
      */
     addVectorCommands(commands, vec) {
-      var _a, _b, _c, _d, _e;
       if (!vec.points || vec.points.length === 0) return;
       commands.push("q");
-      if ((_b = (_a = vec.graphicsState) == null ? void 0 : _a.stroke) == null ? void 0 : _b.color) {
+      if (vec.graphicsState?.stroke?.color) {
         const c = vec.graphicsState.stroke.color;
         commands.push(`${c[0]} ${c[1]} ${c[2]} RG`);
       }
-      if ((_d = (_c = vec.graphicsState) == null ? void 0 : _c.fill) == null ? void 0 : _d.color) {
+      if (vec.graphicsState?.fill?.color) {
         const c = vec.graphicsState.fill.color;
         commands.push(`${c[0]} ${c[1]} ${c[2]} rg`);
       }
-      if ((_e = vec.graphicsState) == null ? void 0 : _e.lineWidth) {
+      if (vec.graphicsState?.lineWidth) {
         commands.push(`${vec.graphicsState.lineWidth} w`);
       }
       const firstPoint = vec.points[0];
@@ -6662,7 +7019,6 @@ ${p.text}`).join("\n\n")
      * Serialize a single PDF object.
      */
     serializeObject(id, obj) {
-      var _a, _b;
       let str = `${id} 0 obj
 `;
       switch (obj.type) {
@@ -6678,10 +7034,10 @@ ${p.text}`).join("\n\n")
           str += `<< /Type /Page /Parent ${obj.parent} 0 R`;
           str += ` /MediaBox [${(obj.mediaBox || [0, 0, 612, 792]).join(" ")}]`;
           if (obj.rotate) str += ` /Rotate ${obj.rotate}`;
-          if ((_a = obj.contents) == null ? void 0 : _a.length) {
+          if (obj.contents?.length) {
             str += ` /Contents [${obj.contents.map((c) => `${c} 0 R`).join(" ")}]`;
           }
-          if ((_b = obj.annotations) == null ? void 0 : _b.length) {
+          if (obj.annotations?.length) {
             str += ` /Annots [${obj.annotations.map((a) => `${a} 0 R`).join(" ")}]`;
           }
           str += " >>\n";
@@ -6835,10 +7191,7 @@ ${p.text}`).join("\n\n")
       count: signatures.length,
       hasSignatures: signatures.length > 0,
       signed: signatures.filter((s) => s.subFilter === SignatureSubFilter.ADOBE_PKCS7_DETACHED).length,
-      certifications: signatures.filter((s) => {
-        var _a;
-        return (_a = s.reason) == null ? void 0 : _a.toLowerCase().includes("certified");
-      }).length,
+      certifications: signatures.filter((s) => s.reason?.toLowerCase().includes("certified")).length,
       algorithms: [...new Set(signatures.map((s) => s.hashAlgorithm))],
       signers: signatures.map((s) => ({
         name: s.signerName || s.fieldName,
@@ -6848,10 +7201,9 @@ ${p.text}`).join("\n\n")
     };
   }
   async function extractOCGs(doc) {
-    var _a, _b, _c;
     const ocgs = [];
     try {
-      const docObj = await ((_c = (_b = (_a = doc._pdf) == null ? void 0 : _a.catalog) == null ? void 0 : _b.objRef) == null ? void 0 : _c.fetch());
+      const docObj = await doc._pdf?.catalog?.objRef?.fetch();
       if (!docObj) return ocgs;
       const ocProps = await docObj.get("OCProperties");
       if (!ocProps) return ocgs;
@@ -6870,8 +7222,8 @@ ${p.text}`).join("\n\n")
           const usage = await ocgDict.get("Usage");
           ocgs.push({
             id: ref.toString(),
-            name: (name == null ? void 0 : name.value) || "Unnamed OCG",
-            intent: (intent == null ? void 0 : intent.value) || "View",
+            name: name?.value || "Unnamed OCG",
+            intent: intent?.value || "View",
             usage: usage ? {
               print: await extractOCGUsage(usage, "Print"),
               view: await extractOCGUsage(usage, "View"),
@@ -6904,8 +7256,8 @@ ${p.text}`).join("\n\n")
       const outputIntents = await dict.get("OutputIntents");
       const category = await dict.get("Category");
       return {
-        category: (category == null ? void 0 : category.value) || null,
-        outputIntents: (outputIntents == null ? void 0 : outputIntents.value) || []
+        category: category?.value || null,
+        outputIntents: outputIntents?.value || []
       };
     } catch {
       return null;
@@ -6917,21 +7269,14 @@ ${p.text}`).join("\n\n")
       hasLayers: ocgs.length > 0,
       layerNames: ocgs.map((o) => o.name),
       intents: [...new Set(ocgs.map((o) => o.intent))],
-      printableLayers: ocgs.filter((o) => {
-        var _a, _b;
-        return ((_b = (_a = o.usage) == null ? void 0 : _a.print) == null ? void 0 : _b.category) !== "OFF";
-      }).length,
-      viewableLayers: ocgs.filter((o) => {
-        var _a, _b;
-        return ((_b = (_a = o.usage) == null ? void 0 : _a.view) == null ? void 0 : _b.category) !== "OFF";
-      }).length
+      printableLayers: ocgs.filter((o) => o.usage?.print?.category !== "OFF").length,
+      viewableLayers: ocgs.filter((o) => o.usage?.view?.category !== "OFF").length
     };
   }
   async function extractEmbeddedFiles(doc) {
-    var _a, _b, _c;
     const files = [];
     try {
-      const docObj = await ((_c = (_b = (_a = doc._pdf) == null ? void 0 : _a.catalog) == null ? void 0 : _b.objRef) == null ? void 0 : _c.fetch());
+      const docObj = await doc._pdf?.catalog?.objRef?.fetch();
       if (!docObj) return files;
       const names = await docObj.get("Names");
       if (!names) return files;
@@ -6962,12 +7307,12 @@ ${p.text}`).join("\n\n")
             const modDate = await efDict2.get("ModDate");
             files.push({
               id: efRef.toString(),
-              name: (fileName == null ? void 0 : fileName.value) || `file_${files.length}`,
-              description: (description == null ? void 0 : description.value) || null,
-              mimeType: (mimeType == null ? void 0 : mimeType.value) || "application/octet-stream",
-              size: (size == null ? void 0 : size.value) || 0,
-              creationDate: (creationDate == null ? void 0 : creationDate.value) || null,
-              modDate: (modDate == null ? void 0 : modDate.value) || null,
+              name: fileName?.value || `file_${files.length}`,
+              description: description?.value || null,
+              mimeType: mimeType?.value || "application/octet-stream",
+              size: size?.value || 0,
+              creationDate: creationDate?.value || null,
+              modDate: modDate?.value || null,
               // Raw data not extracted by default (could be large)
               hasData: true
             });
@@ -7009,10 +7354,9 @@ ${p.text}`).join("\n\n")
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   }
   async function extractActions(doc) {
-    var _a, _b, _c;
     const actions = [];
     try {
-      const docObj = await ((_c = (_b = (_a = doc._pdf) == null ? void 0 : _a.catalog) == null ? void 0 : _b.objRef) == null ? void 0 : _c.fetch());
+      const docObj = await doc._pdf?.catalog?.objRef?.fetch();
       if (!docObj) return actions;
       const openAction = await docObj.get("OpenAction");
       if (openAction) {
@@ -7034,7 +7378,6 @@ ${p.text}`).join("\n\n")
     return actions;
   }
   async function extractPageActions(pagesDict, actions, depth) {
-    var _a;
     if (depth > 10) return;
     try {
       const kids = await pagesDict.get("Kids");
@@ -7046,7 +7389,7 @@ ${p.text}`).join("\n\n")
           const kid = await kidRef.fetch();
           if (!kid) continue;
           const type = await kid.get("Type");
-          const typeName = type == null ? void 0 : type.value;
+          const typeName = type?.value;
           if (typeName === "Pages") {
             await extractPageActions(kid, actions, depth + 1);
           } else if (typeName === "Page") {
@@ -7077,7 +7420,7 @@ ${p.text}`).join("\n\n")
                     actions.push({
                       type: "Annotation",
                       page: pageNum,
-                      fieldName: (_a = await annot.get("T")) == null ? void 0 : _a.value,
+                      fieldName: (await annot.get("T"))?.value,
                       trigger: "click",
                       action: await parseAction(a)
                     });
@@ -7094,59 +7437,58 @@ ${p.text}`).join("\n\n")
     }
   }
   async function parseAction(actionRef) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     if (!actionRef) return null;
     try {
-      const actionDict = await ((_a = actionRef.fetch) == null ? void 0 : _a.call(actionRef)) || actionRef;
+      const actionDict = await actionRef.fetch?.() || actionRef;
       if (!actionDict) return null;
       const s = await actionDict.get("S");
-      const actionType = (s == null ? void 0 : s.value) || "Unknown";
+      const actionType = s?.value || "Unknown";
       const result = {
         type: actionType
       };
       switch (actionType) {
         case "GoTo":
           const dest = await actionDict.get("D");
-          result.destination = (dest == null ? void 0 : dest.value) || dest;
+          result.destination = dest?.value || dest;
           break;
         case "GoToR":
-          result.file = (_b = await actionDict.get("F")) == null ? void 0 : _b.value;
-          result.destination = (_c = await actionDict.get("D")) == null ? void 0 : _c.value;
+          result.file = (await actionDict.get("F"))?.value;
+          result.destination = (await actionDict.get("D"))?.value;
           break;
         case "Launch":
-          result.file = (_d = await actionDict.get("F")) == null ? void 0 : _d.value;
-          result.operation = (_e = await actionDict.get("Win")) == null ? void 0 : _e.value;
+          result.file = (await actionDict.get("F"))?.value;
+          result.operation = (await actionDict.get("Win"))?.value;
           break;
         case "JavaScript":
-          result.script = (_f = await actionDict.get("JS")) == null ? void 0 : _f.value;
+          result.script = (await actionDict.get("JS"))?.value;
           break;
         case "Named":
-          result.name = (_g = await actionDict.get("N")) == null ? void 0 : _g.value;
+          result.name = (await actionDict.get("N"))?.value;
           break;
         case "SetOCGState":
           const state = await actionDict.get("State");
-          result.state = state == null ? void 0 : state.value;
+          result.state = state?.value;
           break;
         case "SubmitForm":
-          result.url = (_h = await actionDict.get("F")) == null ? void 0 : _h.value;
-          result.fields = (_i = await actionDict.get("Fields")) == null ? void 0 : _i.value;
+          result.url = (await actionDict.get("F"))?.value;
+          result.fields = (await actionDict.get("Fields"))?.value;
           break;
         case "ResetForm":
-          result.fields = (_j = await actionDict.get("Fields")) == null ? void 0 : _j.value;
+          result.fields = (await actionDict.get("Fields"))?.value;
           break;
         case "Hide":
-          result.targets = (_k = await actionDict.get("T")) == null ? void 0 : _k.value;
-          result.hidden = (_l = await actionDict.get("H")) == null ? void 0 : _l.value;
+          result.targets = (await actionDict.get("T"))?.value;
+          result.hidden = (await actionDict.get("H"))?.value;
           break;
         case "Sound":
         case "Movie":
-          result.sound = (_m = await actionDict.get("S")) == null ? void 0 : _m.value;
+          result.sound = (await actionDict.get("S"))?.value;
           break;
         case "Rendition":
-          result.action = (_n = await actionDict.get("AN")) == null ? void 0 : _n.value;
+          result.action = (await actionDict.get("AN"))?.value;
           break;
         case "Trans":
-          result.trans = (_o = await actionDict.get("Trans")) == null ? void 0 : _o.value;
+          result.trans = (await actionDict.get("Trans"))?.value;
           break;
       }
       return result;
@@ -7155,35 +7497,24 @@ ${p.text}`).join("\n\n")
     }
   }
   function buildActionsSummary(actions) {
-    var _a;
     const byType = {};
     for (const a of actions) {
-      const type = ((_a = a.action) == null ? void 0 : _a.type) || "Unknown";
+      const type = a.action?.type || "Unknown";
       byType[type] = (byType[type] || 0) + 1;
     }
     return {
       count: actions.length,
       hasActions: actions.length > 0,
       byType,
-      hasJavaScript: actions.some((a) => {
-        var _a2;
-        return ((_a2 = a.action) == null ? void 0 : _a2.type) === "JavaScript";
-      }),
-      hasNavigation: actions.some((a) => {
-        var _a2;
-        return ["GoTo", "GoToR", "GoToE"].includes((_a2 = a.action) == null ? void 0 : _a2.type);
-      }),
-      hasFormActions: actions.some((a) => {
-        var _a2;
-        return ["SubmitForm", "ResetForm", "ImportData"].includes((_a2 = a.action) == null ? void 0 : _a2.type);
-      }),
+      hasJavaScript: actions.some((a) => a.action?.type === "JavaScript"),
+      hasNavigation: actions.some((a) => ["GoTo", "GoToR", "GoToE"].includes(a.action?.type)),
+      hasFormActions: actions.some((a) => ["SubmitForm", "ResetForm", "ImportData"].includes(a.action?.type)),
       documentActions: actions.filter((a) => a.type === "Document"),
       pageActions: actions.filter((a) => a.type === "Page"),
       annotationActions: actions.filter((a) => a.type === "Annotation")
     };
   }
   async function extractAppearanceStreams(page) {
-    var _a, _b, _c, _d;
     const appearances = [];
     try {
       const annotations = await page.getAnnotations();
@@ -7194,11 +7525,11 @@ ${p.text}`).join("\n\n")
             fieldName: ann.fieldName,
             type: ann.subtype,
             appearances: {
-              normal: ((_a = ann.appearance) == null ? void 0 : _a.N) ? await extractAppearanceDict(ann.appearance.N) : null,
-              rollover: ((_b = ann.appearance) == null ? void 0 : _b.R) ? await extractAppearanceDict(ann.appearance.R) : null,
-              down: ((_c = ann.appearance) == null ? void 0 : _c.D) ? await extractAppearanceDict(ann.appearance.D) : null
+              normal: ann.appearance?.N ? await extractAppearanceDict(ann.appearance.N) : null,
+              rollover: ann.appearance?.R ? await extractAppearanceDict(ann.appearance.R) : null,
+              down: ann.appearance?.D ? await extractAppearanceDict(ann.appearance.D) : null
             },
-            currentAppearance: ((_d = ann.appearance) == null ? void 0 : _d.N) ? "normal" : null
+            currentAppearance: ann.appearance?.N ? "normal" : null
           };
           appearances.push(appearance);
         }
@@ -7209,15 +7540,14 @@ ${p.text}`).join("\n\n")
     return appearances;
   }
   async function extractAppearanceDict(appearRef) {
-    var _a, _b, _c;
     try {
-      const dict = await ((_a = appearRef.fetch) == null ? void 0 : _a.call(appearRef)) || appearRef;
+      const dict = await appearRef.fetch?.() || appearRef;
       if (!dict) return null;
       if (dict.getBytes) {
         return {
           type: "single",
           hasData: true,
-          size: ((_c = (_b = dict.dict) == null ? void 0 : _b.get("Length")) == null ? void 0 : _c.value) || 0
+          size: dict.dict?.get("Length")?.value || 0
         };
       }
       const result = {
@@ -7250,14 +7580,13 @@ ${p.text}`).join("\n\n")
     };
   }
   function trackXObjectReuse(ir) {
-    var _a, _b, _c, _d;
     const xobjects = {};
     const usageMap = {};
     for (const [pageId, pageData] of Object.entries(ir.pages)) {
       const pageNum = parseInt(pageId.replace("page_", ""));
       for (const vecId of pageData.vectors || []) {
-        const vec = (_a = ir.vectors) == null ? void 0 : _a[vecId];
-        if ((_b = vec == null ? void 0 : vec.raw) == null ? void 0 : _b.xObject) {
+        const vec = ir.vectors?.[vecId];
+        if (vec?.raw?.xObject) {
           const xobjId = vec.raw.xObject;
           if (!xobjects[xobjId]) {
             xobjects[xobjId] = {
@@ -7272,8 +7601,8 @@ ${p.text}`).join("\n\n")
         }
       }
       for (const textId of pageData.content || []) {
-        const text = (_c = ir.objects) == null ? void 0 : _c[textId];
-        if ((_d = text == null ? void 0 : text.raw) == null ? void 0 : _d.xObject) {
+        const text = ir.objects?.[textId];
+        if (text?.raw?.xObject) {
           const xobjId = text.raw.xObject;
           if (!xobjects[xobjId]) {
             xobjects[xobjId] = {
@@ -7328,7 +7657,7 @@ ${p.text}`).join("\n\n")
       const pdf = doc._pdf;
       if (!pdf) return revisions;
       const meta = await pdf.getMetadata();
-      const info = (meta == null ? void 0 : meta.info) || {};
+      const info = meta?.info || {};
       revisions.push({
         version: 1,
         type: "original",
@@ -7338,7 +7667,7 @@ ${p.text}`).join("\n\n")
         creator: info.Creator || null
       });
       const trailer = pdf.trailer;
-      if (trailer == null ? void 0 : trailer.Prev) {
+      if (trailer?.Prev) {
         revisions.push({
           version: 2,
           type: "incremental",
@@ -7370,9 +7699,8 @@ ${p.text}`).join("\n\n")
     const issues = [];
     let score = 1;
     const invisibleText = contentItems.filter((item) => {
-      var _a, _b;
-      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+      const x = item.transform?.[4] || 0;
+      const y = item.transform?.[5] || 0;
       return x < 0 || x > pageSize.width || y < 0 || y > pageSize.height;
     });
     if (invisibleText.length > 0) {
@@ -7455,9 +7783,8 @@ ${p.text}`).join("\n\n")
       score -= 0.05;
     }
     const clippedText = contentItems.filter((item) => {
-      var _a, _b;
-      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+      const x = item.transform?.[4] || 0;
+      const y = item.transform?.[5] || 0;
       const w = item.width || 0;
       const h = item.height || 0;
       return x + w > pageSize.width + 10 || y + h > pageSize.height + 10;
@@ -7537,19 +7864,15 @@ ${p.text}`).join("\n\n")
     return duplicates;
   }
   function compareVisualInternal(pageData, visualRegions, contentItems) {
-    var _a, _b;
     const discrepancies = [];
-    const internalTextRegions = contentItems.filter((item) => item.str && item.str.trim().length > 0).map((item) => {
-      var _a2, _b2;
-      return {
-        x: ((_a2 = item.transform) == null ? void 0 : _a2[4]) || 0,
-        y: ((_b2 = item.transform) == null ? void 0 : _b2[5]) || 0,
-        width: item.width || 0,
-        height: item.height || 0,
-        text: item.str
-      };
-    });
-    const visualTextRegions = (visualRegions == null ? void 0 : visualRegions.textRegions) || [];
+    const internalTextRegions = contentItems.filter((item) => item.str && item.str.trim().length > 0).map((item) => ({
+      x: item.transform?.[4] || 0,
+      y: item.transform?.[5] || 0,
+      width: item.width || 0,
+      height: item.height || 0,
+      text: item.str
+    }));
+    const visualTextRegions = visualRegions?.textRegions || [];
     for (const vRegion of visualTextRegions) {
       const matchingInternal = internalTextRegions.find(
         (iRegion) => Math.abs(iRegion.x - vRegion.x) < 10 && Math.abs(iRegion.y - vRegion.y) < 10
@@ -7577,8 +7900,8 @@ ${p.text}`).join("\n\n")
         });
       }
     }
-    const internalImageCount = ((_a = pageData.images) == null ? void 0 : _a.length) || 0;
-    const visualImageCount = ((_b = visualRegions == null ? void 0 : visualRegions.imageRegions) == null ? void 0 : _b.length) || 0;
+    const internalImageCount = pageData.images?.length || 0;
+    const visualImageCount = visualRegions?.imageRegions?.length || 0;
     if (Math.abs(internalImageCount - visualImageCount) > 0) {
       discrepancies.push({
         type: "image_count_mismatch",
@@ -7589,8 +7912,7 @@ ${p.text}`).join("\n\n")
       });
     }
     const hiddenText = contentItems.filter((item) => {
-      var _a2;
-      const fontSize = Math.abs((_a2 = item.transform) == null ? void 0 : _a2[0]) || 12;
+      const fontSize = Math.abs(item.transform?.[0]) || 12;
       return fontSize < 2 && item.str && item.str.trim().length > 0;
     });
     if (hiddenText.length > 0) {
@@ -7614,7 +7936,6 @@ ${p.text}`).join("\n\n")
     };
   }
   function detectRepeatedElements(pageResults2, allContentItems) {
-    var _a, _b, _c;
     const results = {
       watermarks: [],
       headers: [],
@@ -7625,10 +7946,10 @@ ${p.text}`).join("\n\n")
     const bottomElements = [];
     const centerElements = [];
     for (const [pageId, content] of Object.entries(allContentItems)) {
-      const pageHeight = ((_b = (_a = pageResults2[pageId]) == null ? void 0 : _a.pageSize) == null ? void 0 : _b.height) || 792;
+      const pageHeight = pageResults2[pageId]?.pageSize?.height || 792;
       for (const item of content) {
         if (!item.str || item.str.trim().length === 0) continue;
-        const y = ((_c = item.transform) == null ? void 0 : _c[5]) || 0;
+        const y = item.transform?.[5] || 0;
         const normalizedY = y / pageHeight;
         if (normalizedY > 0.9) {
           topElements.push({ text: item.str.trim(), page: pageId, y });
@@ -7701,9 +8022,8 @@ ${p.text}`).join("\n\n")
         const [r, g, b] = vec.fillColor;
         if (r < 0.1 && g < 0.1 && b < 0.1) {
           const coveredText = contentItems.filter((item) => {
-            var _a, _b;
-            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+            const x = item.transform?.[4] || 0;
+            const y = item.transform?.[5] || 0;
             return x >= vec.bbox[0] && x <= vec.bbox[2] && y >= vec.bbox[1] && y <= vec.bbox[3];
           });
           if (coveredText.length > 0) {
@@ -7720,7 +8040,6 @@ ${p.text}`).join("\n\n")
     return redactions;
   }
   function validateTags(pageData, structureTree, contentItems) {
-    var _a;
     const issues = [];
     if (!structureTree) {
       issues.push({
@@ -7736,7 +8055,7 @@ ${p.text}`).join("\n\n")
         (item) => item.str && item.str.includes(heading.text)
       );
       if (matchingText) {
-        const fontSize = Math.abs((_a = matchingText.transform) == null ? void 0 : _a[0]) || 12;
+        const fontSize = Math.abs(matchingText.transform?.[0]) || 12;
         if (fontSize < 14) {
           issues.push({
             type: "fake_heading",
@@ -7822,19 +8141,12 @@ ${p.text}`).join("\n\n")
     return broken;
   }
   function calculateRAGReadiness(pageResults2, textQuality, visualComparison, repeatedElements) {
-    var _a, _b, _c;
     let score = 1;
     const factors = [];
-    const avgTextQuality = pageResults2.reduce((sum, p) => {
-      var _a2;
-      return sum + (((_a2 = p.textQuality) == null ? void 0 : _a2.score) || 1);
-    }, 0) / pageResults2.length;
+    const avgTextQuality = pageResults2.reduce((sum, p) => sum + (p.textQuality?.score || 1), 0) / pageResults2.length;
     score *= avgTextQuality;
     factors.push({ factor: "text_quality", impact: avgTextQuality });
-    const avgVisualAgreement = pageResults2.reduce((sum, p) => {
-      var _a2;
-      return sum + (((_a2 = p.visualComparison) == null ? void 0 : _a2.score) || 1);
-    }, 0) / pageResults2.length;
+    const avgVisualAgreement = pageResults2.reduce((sum, p) => sum + (p.visualComparison?.score || 1), 0) / pageResults2.length;
     score *= avgVisualAgreement;
     factors.push({ factor: "visual_agreement", impact: avgVisualAgreement });
     const pagesWithStructure = pageResults2.filter((p) => p.hasStructureTree).length;
@@ -7845,19 +8157,16 @@ ${p.text}`).join("\n\n")
     const readingOrderRatio = pagesWithReadingOrder / pageResults2.length;
     score *= 0.5 + readingOrderRatio * 0.5;
     factors.push({ factor: "reading_order", impact: readingOrderRatio });
-    const headerFooterCount = (((_a = repeatedElements.headers) == null ? void 0 : _a.length) || 0) + (((_b = repeatedElements.footers) == null ? void 0 : _b.length) || 0);
+    const headerFooterCount = (repeatedElements.headers?.length || 0) + (repeatedElements.footers?.length || 0);
     if (headerFooterCount > 0) {
       score *= 0.9;
       factors.push({ factor: "header_footer_pollution", impact: 0.9 });
     }
-    if (((_c = repeatedElements.watermarks) == null ? void 0 : _c.length) > 0) {
+    if (repeatedElements.watermarks?.length > 0) {
       score *= 0.95;
       factors.push({ factor: "watermarks", impact: 0.95 });
     }
-    const totalDuplicates = pageResults2.reduce((sum, p) => {
-      var _a2, _b2;
-      return sum + (((_b2 = (_a2 = p.textQuality) == null ? void 0 : _a2.summary) == null ? void 0 : _b2.duplicates) || 0);
-    }, 0);
+    const totalDuplicates = pageResults2.reduce((sum, p) => sum + (p.textQuality?.summary?.duplicates || 0), 0);
     if (totalDuplicates > 0) {
       score *= 0.95;
       factors.push({ factor: "duplicate_text", impact: 0.95 });
@@ -7956,9 +8265,8 @@ ${p.text}`).join("\n\n")
           y2: rows[r + 1]
         };
         const cellText = textItems.filter((item) => {
-          var _a, _b;
-          const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-          const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+          const x = item.transform?.[4] || 0;
+          const y = item.transform?.[5] || 0;
           return x >= cellBbox.x1 && x <= cellBbox.x2 && y >= cellBbox.y1 && y <= cellBbox.y2;
         });
         table.cells.push({
@@ -7991,7 +8299,6 @@ ${p.text}`).join("\n\n")
     return table;
   }
   function diagnoseDocument(pageResults2, graph) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
     const ir = graph.getIR();
     const issues = {
       scannedPages: 0,
@@ -8018,26 +8325,26 @@ ${p.text}`).join("\n\n")
       if (page.readingOrder === 0 && page.contentBlocks > 3) {
         issues.readingOrderProblems++;
       }
-      issues.duplicateText += ((_b = (_a = page.textQuality) == null ? void 0 : _a.summary) == null ? void 0 : _b.duplicates) || 0;
-      if (((_c = page.structures) == null ? void 0 : _c.tables) && !page.hasStructureTree) {
+      issues.duplicateText += page.textQuality?.summary?.duplicates || 0;
+      if (page.structures?.tables && !page.hasStructureTree) {
         issues.untaggedTables += page.structures.tables;
       }
-      issues.unrecognizedImages += ((_e = (_d = page.visual) == null ? void 0 : _d.imageRegions) == null ? void 0 : _e.length) || 0;
+      issues.unrecognizedImages += page.visual?.imageRegions?.length || 0;
       if (page.source === "ocr" && page.confidence && page.confidence < 70) {
         issues.suspiciousOCR++;
       }
-      issues.accessibilityFailures += ((_g = (_f = page.markedContent) == null ? void 0 : _f.filter((m) => m.isArtifact)) == null ? void 0 : _g.length) || 0;
-      issues.invisibleText += ((_i = (_h = page.textQuality) == null ? void 0 : _h.summary) == null ? void 0 : _i.invisibleText) || 0;
-      issues.clippedText += ((_k = (_j = page.textQuality) == null ? void 0 : _j.summary) == null ? void 0 : _k.clippedText) || 0;
-      totalScore += ((_l = page.textQuality) == null ? void 0 : _l.score) || 1;
+      issues.accessibilityFailures += page.markedContent?.filter((m) => m.isArtifact)?.length || 0;
+      issues.invisibleText += page.textQuality?.summary?.invisibleText || 0;
+      issues.clippedText += page.textQuality?.summary?.clippedText || 0;
+      totalScore += page.textQuality?.score || 1;
     }
-    issues.watermarks = ((_o = (_n = (_m = pageResults2[0]) == null ? void 0 : _m.repeatedElements) == null ? void 0 : _n.watermarks) == null ? void 0 : _o.length) || 0;
+    issues.watermarks = pageResults2[0]?.repeatedElements?.watermarks?.length || 0;
     const avgScore = totalScore / pageResults2.length;
     const ragReadiness = calculateRAGReadiness(
       pageResults2,
       null,
       null,
-      ((_p = pageResults2[0]) == null ? void 0 : _p.repeatedElements) || {}
+      pageResults2[0]?.repeatedElements || {}
     );
     return {
       score: Math.round(avgScore * 100),
@@ -8054,7 +8361,6 @@ ${p.text}`).join("\n\n")
     };
   }
   function normalizeDocument(graph, options = {}) {
-    var _a, _b, _c, _d, _e;
     const {
       readingOrder = true,
       ocr = "auto",
@@ -8071,8 +8377,8 @@ ${p.text}`).join("\n\n")
     if (fixHyphenation || fixLigatures) {
       for (const [pageId, pageData] of Object.entries(ir.pages)) {
         for (const textId of pageData.content || []) {
-          const textObj = (_a = ir.objects) == null ? void 0 : _a[textId];
-          if ((_b = textObj == null ? void 0 : textObj.raw) == null ? void 0 : _b.text) {
+          const textObj = ir.objects?.[textId];
+          if (textObj?.raw?.text) {
             const original = textObj.raw.text;
             textObj.raw.text = normalizeText(original);
             if (original !== textObj.raw.text) {
@@ -8091,8 +8397,8 @@ ${p.text}`).join("\n\n")
         const seen = /* @__PURE__ */ new Set();
         const uniqueContent = [];
         for (const textId of pageData.content || []) {
-          const textObj = (_c = ir.objects) == null ? void 0 : _c[textId];
-          const text = ((_d = textObj == null ? void 0 : textObj.raw) == null ? void 0 : _d.text) || "";
+          const textObj = ir.objects?.[textId];
+          const text = textObj?.raw?.text || "";
           const normalized = text.toLowerCase().trim();
           if (!seen.has(normalized) || normalized.length < 5) {
             seen.add(normalized);
@@ -8111,11 +8417,8 @@ ${p.text}`).join("\n\n")
     }
     if (tables) {
       for (const [pageId, pageData] of Object.entries(ir.pages)) {
-        if (((_e = pageData.vectors) == null ? void 0 : _e.length) > 0) {
-          const textItems = (pageData.content || []).map((id) => {
-            var _a2;
-            return (_a2 = ir.objects) == null ? void 0 : _a2[id];
-          }).filter(Boolean).map((obj) => obj.raw);
+        if (pageData.vectors?.length > 0) {
+          const textItems = (pageData.content || []).map((id) => ir.objects?.[id]).filter(Boolean).map((obj) => obj.raw);
           const reconstructed = reconstructTable(pageData.vectors, textItems, pageData);
           if (reconstructed.cells.length > 0) {
             pageData.reconstructedTable = reconstructed;
@@ -8170,13 +8473,12 @@ ${p.text}`).join("\n\n")
     return result;
   }
   function detectSkewFromText(items) {
-    var _a, _b;
     if (items.length < 5) return { angle: 0, confidence: 0 };
     const baselines = [];
     for (const item of items) {
       if (!item.str || item.str.trim().length < 2) continue;
-      const y = ((_a = item.transform) == null ? void 0 : _a[5]) || 0;
-      const x = ((_b = item.transform) == null ? void 0 : _b[4]) || 0;
+      const y = item.transform?.[5] || 0;
+      const x = item.transform?.[4] || 0;
       baselines.push({ x, y });
     }
     if (baselines.length < 3) return { angle: 0, confidence: 0 };
@@ -8199,20 +8501,10 @@ ${p.text}`).join("\n\n")
     return { angle: avgAngle, confidence };
   }
   function detectTextDirection(items) {
-    var _a, _b, _c, _d;
     if (items.length < 3) return "horizontal";
-    const sortedByY = [...items].sort((a, b) => {
-      var _a2, _b2;
-      return (((_a2 = b.transform) == null ? void 0 : _a2[5]) || 0) - (((_b2 = a.transform) == null ? void 0 : _b2[5]) || 0);
-    });
-    const yVariance = calculateVariance(sortedByY.map((i) => {
-      var _a2;
-      return ((_a2 = i.transform) == null ? void 0 : _a2[5]) || 0;
-    }));
-    const xVariance = calculateVariance(sortedByY.map((i) => {
-      var _a2;
-      return ((_a2 = i.transform) == null ? void 0 : _a2[4]) || 0;
-    }));
+    const sortedByY = [...items].sort((a, b) => (b.transform?.[5] || 0) - (a.transform?.[5] || 0));
+    const yVariance = calculateVariance(sortedByY.map((i) => i.transform?.[5] || 0));
+    const xVariance = calculateVariance(sortedByY.map((i) => i.transform?.[4] || 0));
     if (yVariance > xVariance * 2) {
       return "vertical";
     }
@@ -8220,7 +8512,7 @@ ${p.text}`).join("\n\n")
     for (let i = 1; i < items.length; i++) {
       const prev = items[i - 1];
       const curr = items[i];
-      if ((((_a = curr.transform) == null ? void 0 : _a[4]) || 0) > (((_b = prev.transform) == null ? void 0 : _b[4]) || 0) && (((_c = curr.transform) == null ? void 0 : _c[5]) || 0) < (((_d = prev.transform) == null ? void 0 : _d[5]) || 0)) {
+      if ((curr.transform?.[4] || 0) > (prev.transform?.[4] || 0) && (curr.transform?.[5] || 0) < (prev.transform?.[5] || 0)) {
         upsideDownCount++;
       }
     }
@@ -8330,9 +8622,8 @@ ${p.text}`).join("\n\n")
         const aspectRatio = width / height;
         if (aspectRatio > 0.2 && aspectRatio < 5 && height > 5 && height < 100) {
           const overlappingText = contentItems.filter((item) => {
-            var _a, _b;
-            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+            const x = item.transform?.[4] || 0;
+            const y = item.transform?.[5] || 0;
             return x >= bbox[0] - 5 && x <= bbox[2] + 5 && y >= bbox[1] - 5 && y <= bbox[3] + 5;
           });
           if (overlappingText.length === 0) {
@@ -8390,9 +8681,8 @@ ${p.text}`).join("\n\n")
         const height = bbox[3] - bbox[1];
         if (width > 50 && width < 400 && height > 10 && height < 50) {
           const nearbyText = contentItems.filter((item) => {
-            var _a, _b;
-            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+            const x = item.transform?.[4] || 0;
+            const y = item.transform?.[5] || 0;
             return x < bbox[0] && Math.abs(y - bbox[1]) < height;
           });
           if (nearbyText.length > 0) {
@@ -8410,9 +8700,8 @@ ${p.text}`).join("\n\n")
   function recoverFormField(pattern, contentItems) {
     const bbox = pattern.bbox;
     const insideText = contentItems.filter((item) => {
-      var _a, _b;
-      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+      const x = item.transform?.[4] || 0;
+      const y = item.transform?.[5] || 0;
       return x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3];
     });
     if (insideText.length > 0) {
@@ -8443,9 +8732,8 @@ ${p.text}`).join("\n\n")
         const height = bbox[3] - bbox[1];
         if (width > 8 && width < 30 && height > 8 && height < 30 && Math.abs(width - height) < 5) {
           const nearbyLabel = contentItems.filter((item) => {
-            var _a, _b;
-            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+            const x = item.transform?.[4] || 0;
+            const y = item.transform?.[5] || 0;
             return x > bbox[2] && Math.abs(y - bbox[1]) < height * 2;
           });
           const isFilled = detectCheckmarkInArea(bbox, vectors);
@@ -8464,9 +8752,8 @@ ${p.text}`).join("\n\n")
         const diameter = bbox[2] - bbox[0];
         if (diameter > 8 && diameter < 30) {
           const nearbyLabel = contentItems.filter((item) => {
-            var _a, _b;
-            const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-            const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+            const x = item.transform?.[4] || 0;
+            const y = item.transform?.[5] || 0;
             return x > bbox[2] && Math.abs(y - bbox[1]) < diameter * 2;
           });
           const isFilled = detectCheckmarkInArea(bbox, vectors);
@@ -8561,16 +8848,14 @@ ${p.text}`).join("\n\n")
     for (const image of images) {
       const imageBbox = image.bbox;
       const captionsBelow = contentItems.filter((item) => {
-        var _a, _b;
-        const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-        const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+        const x = item.transform?.[4] || 0;
+        const y = item.transform?.[5] || 0;
         const text = item.str || "";
         return y < imageBbox.y && y > imageBbox.y - 50 && Math.abs(x + (item.width || 0) / 2 - (imageBbox.x + imageBbox.width / 2)) < imageBbox.width && (text.startsWith("Figure") || text.startsWith("Image") || text.startsWith("Table") || text.startsWith("Fig.") || text.startsWith("Img.") || /^\d+\./.test(text));
       });
       const titlesAbove = contentItems.filter((item) => {
-        var _a, _b;
-        const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-        const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+        const x = item.transform?.[4] || 0;
+        const y = item.transform?.[5] || 0;
         const text = item.str || "";
         return y > imageBbox.y + imageBbox.height && y < imageBbox.y + imageBbox.height + 30 && Math.abs(x + (item.width || 0) / 2 - (imageBbox.x + imageBbox.width / 2)) < imageBbox.width * 1.5 && text.length > 5;
       });
@@ -8589,28 +8874,27 @@ ${p.text}`).join("\n\n")
     return associations;
   }
   function detectFootnotes(contentItems, pageData) {
-    var _a, _b, _c, _d, _e, _f;
     const footnotes = [];
     const footnoteRefs = [];
     for (const item of contentItems) {
       const text = item.str || "";
-      const fontSize = Math.abs((_a = item.transform) == null ? void 0 : _a[0]) || 12;
+      const fontSize = Math.abs(item.transform?.[0]) || 12;
       if (/^\d{1,3}$/.test(text) && fontSize < 10) {
         footnoteRefs.push({
           text,
-          bbox: [((_b = item.transform) == null ? void 0 : _b[4]) || 0, ((_c = item.transform) == null ? void 0 : _c[5]) || 0],
+          bbox: [item.transform?.[4] || 0, item.transform?.[5] || 0],
           fontSize,
           type: "footnote_reference"
         });
       }
       if (/^\d{1,2}\.\s/.test(text) || /^[a-z]\.\s/.test(text)) {
-        const y = ((_d = item.transform) == null ? void 0 : _d[5]) || 0;
+        const y = item.transform?.[5] || 0;
         const pageHeight = pageData.height || 792;
         if (y < pageHeight * 0.2) {
           footnotes.push({
             text,
-            bbox: [((_e = item.transform) == null ? void 0 : _e[4]) || 0, y],
-            marker: (_f = text.match(/^(\d{1,2}|[a-z])\./)) == null ? void 0 : _f[1],
+            bbox: [item.transform?.[4] || 0, y],
+            marker: text.match(/^(\d{1,2}|[a-z])\./)?.[1],
             type: "footnote"
           });
         }
@@ -8678,7 +8962,7 @@ ${p.text}`).join("\n\n")
   }
   function detectMalformedPDF(pdf) {
     const hints = [];
-    if (!(pdf == null ? void 0 : pdf.catalog)) {
+    if (!pdf?.catalog) {
       hints.push({
         type: "missing_catalog",
         severity: "error",
@@ -8686,7 +8970,7 @@ ${p.text}`).join("\n\n")
         recovery: "Try opening with a repair-capable PDF library"
       });
     }
-    if (pdf == null ? void 0 : pdf.xrefBroken) {
+    if (pdf?.xrefBroken) {
       hints.push({
         type: "broken_xref",
         severity: "error",
@@ -8694,7 +8978,7 @@ ${p.text}`).join("\n\n")
         recovery: "Rebuild xref table using repair tools"
       });
     }
-    if (!(pdf == null ? void 0 : pdf.pages)) {
+    if (!pdf?.pages) {
       hints.push({
         type: "missing_pages",
         severity: "error",
@@ -8702,7 +8986,7 @@ ${p.text}`).join("\n\n")
         recovery: "Extract pages using alternative methods"
       });
     }
-    if ((pdf == null ? void 0 : pdf.encrypted) && !(pdf == null ? void 0 : pdf.password)) {
+    if (pdf?.encrypted && !pdf?.password) {
       hints.push({
         type: "encrypted_no_password",
         severity: "warning",
@@ -8710,7 +8994,7 @@ ${p.text}`).join("\n\n")
         recovery: "Provide password or use decryption tools"
       });
     }
-    if (pdf == null ? void 0 : pdf.truncated) {
+    if (pdf?.truncated) {
       hints.push({
         type: "truncated_file",
         severity: "error",
@@ -9298,7 +9582,6 @@ ${p.text}`).join("\n\n")
     }
   };
   function extractRelationships(contentGraph, conceptGraph) {
-    var _a, _b, _c;
     const relationships = [];
     const pageEntityMap = /* @__PURE__ */ new Map();
     for (const entity of contentGraph.allEntities) {
@@ -9463,20 +9746,17 @@ ${p.text}`).join("\n\n")
       }
     }
     for (const [page, pageHeadings] of headingsByPage) {
-      pageHeadings.sort((a, b) => {
-        var _a2, _b2;
-        return (((_a2 = a.bbox) == null ? void 0 : _a2[1]) || 0) - (((_b2 = b.bbox) == null ? void 0 : _b2[1]) || 0);
-      });
+      pageHeadings.sort((a, b) => (a.bbox?.[1] || 0) - (b.bbox?.[1] || 0));
       for (let i = 0; i < pageHeadings.length; i++) {
         const heading = pageHeadings[i];
-        const headingId = `heading:${(_a = heading.text) == null ? void 0 : _a.substring(0, 50)}:${page}`;
+        const headingId = `heading:${heading.text?.substring(0, 50)}:${page}`;
         conceptGraph.addNode(new ConceptNode(headingId, "heading", heading.text || "", {
           page,
           bbox: heading.bbox
         }));
-        const nextY = i < pageHeadings.length - 1 ? ((_b = pageHeadings[i + 1].bbox) == null ? void 0 : _b[1]) || Infinity : Infinity;
+        const nextY = i < pageHeadings.length - 1 ? pageHeadings[i + 1].bbox?.[1] || Infinity : Infinity;
         for (const entity of contentGraph.allEntities) {
-          if (entity.page === page && entity.bbox && entity.bbox[1] > (((_c = heading.bbox) == null ? void 0 : _c[1]) || 0) && entity.bbox[1] < nextY) {
+          if (entity.page === page && entity.bbox && entity.bbox[1] > (heading.bbox?.[1] || 0) && entity.bbox[1] < nextY) {
             const entityId = `${entity.type}:${entity.value}`;
             conceptGraph.addEdge(new ConceptEdge(headingId, entityId, "heading_section", {
               weight: 0.9,
@@ -9495,7 +9775,7 @@ ${p.text}`).join("\n\n")
         }
       }
     }
-    const definitionPages = ((contentGraph == null ? void 0 : contentGraph.pages) || []).map((p) => ({
+    const definitionPages = (contentGraph?.pages || []).map((p) => ({
       pageNum: p.page,
       text: (p.blocks || []).map((b) => b.text || "").join("\n")
     }));
@@ -9594,15 +9874,14 @@ ${p.text}`).join("\n\n")
      * Build fingerprint from a DocumentGraph.
      */
     static fromGraph(graph, ir) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
       const fp = new _CodbFingerprint();
-      fp.toc = (((_a = graph.layout) == null ? void 0 : _a.getAllHeadings()) || []).map((h) => ({
+      fp.toc = (graph.layout?.getAllHeadings() || []).map((h) => ({
         text: h.text,
         level: h.level,
         page: h.page,
         position: h.y
       }));
-      const entities = ((_b = graph._contentGraph) == null ? void 0 : _b.allEntities) || [];
+      const entities = graph._contentGraph?.allEntities || [];
       for (const entity of entities) {
         const key = `${entity.type}:${(entity.value || "").toLowerCase()}`;
         if (!fp.entityRegistry.has(key)) {
@@ -9619,17 +9898,17 @@ ${p.text}`).join("\n\n")
         }
         entry.count++;
       }
-      fp.layoutSignature.columnCounts = ((_d = (_c = graph.layout) == null ? void 0 : _c.pages) == null ? void 0 : _d.map((p) => p.columns)) || [];
+      fp.layoutSignature.columnCounts = graph.layout?.pages?.map((p) => p.columns) || [];
       const pageTypes = {};
       for (const c of graph.classifications || []) {
         pageTypes[c.type] = (pageTypes[c.type] || 0) + 1;
       }
       fp.layoutSignature.pageTypes = pageTypes;
-      fp.layoutSignature.flowPattern = ((_g = (_f = (_e = graph.layout) == null ? void 0 : _e.pages) == null ? void 0 : _f[0]) == null ? void 0 : _g.flow) || "unknown";
+      fp.layoutSignature.flowPattern = graph.layout?.pages?.[0]?.flow || "unknown";
       fp.structureProfile = {
-        tableCount: ((_i = (_h = graph.structure) == null ? void 0 : _h.tables) == null ? void 0 : _i.length) || 0,
-        formCount: ((_k = (_j = graph.structure) == null ? void 0 : _j.forms) == null ? void 0 : _k.length) || 0,
-        listCount: ((_m = (_l = graph.structure) == null ? void 0 : _l.lists) == null ? void 0 : _m.length) || 0,
+        tableCount: graph.structure?.tables?.length || 0,
+        formCount: graph.structure?.forms?.length || 0,
+        listCount: graph.structure?.lists?.length || 0,
         headingCount: fp.toc.length
       };
       fp.topicVector = buildTopicVector(graph);
@@ -9645,8 +9924,8 @@ ${p.text}`).join("\n\n")
       }
       fp.metadata = {
         pageCount: graph.pageCount,
-        wordCount: ((_n = graph.text) == null ? void 0 : _n.wordCount) || 0,
-        documentType: ((_p = (_o = graph._contentGraph) == null ? void 0 : _o.documentType) == null ? void 0 : _p.type) || "unknown"
+        wordCount: graph.text?.wordCount || 0,
+        documentType: graph._contentGraph?.documentType?.type || "unknown"
       };
       return fp;
     }
@@ -9755,7 +10034,6 @@ ${p.text}`).join("\n\n")
     return score;
   }
   function hybridSearch(graph, query, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g;
     const {
       maxResults = 20,
       minScore = 0.1,
@@ -9767,11 +10045,8 @@ ${p.text}`).join("\n\n")
     const contentGraph = graph._contentGraph;
     const fingerprint = graph._fingerprint;
     const conceptGr = graph._conceptGraph;
-    const pages = ((_a = graph.text) == null ? void 0 : _a.pages) || [];
-    const avgDocLength = pages.reduce((s, p) => {
-      var _a2;
-      return s + (((_a2 = p.text) == null ? void 0 : _a2.length) || 0);
-    }, 0) / (pages.length || 1);
+    const pages = graph.text?.pages || [];
+    const avgDocLength = pages.reduce((s, p) => s + (p.text?.length || 0), 0) / (pages.length || 1);
     const expandedTerms = useExpansion ? expandQuery(query, { includeSynonyms: true, includeStems: true }) : [{ term: query.toLowerCase(), weight: 1, sources: ["original"] }];
     const queryLower = query.toLowerCase();
     const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 1);
@@ -9808,10 +10083,10 @@ ${p.text}`).join("\n\n")
           signals.concept += expanded.weight;
         }
       }
-      const pageEntities = ((_b = contentGraph == null ? void 0 : contentGraph.allEntities) == null ? void 0 : _b.filter((e) => e.page === pageNum)) || [];
+      const pageEntities = contentGraph?.allEntities?.filter((e) => e.page === pageNum) || [];
       signals.entity = entityScore(query, pageEntities);
-      const pageBlocks = ((_c = contentGraph == null ? void 0 : contentGraph.allBlocks) == null ? void 0 : _c.filter((b) => b.page === pageNum)) || [];
-      const headings = ((_d = graph.layout) == null ? void 0 : _d.getHeadings(pageNum)) || [];
+      const pageBlocks = contentGraph?.allBlocks?.filter((b) => b.page === pageNum) || [];
+      const headings = graph.layout?.getHeadings(pageNum) || [];
       signals.structure = structureScore(query, pageBlocks, headings);
       signals.relationship = 0;
       if (conceptGr) {
@@ -9837,12 +10112,12 @@ ${p.text}`).join("\n\n")
       }
       signals.context = 0;
       for (const heading of headings) {
-        if ((_e = heading.text) == null ? void 0 : _e.toLowerCase().includes(queryLower)) {
+        if (heading.text?.toLowerCase().includes(queryLower)) {
           signals.context += 2;
         }
       }
-      const pageInfo = (_f = graph._pageResults) == null ? void 0 : _f[pageNum - 1];
-      if ((_g = pageInfo == null ? void 0 : pageInfo.classification) == null ? void 0 : _g.type) {
+      const pageInfo = graph._pageResults?.[pageNum - 1];
+      if (pageInfo?.classification?.type) {
         const classType = pageInfo.classification.type.toLowerCase();
         for (const term of queryTerms) {
           if (classType.includes(term)) signals.context += 1;
@@ -9931,12 +10206,11 @@ ${p.text}`).join("\n\n")
     const expandedText = expandedTerms.map((e) => e.term).join(" ");
     const candidates = results.slice(0, topK);
     const reranked = candidates.map((result) => {
-      var _a, _b, _c;
       let rerankScore = result.score;
       const bonuses = {};
       const activeSignals = Object.values(result.signals || {}).filter((s) => s > 0).length;
       bonuses.multiSignal = activeSignals >= 3 ? 0.15 : activeSignals >= 2 ? 0.08 : 0;
-      if (((_a = result.entities) == null ? void 0 : _a.length) > 0) {
+      if (result.entities?.length > 0) {
         for (const entity of result.entities) {
           const entityVal = (entity.value || "").toLowerCase();
           if (queryLower.includes(entityVal)) {
@@ -9945,10 +10219,10 @@ ${p.text}`).join("\n\n")
           }
         }
       }
-      if (((_b = result.signals) == null ? void 0 : _b.concept) > 1) {
+      if (result.signals?.concept > 1) {
         bonuses.conceptAgreement = 0.1;
       }
-      if (((_c = result.signals) == null ? void 0 : _c.structure) > 2) {
+      if (result.signals?.structure > 2) {
         bonuses.structuralRelevance = 0.1;
       }
       if ((result.text || "").length < 50) {
@@ -10133,7 +10407,6 @@ ${p.text}`).join("\n\n")
     const intent = detectIntent(query);
     const queryLower = query.toLowerCase();
     return results.map((result) => {
-      var _a, _b, _c;
       const explanation = [];
       const reasons = [];
       if (result.contributions) {
@@ -10149,23 +10422,20 @@ ${p.text}`).join("\n\n")
           }
         }
       }
-      if (intent.type === QueryIntent.ENTITY_SEARCH && ((_a = result.entities) == null ? void 0 : _a.length) > 0) {
+      if (intent.type === QueryIntent.ENTITY_SEARCH && result.entities?.length > 0) {
         const matchingEntities = result.entities.filter(
-          (e) => {
-            var _a2;
-            return (_a2 = e.value) == null ? void 0 : _a2.toLowerCase().includes(queryLower);
-          }
+          (e) => e.value?.toLowerCase().includes(queryLower)
         );
         if (matchingEntities.length > 0) {
           reasons.push({ signal: "exact_entity_match", value: matchingEntities[0].value, contribution: 0.25 });
           explanation.push(`Exact ${intent.entityType || "entity"} match: ${matchingEntities[0].value}`);
         }
       }
-      if (intent.type === QueryIntent.TABLE_QUERY && ((_b = result.signals) == null ? void 0 : _b.structure) > 0) {
+      if (intent.type === QueryIntent.TABLE_QUERY && result.signals?.structure > 0) {
         reasons.push({ signal: "table_structure", contribution: 0.15 });
         explanation.push("Contains table structure");
       }
-      if (intent.type === QueryIntent.RELATIONSHIP_LOOKUP && ((_c = result.signals) == null ? void 0 : _c.relationship) > 0) {
+      if (intent.type === QueryIntent.RELATIONSHIP_LOOKUP && result.signals?.relationship > 0) {
         reasons.push({ signal: "relationship_evidence", contribution: 0.2 });
         explanation.push("Contains relationship evidence");
       }
@@ -10179,13 +10449,12 @@ ${p.text}`).join("\n\n")
     });
   }
   function operatorCount(graph, criteria) {
-    var _a, _b, _c, _d;
     const { entityType, blockType, page, textContains } = criteria;
     let items = [];
     if (entityType) {
-      items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+      items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     } else if (blockType) {
-      items = ((_d = (_c = graph._contentGraph) == null ? void 0 : _c.allBlocks) == null ? void 0 : _d.filter((b) => b.type === blockType)) || [];
+      items = graph._contentGraph?.allBlocks?.filter((b) => b.type === blockType) || [];
     }
     if (page) {
       items = items.filter((i) => i.page === page);
@@ -10204,9 +10473,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorSum(graph, criteria) {
-    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     if (page) {
       items = items.filter((i) => i.page === page);
     }
@@ -10230,9 +10498,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorMax(graph, criteria) {
-    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     if (page) items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
@@ -10258,9 +10525,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorMin(graph, criteria) {
-    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     if (page) items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
@@ -10286,9 +10552,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorAvg(graph, criteria) {
-    var _a, _b;
     const { entityType = "currency", page, filter } = criteria;
-    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     if (page) items = items.filter((i) => i.page === page);
     if (filter) {
       items = items.filter((i) => {
@@ -10316,9 +10581,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorBefore(graph, criteria) {
-    var _a, _b;
     const { entityType = "date", referenceDate, page } = criteria;
-    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     if (page) items = items.filter((i) => i.page <= page);
     if (referenceDate) {
       const refTime = new Date(referenceDate).getTime();
@@ -10335,9 +10599,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorAfter(graph, criteria) {
-    var _a, _b;
     const { entityType = "date", referenceDate, page } = criteria;
-    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     if (page) items = items.filter((i) => i.page >= page);
     if (referenceDate) {
       const refTime = new Date(referenceDate).getTime();
@@ -10354,9 +10617,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorBetween(graph, criteria) {
-    var _a, _b;
     const { entityType = "currency", low, high, page } = criteria;
-    let items = ((_b = (_a = graph._contentGraph) == null ? void 0 : _a.allEntities) == null ? void 0 : _b.filter((e) => e.type === entityType)) || [];
+    let items = graph._contentGraph?.allEntities?.filter((e) => e.type === entityType) || [];
     if (page) items = items.filter((i) => i.page === page);
     items = items.filter((i) => {
       const numVal = parseFloat((i.value || "").replace(/[$,]/g, ""));
@@ -10379,9 +10641,8 @@ ${p.text}`).join("\n\n")
     };
   }
   function operatorGroupBy(graph, criteria) {
-    var _a;
     const { entityType, groupBy = "page" } = criteria;
-    let items = ((_a = graph._contentGraph) == null ? void 0 : _a.allEntities) || [];
+    let items = graph._contentGraph?.allEntities || [];
     if (entityType) {
       items = items.filter((i) => i.type === entityType);
     }
@@ -10420,7 +10681,6 @@ ${p.text}`).join("\n\n")
     };
   }
   function executeReasoning(graph, query) {
-    var _a;
     const lower = query.toLowerCase();
     const intent = detectIntent(query);
     if (intent.type === QueryIntent.COUNT) {
@@ -10470,7 +10730,7 @@ ${p.text}`).join("\n\n")
       return {
         answer: result.itemCount > 0 ? `The average is ${result.formattedResult} (from ${result.itemCount} value(s)).` : "No monetary values found matching this query.",
         confidence: 0.85,
-        evidence: ((_a = result.items) == null ? void 0 : _a.slice(0, 5).map((i) => ({ text: i.value, page: i.page }))) || [],
+        evidence: result.items?.slice(0, 5).map((i) => ({ text: i.value, page: i.page })) || [],
         reasoning: { intent: QueryIntent.AGGREGATION, operator: "AVG", criteria, result: result.result }
       };
     }
@@ -10585,23 +10845,22 @@ ${p.text}`).join("\n\n")
     return similarity / fields.length;
   }
   function buildTopicVector(graph) {
-    var _a, _b, _c;
     const vector = {};
-    const headings = ((_a = graph.layout) == null ? void 0 : _a.getAllHeadings()) || [];
+    const headings = graph.layout?.getAllHeadings() || [];
     for (const heading of headings) {
       const words = heading.text.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
       for (const word of words) {
         vector[word] = (vector[word] || 0) + 2;
       }
     }
-    const entities = ((_b = graph._contentGraph) == null ? void 0 : _b.allEntities) || [];
+    const entities = graph._contentGraph?.allEntities || [];
     for (const entity of entities) {
       const words = (entity.value || "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
       for (const word of words) {
         vector[word] = (vector[word] || 0) + 1;
       }
     }
-    const blocks = ((_c = graph._contentGraph) == null ? void 0 : _c.allBlocks) || [];
+    const blocks = graph._contentGraph?.allBlocks || [];
     for (const block of blocks.slice(0, 50)) {
       const words = (block.text || "").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
       for (const word of words) {
@@ -10623,18 +10882,14 @@ ${p.text}`).join("\n\n")
     return dist < threshold;
   }
   function groupEntitiesByRow(entities) {
-    var _a, _b;
     if (entities.length === 0) return [];
-    const sorted = [...entities].sort((a, b) => {
-      var _a2, _b2;
-      return (((_a2 = a.bbox) == null ? void 0 : _a2[1]) || 0) - (((_b2 = b.bbox) == null ? void 0 : _b2[1]) || 0);
-    });
+    const sorted = [...entities].sort((a, b) => (a.bbox?.[1] || 0) - (b.bbox?.[1] || 0));
     const rows = [];
     let currentRow = [sorted[0]];
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const curr = sorted[i];
-      if (Math.abs((((_a = curr.bbox) == null ? void 0 : _a[1]) || 0) - (((_b = prev.bbox) == null ? void 0 : _b[1]) || 0)) < 15) {
+      if (Math.abs((curr.bbox?.[1] || 0) - (prev.bbox?.[1] || 0)) < 15) {
         currentRow.push(curr);
       } else {
         rows.push(currentRow);
@@ -10645,7 +10900,6 @@ ${p.text}`).join("\n\n")
     return rows;
   }
   function buildTableObjects(contentGraph, conceptGraph) {
-    var _a, _b;
     const tables = [];
     const tableBlocks = contentGraph.allBlocks.filter((b) => b.type === "table");
     for (const block of tableBlocks) {
@@ -10662,7 +10916,7 @@ ${p.text}`).join("\n\n")
       for (let i = 1; i < cellTexts.length; i++) {
         const prev = cellTexts[i - 1];
         const curr = cellTexts[i];
-        if (Math.abs((((_a = curr.bbox) == null ? void 0 : _a[1]) || 0) - (((_b = prev.bbox) == null ? void 0 : _b[1]) || 0)) < 10) {
+        if (Math.abs((curr.bbox?.[1] || 0) - (prev.bbox?.[1] || 0)) < 10) {
           currentRow.push(curr);
         } else {
           cellRows.push(currentRow);
@@ -10759,8 +11013,11 @@ ${p.text}`).join("\n\n")
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  function embeddedImageSrc3(src) {
+    src = String(src || "");
+    return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : "";
+  }
   function wcagAudit(ir) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
     const issues = [];
     let score = 100;
     const criteria = {};
@@ -10773,7 +11030,7 @@ ${p.text}`).join("\n\n")
         const obj = ir.objects[objId];
         if (!obj) continue;
         if (obj.type === "image") {
-          if (!((_a = obj.accessibility) == null ? void 0 : _a.alt) && ((_b = obj.accessibility) == null ? void 0 : _b.alt) !== "") {
+          if (!obj.accessibility?.alt && obj.accessibility?.alt !== "") {
             criteria["1.1.1"].status = "fail";
             criteria["1.1.1"].issues.push(objId);
             issues.push({
@@ -10795,10 +11052,7 @@ ${p.text}`).join("\n\n")
       const page = ir.pages[pageId];
       if (!page) continue;
       const pageNum = parseInt(pageId.split("_")[1]);
-      const headings = (page.content || []).map((id) => ir.objects[id]).filter((obj) => {
-        var _a2;
-        return ((_a2 = obj == null ? void 0 : obj.semantic) == null ? void 0 : _a2.role) === "heading";
-      });
+      const headings = (page.content || []).map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading");
       let prevLevel = 0;
       for (const heading of headings) {
         const level2 = heading.semantic.level || 1;
@@ -10820,8 +11074,8 @@ ${p.text}`).join("\n\n")
       }
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
-        if (((_c = obj == null ? void 0 : obj.semantic) == null ? void 0 : _c.role) === "table") {
-          if (!((_d = obj.semantic) == null ? void 0 : _d.caption) && !((_e = obj.accessibility) == null ? void 0 : _e.summary)) {
+        if (obj?.semantic?.role === "table") {
+          if (!obj.semantic?.caption && !obj.accessibility?.summary) {
             criteria["1.3.1"].status = "fail";
             criteria["1.3.1"].issues.push(objId);
             issues.push({
@@ -10836,8 +11090,8 @@ ${p.text}`).join("\n\n")
             score -= 2;
           }
         }
-        if (((_f = obj == null ? void 0 : obj.semantic) == null ? void 0 : _f.role) === "list") {
-          const items = ((_g = obj.semantic) == null ? void 0 : _g.items) || [];
+        if (obj?.semantic?.role === "list") {
+          const items = obj.semantic?.items || [];
           if (items.length === 0) {
             criteria["1.3.1"].status = "fail";
             issues.push({
@@ -10860,7 +11114,7 @@ ${p.text}`).join("\n\n")
       if (!page) continue;
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
-        if ((obj == null ? void 0 : obj.type) === "text" && ((_h = obj.raw) == null ? void 0 : _h.color) && ((_i = obj.raw) == null ? void 0 : _i.bgColor)) {
+        if (obj?.type === "text" && obj.raw?.color && obj.raw?.bgColor) {
           const ratio = computeContrastRatio(obj.raw.color, obj.raw.bgColor);
           if (ratio < 4.5) {
             criteria["1.4.3"].status = "fail";
@@ -10882,8 +11136,8 @@ ${p.text}`).join("\n\n")
     criteria["1.4.11"] = { name: "Non-text Contrast", status: "pass", issues: [] };
     criteria["2.1.1"] = { name: "Keyboard", status: "pass", issues: [] };
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (((_j = obj == null ? void 0 : obj.semantic) == null ? void 0 : _j.role) === "form_field" || ((_k = obj == null ? void 0 : obj.semantic) == null ? void 0 : _k.role) === "link") {
-        if (((_l = obj.accessibility) == null ? void 0 : _l.tabindex) === -1) {
+      if (obj?.semantic?.role === "form_field" || obj?.semantic?.role === "link") {
+        if (obj.accessibility?.tabindex === -1) {
           criteria["2.1.1"].status = "fail";
           issues.push({
             type: "keyboard_trap",
@@ -10899,7 +11153,7 @@ ${p.text}`).join("\n\n")
     }
     criteria["2.4.1"] = { name: "Bypass Blocks", status: "pass", issues: [] };
     criteria["2.4.2"] = { name: "Page Titled", status: "pass", issues: [] };
-    if (!((_m = ir.document.metadata) == null ? void 0 : _m.title)) {
+    if (!ir.document.metadata?.title) {
       criteria["2.4.2"].status = "fail";
       issues.push({
         type: "missing_title",
@@ -10916,7 +11170,7 @@ ${p.text}`).join("\n\n")
       if (!page) continue;
       for (const objId of page.content || []) {
         const obj = ir.objects[objId];
-        if (((_n = obj == null ? void 0 : obj.semantic) == null ? void 0 : _n.role) === "heading" && (!((_o = obj.semantic) == null ? void 0 : _o.text) || obj.semantic.text.trim() === "")) {
+        if (obj?.semantic?.role === "heading" && (!obj.semantic?.text || obj.semantic.text.trim() === "")) {
           criteria["2.4.6"].status = "fail";
           issues.push({
             type: "empty_heading",
@@ -10932,7 +11186,7 @@ ${p.text}`).join("\n\n")
       }
     }
     criteria["3.1.1"] = { name: "Language of Page", status: "pass", issues: [] };
-    if (!((_p = ir.document.metadata) == null ? void 0 : _p.language)) {
+    if (!ir.document.metadata?.language) {
       criteria["3.1.1"].status = "fail";
       issues.push({
         type: "missing_language",
@@ -10946,8 +11200,8 @@ ${p.text}`).join("\n\n")
     criteria["3.1.2"] = { name: "Language of Parts", status: "pass", issues: [] };
     criteria["4.1.2"] = { name: "Name, Role, Value", status: "pass", issues: [] };
     for (const [id, obj] of Object.entries(ir.objects)) {
-      if (((_q = obj == null ? void 0 : obj.semantic) == null ? void 0 : _q.role) === "form_field") {
-        if (!((_r = obj.accessibility) == null ? void 0 : _r.label) && !((_s = obj.accessibility) == null ? void 0 : _s.labelledby)) {
+      if (obj?.semantic?.role === "form_field") {
+        if (!obj.accessibility?.label && !obj.accessibility?.labelledby) {
           criteria["4.1.2"].status = "fail";
           issues.push({
             type: "form_no_label",
@@ -11021,7 +11275,6 @@ ${p.text}`).join("\n\n")
     return (lighter + 0.05) / (darker + 0.05);
   }
   function exportAccessibleHTML(ir, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g;
     const {
       mode = "accessible",
       includeSkipNav = true,
@@ -11035,9 +11288,9 @@ ${p.text}`).join("\n\n")
       customStyles = "",
       lang
     } = options;
-    const docLang = lang || ((_a = ir.document.metadata) == null ? void 0 : _a.language) || "en";
-    const title = ((_b = ir.document.metadata) == null ? void 0 : _b.title) || "Document";
-    const author = ((_c = ir.document.metadata) == null ? void 0 : _c.author) || "";
+    const docLang = lang || ir.document.metadata?.language || "en";
+    const title = ir.document.metadata?.title || "Document";
+    const author = ir.document.metadata?.author || "";
     let html = "<!DOCTYPE html>\n";
     html += `<html lang="${escapeHTML3(docLang)}">
 `;
@@ -11071,7 +11324,7 @@ ${customStyles}
         html += `  <p class="doc-author">By ${escapeHTML3(author)}</p>
 `;
       }
-      const date = ((_d = ir.document.metadata) == null ? void 0 : _d.creationDate) || ((_e = ir.document.metadata) == null ? void 0 : _e.modDate);
+      const date = ir.document.metadata?.creationDate || ir.document.metadata?.modDate;
       if (date) {
         html += `  <p class="doc-date"><time datetime="${escapeHTML3(date)}">${escapeHTML3(date)}</time></p>
 `;
@@ -11089,7 +11342,7 @@ ${customStyles}
       for (const pageId of ir.document.pages) {
         const page = ir.pages[pageId];
         if (!page) continue;
-        const label = ((_f = page.labels) == null ? void 0 : _f.print) || `Page ${page.num}`;
+        const label = page.labels?.print || `Page ${page.num}`;
         html += `      <li><a href="#${pageId}" aria-label="Go to ${escapeHTML3(label)}">${escapeHTML3(label)}</a></li>
 `;
       }
@@ -11101,7 +11354,7 @@ ${customStyles}
       const page = ir.pages[pageId];
       if (!page) continue;
       const pageNum = parseInt(pageId.split("_")[1]);
-      const pageLabel = ((_g = page.labels) == null ? void 0 : _g.print) || `Page ${pageNum}`;
+      const pageLabel = page.labels?.print || `Page ${pageNum}`;
       const dataAttr = includeDataAttributes2 ? ` data-pdf-page="${pageNum}" data-pdf-page-id="${pageId}"` : "";
       html += `
   <section id="${pageId}" class="pdf-page"${dataAttr} aria-label="${escapeHTML3(pageLabel)}">
@@ -11127,7 +11380,6 @@ ${customStyles}
       html += "  </section>\n";
     }
     html += "</main>\n";
-    // Backend/search context is intentionally not embedded in viewer HTML.
     if (includeLandmarks) {
       html += '<footer role="contentinfo" aria-label="Document footer">\n';
       html += '  <p>Generated by <a href="https://github.com/CityofDaytonaBeach/codbdocs">CodbDocs</a></p>\n';
@@ -11141,11 +11393,7 @@ ${customStyles}
     html += "</body>\n</html>";
     return html;
   }
-  function buildAccessibleRAGPayload(ir) {
-    return buildRAGContext(ir, null);
-  }
   function generateSkipNav(ir) {
-    var _a;
     let html = "<!-- Skip Navigation -->\n";
     html += '<a href="#main-content" class="skip-link" id="skip-to-main">Skip to main content</a>\n';
     if (ir.document.pages.length > 5) {
@@ -11154,7 +11402,7 @@ ${customStyles}
       for (const pageId of ir.document.pages) {
         const page = ir.pages[pageId];
         if (!page) continue;
-        const label = ((_a = page.labels) == null ? void 0 : _a.print) || `Page ${page.num}`;
+        const label = page.labels?.print || `Page ${page.num}`;
         html += `    <li><a href="#${pageId}" class="skip-link">${escapeHTML3(label)}</a></li>
 `;
       }
@@ -11164,7 +11412,6 @@ ${customStyles}
     return html;
   }
   function renderAccessiblePage(page, ir, opts) {
-    var _a, _b;
     let html = "";
     const { pageNum, includeDataAttributes: includeDataAttributes2, enforceHeadingHierarchy, headingTracker, wrapImagesInFigures, mode } = opts;
     const objects = (page.content || []).map((id) => ir.objects[id]).filter((obj) => obj && obj.bbox).sort((a, b) => {
@@ -11174,7 +11421,7 @@ ${customStyles}
     });
     for (const obj of objects) {
       const dataAttr = includeDataAttributes2 ? ` data-pdf-object="${obj.id}"` : "";
-      switch ((_a = obj.semantic) == null ? void 0 : _a.role) {
+      switch (obj.semantic?.role) {
         case "heading":
           html += renderAccessibleHeading(obj, { dataAttr, headingTracker, enforceHeadingHierarchy });
           break;
@@ -11206,7 +11453,7 @@ ${customStyles}
     for (const vecId of page.vectors || []) {
       const vec = ir.vectors[vecId];
       if (!vec) continue;
-      if (((_b = vec.semantic) == null ? void 0 : _b.role) === "separator") {
+      if (vec.semantic?.role === "separator") {
         const dataAttr = includeDataAttributes2 ? ` data-pdf-vector="${vec.id}"` : "";
         html += `    <hr${dataAttr} aria-hidden="true">
 `;
@@ -11215,30 +11462,28 @@ ${customStyles}
     return html;
   }
   function renderAccessibleHeading(obj, opts) {
-    var _a, _b, _c, _d;
     const { dataAttr, headingTracker, enforceHeadingHierarchy } = opts;
-    let level = ((_a = obj.semantic) == null ? void 0 : _a.level) || 2;
+    let level = obj.semantic?.level || 2;
     if (enforceHeadingHierarchy) {
       if (level > headingTracker.current + 1 && headingTracker.current > 0) {
         level = headingTracker.current + 1;
       }
       headingTracker.current = level;
     }
-    const text = escapeHTML3(((_b = obj.semantic) == null ? void 0 : _b.text) || "");
+    const text = escapeHTML3(obj.semantic?.text || "");
     if (!text) return "";
-    const id = obj.id || `heading-${(_c = obj.bbox) == null ? void 0 : _c[0]}-${(_d = obj.bbox) == null ? void 0 : _d[1]}`;
+    const id = obj.id || `heading-${obj.bbox?.[0]}-${obj.bbox?.[1]}`;
     return `    <h${level} id="${id}"${dataAttr}>${text}</h${level}>
 `;
   }
   function renderAccessibleTable(obj, ir, opts) {
-    var _a, _b, _c, _d;
     const { dataAttr, pageNum } = opts;
     let html = "";
     const tableId = obj.id || `table-${pageNum}`;
-    const caption = ((_a = obj.semantic) == null ? void 0 : _a.caption) || "";
-    const summary = ((_b = obj.accessibility) == null ? void 0 : _b.summary) || "";
-    const rows = ((_c = obj.semantic) == null ? void 0 : _c.rows) || [];
-    const cols = ((_d = obj.semantic) == null ? void 0 : _d.cols) || [];
+    const caption = obj.semantic?.caption || "";
+    const summary = obj.accessibility?.summary || "";
+    const rows = obj.semantic?.rows || [];
+    const cols = obj.semantic?.cols || [];
     html += `    <table id="${tableId}"${dataAttr}`;
     if (summary) html += ` aria-label="${escapeHTML3(summary)}"`;
     html += ">\n";
@@ -11255,7 +11500,7 @@ ${customStyles}
       const headerRow = rows[0] || [];
       for (let c = 0; c < headerRow.length; c++) {
         const cell = headerRow[c];
-        html += `          <th scope="col">${escapeHTML3((cell == null ? void 0 : cell.text) || "")}</th>
+        html += `          <th scope="col">${escapeHTML3(cell?.text || "")}</th>
 `;
       }
       html += "        </tr>\n";
@@ -11267,7 +11512,7 @@ ${customStyles}
           const row = rows[r] || [];
           for (let c = 0; c < row.length; c++) {
             const cell = row[c];
-            html += `          <td>${escapeHTML3((cell == null ? void 0 : cell.text) || "")}</td>
+            html += `          <td>${escapeHTML3(cell?.text || "")}</td>
 `;
           }
           html += "        </tr>\n";
@@ -11302,14 +11547,13 @@ ${customStyles}
     return html;
   }
   function renderTableFromNearbyText(obj, ir, pageNum) {
-    var _a, _b;
     let html = "";
     if (!obj.bbox) return html;
     const pageId = `page_${pageNum}`;
     const page = ir.pages[pageId];
     if (!page) return html;
     const cells = (page.content || []).map((id) => ir.objects[id]).filter(
-      (o) => (o == null ? void 0 : o.bbox) && o.type === "text" && o.bbox[0] >= obj.bbox[0] - 5 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[0] + (o.bbox[2] || 0) <= obj.bbox[0] + obj.bbox[2] + 5 && o.bbox[1] + (o.bbox[3] || 0) <= obj.bbox[1] + obj.bbox[3] + 5
+      (o) => o?.bbox && o.type === "text" && o.bbox[0] >= obj.bbox[0] - 5 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[0] + (o.bbox[2] || 0) <= obj.bbox[0] + obj.bbox[2] + 5 && o.bbox[1] + (o.bbox[3] || 0) <= obj.bbox[1] + obj.bbox[3] + 5
     ).sort((a, b) => {
       const yDiff = (a.bbox[1] || 0) - (b.bbox[1] || 0);
       if (Math.abs(yDiff) > 5) return yDiff;
@@ -11332,7 +11576,7 @@ ${customStyles}
     if (rows.length === 0) return html;
     html += "      <thead>\n        <tr>\n";
     for (const cell of rows[0]) {
-      html += `          <th scope="col">${escapeHTML3(((_a = cell.semantic) == null ? void 0 : _a.text) || "")}</th>
+      html += `          <th scope="col">${escapeHTML3(cell.semantic?.text || "")}</th>
 `;
     }
     html += "        </tr>\n      </thead>\n";
@@ -11341,7 +11585,7 @@ ${customStyles}
       for (let r = 1; r < rows.length; r++) {
         html += "        <tr>\n";
         for (const cell of rows[r]) {
-          html += `          <td>${escapeHTML3(((_b = cell.semantic) == null ? void 0 : _b.text) || "")}</td>
+          html += `          <td>${escapeHTML3(cell.semantic?.text || "")}</td>
 `;
         }
         html += "        </tr>\n";
@@ -11351,16 +11595,15 @@ ${customStyles}
     return html;
   }
   function renderAccessibleList(obj, ir, opts) {
-    var _a, _b;
     const { dataAttr } = opts;
-    const items = ((_a = obj.semantic) == null ? void 0 : _a.items) || [];
-    const ordered = ((_b = obj.semantic) == null ? void 0 : _b.ordered) || false;
+    const items = obj.semantic?.items || [];
+    const ordered = obj.semantic?.ordered || false;
     const tag = ordered ? "ol" : "ul";
     let html = `    <${tag}${dataAttr} role="list">
 `;
     if (items.length > 0) {
       for (const item of items) {
-        const text = typeof item === "string" ? item : (item == null ? void 0 : item.text) || "";
+        const text = typeof item === "string" ? item : item?.text || "";
         html += `      <li>${escapeHTML3(text)}</li>
 `;
       }
@@ -11376,29 +11619,34 @@ ${customStyles}
     return html;
   }
   function findNearbyListItems(obj, ir) {
-    var _a, _b;
     if (!obj.bbox) return [];
     const items = [];
     for (const [id, o] of Object.entries(ir.objects)) {
-      if ((o == null ? void 0 : o.type) === "text" && o.bbox && ((_a = o.semantic) == null ? void 0 : _a.role) !== "heading") {
+      if (o?.type === "text" && o.bbox && o.semantic?.role !== "heading") {
         if (Math.abs((o.bbox[0] || 0) - (obj.bbox[0] || 0)) < 50 && o.bbox[1] >= obj.bbox[1] - 5 && o.bbox[1] <= obj.bbox[1] + obj.bbox[3] + 5) {
-          if ((_b = o.semantic) == null ? void 0 : _b.text) items.push(o.semantic.text);
+          if (o.semantic?.text) items.push(o.semantic.text);
         }
       }
     }
     return items;
   }
   function renderAccessibleFormField(obj, ir, opts) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
     const { dataAttr } = opts;
-    const fieldType = ((_a = obj.semantic) == null ? void 0 : _a.fieldType) || "text";
-    const fieldName = ((_b = obj.semantic) == null ? void 0 : _b.fieldName) || ((_c = obj.accessibility) == null ? void 0 : _c.label) || "";
-    const fieldId = obj.id || `field-${fieldName}`;
-    const label = ((_d = obj.accessibility) == null ? void 0 : _d.label) || fieldName;
-    const value = ((_e = obj.semantic) == null ? void 0 : _e.value) || "";
-    const required = ((_f = obj.accessibility) == null ? void 0 : _f.required) || false;
-    const description = ((_g = obj.accessibility) == null ? void 0 : _g.description) || "";
-    const error = ((_h = obj.accessibility) == null ? void 0 : _h.error) || "";
+    const fieldType = obj.semantic?.fieldType || "text";
+    const fieldName = obj.semantic?.fieldName || obj.accessibility?.label || "";
+    const fieldId = String(obj.id || `field-${fieldName}`).replace(/[^A-Za-z0-9_-]/g, "-");
+    const label = obj.accessibility?.label || fieldName;
+    const value = obj.semantic?.value ?? "";
+    const values = Array.isArray(value) ? value.map(String) : [String(value)];
+    const required = obj.accessibility?.required || false;
+    const readOnly = obj.accessibility?.readOnly || obj.raw?.readOnly || false;
+    const hidden = obj.raw?.hidden || false;
+    const description = obj.accessibility?.description || "";
+    const error = obj.accessibility?.error || "";
+    if (hidden) {
+      return `    <input type="hidden" name="${escapeHTML3(fieldName)}" value="${escapeHTML3(values[0])}"${dataAttr}>
+`;
+    }
     let html = `    <div class="form-field"${dataAttr}>
 `;
     if (label) {
@@ -11413,33 +11661,47 @@ ${customStyles}
       description ? `${fieldId}-desc` : "",
       error ? `${fieldId}-error` : ""
     ].filter(Boolean).join(" ");
+    const common = ` id="${escapeHTML3(fieldId)}" name="${escapeHTML3(fieldName)}"` + (required ? ' required aria-required="true"' : "") + (ariaDesc ? ` aria-describedby="${escapeHTML3(ariaDesc)}"` : "");
     switch (fieldType) {
       case "checkbox":
-        html += `      <input type="checkbox" id="${fieldId}" name="${escapeHTML3(fieldName)}"${value === "true" ? " checked" : ""}${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+        html += `      <input type="checkbox"${common} value="${escapeHTML3(obj.semantic?.optionValue || obj.raw?.optionValue || "On")}"${obj.semantic?.checked || obj.raw?.checked ? " checked" : ""}${readOnly ? ' disabled aria-readonly="true"' : ""}>
 `;
         break;
       case "radio":
-        html += `      <input type="radio" id="${fieldId}" name="${escapeHTML3(fieldName)}"${value ? " checked" : ""}${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+        html += `      <input type="radio"${common} value="${escapeHTML3(obj.semantic?.optionValue || obj.raw?.optionValue || "On")}"${obj.semantic?.checked || obj.raw?.checked ? " checked" : ""}${readOnly ? ' disabled aria-readonly="true"' : ""}>
 `;
         break;
       case "dropdown":
-        html += `      <select id="${fieldId}" name="${escapeHTML3(fieldName)}"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+      case "listbox":
+        html += `      <select${common}${obj.semantic?.multiple ? " multiple" : ""}${fieldType === "listbox" ? ` size="${Math.min(8, Math.max(2, obj.semantic?.options?.length || 2))}"` : ""}${readOnly ? ' disabled aria-readonly="true"' : ""}>
 `;
-        const options = ((_i = obj.semantic) == null ? void 0 : _i.options) || [];
+        const options = obj.semantic?.options || [];
         for (const opt of options) {
-          const optVal = typeof opt === "string" ? opt : (opt == null ? void 0 : opt.value) || "";
-          const optLabel = typeof opt === "string" ? opt : (opt == null ? void 0 : opt.label) || optVal;
-          html += `        <option value="${escapeHTML3(optVal)}"${optVal === value ? " selected" : ""}>${escapeHTML3(optLabel)}</option>
+          const optVal = typeof opt === "string" ? opt : opt?.value || "";
+          const optLabel = typeof opt === "string" ? opt : opt?.label || optVal;
+          html += `        <option value="${escapeHTML3(optVal)}"${values.includes(String(optVal)) ? " selected" : ""}>${escapeHTML3(optLabel)}</option>
 `;
         }
         html += "      </select>\n";
         break;
       case "textarea":
-        html += `      <textarea id="${fieldId}" name="${escapeHTML3(fieldName)}" rows="4"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>${escapeHTML3(value)}</textarea>
+        html += `      <textarea${common} rows="4"${readOnly ? ' readonly aria-readonly="true"' : ""}${obj.semantic?.maxLength ? ` maxlength="${Number(obj.semantic.maxLength)}"` : ""}>${escapeHTML3(values[0])}</textarea>
+`;
+        break;
+      case "password":
+        html += `      <input type="password"${common} value="${escapeHTML3(values[0])}"${readOnly ? ' readonly aria-readonly="true"' : ""}${obj.semantic?.maxLength ? ` maxlength="${Number(obj.semantic.maxLength)}"` : ""}>
+`;
+        break;
+      case "button":
+        html += `      <button type="button"${common} disabled>${escapeHTML3(label)}</button>
+`;
+        break;
+      case "signature":
+        html += `      <output${common}>${escapeHTML3(values[0] || "Unsigned")}</output>
 `;
         break;
       default:
-        html += `      <input type="text" id="${fieldId}" name="${escapeHTML3(fieldName)}" value="${escapeHTML3(value)}"${required ? " required" : ""}${ariaDesc ? ` aria-describedby="${ariaDesc}"` : ""}>
+        html += `      <input type="text"${common} value="${escapeHTML3(values[0])}"${readOnly ? ' readonly aria-readonly="true"' : ""}${obj.semantic?.maxLength ? ` maxlength="${Number(obj.semantic.maxLength)}"` : ""}>
 `;
         break;
     }
@@ -11451,12 +11713,11 @@ ${customStyles}
     return html;
   }
   function renderAccessibleLink(obj, opts) {
-    var _a, _b, _c, _d, _e, _f, _g;
     const { dataAttr } = opts;
-    const href = ((_a = obj.accessibility) == null ? void 0 : _a.href) || ((_b = obj.semantic) == null ? void 0 : _b.url) || ((_c = obj.raw) == null ? void 0 : _c.href) || ((_d = obj.raw) == null ? void 0 : _d.url) || "#";
-    const text = escapeHTML3(((_e = obj.semantic) == null ? void 0 : _e.text) || "");
-    const target = ((_f = obj.accessibility) == null ? void 0 : _f.target) || "";
-    const ariaLabel = ((_g = obj.accessibility) == null ? void 0 : _g.ariaLabel) || "";
+    const href = obj.accessibility?.href || obj.semantic?.url || obj.raw?.href || obj.raw?.url || "#";
+    const text = escapeHTML3(obj.semantic?.text || "");
+    const target = obj.accessibility?.target || "";
+    const ariaLabel = obj.accessibility?.ariaLabel || "";
     let attrs = dataAttr;
     if (ariaLabel) attrs += ` aria-label="${escapeHTML3(ariaLabel)}"`;
     if (target === "_blank") attrs += ' target="_blank" rel="noopener noreferrer"';
@@ -11465,13 +11726,12 @@ ${customStyles}
 `;
   }
   function renderAccessibleImage(obj, opts) {
-    var _a, _b, _c, _d, _e, _f;
     const { dataAttr, wrapImagesInFigures, mode } = opts;
-    const src = embeddedImageSrc(((_a = obj.raw) == null ? void 0 : _a.src) || "");
-    const alt = ((_b = obj.accessibility) == null ? void 0 : _b.alt) || "";
-    const caption = ((_c = obj.semantic) == null ? void 0 : _c.caption) || "";
-    const isDecorative = ((_d = obj.accessibility) == null ? void 0 : _d.decorative) || !alt && !caption;
-    const role = ((_e = obj.accessibility) == null ? void 0 : _e.role) || ((_f = obj.semantic) == null ? void 0 : _f.role) || "";
+    const src = embeddedImageSrc3(obj.raw?.src || "");
+    const alt = obj.accessibility?.alt || "";
+    const caption = obj.semantic?.caption || "";
+    const isDecorative = obj.accessibility?.decorative || !alt && !caption;
+    const role = obj.accessibility?.role || obj.semantic?.role || "";
     const altAttr = isDecorative ? ' alt="" role="presentation"' : ` alt="${escapeHTML3(alt || caption || "Image")}"`;
     let html = "";
     if (wrapImagesInFigures) {
@@ -11495,9 +11755,8 @@ ${customStyles}
     return html;
   }
   function renderAccessibleText(obj, opts) {
-    var _a;
     const { dataAttr } = opts;
-    const text = escapeHTML3(((_a = obj.semantic) == null ? void 0 : _a.text) || "");
+    const text = escapeHTML3(obj.semantic?.text || "");
     if (!text) return "";
     return `    <p${dataAttr}>${text}</p>
 `;
@@ -11767,7 +12026,6 @@ ${customStyles}
 `;
   }
   function remediateAccessibility(ir, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const {
       fixAltText = true,
       fixHeadingHierarchy = true,
@@ -11778,14 +12036,14 @@ ${customStyles}
       defaultLanguage = "en"
     } = options;
     const report = { fixes: [], summary: {} };
-    if (fixLanguage && !((_a = ir.document.metadata) == null ? void 0 : _a.language)) {
+    if (fixLanguage && !ir.document.metadata?.language) {
       ir.document.metadata.language = defaultLanguage;
       report.fixes.push({ type: "language", action: `Set document language to "${defaultLanguage}"` });
     }
-    if (fixTitle && !((_b = ir.document.metadata) == null ? void 0 : _b.title)) {
+    if (fixTitle && !ir.document.metadata?.title) {
       let inferredTitle = "";
       for (const [id, obj] of Object.entries(ir.objects)) {
-        if (((_c = obj == null ? void 0 : obj.semantic) == null ? void 0 : _c.role) === "heading" && ((_d = obj.semantic) == null ? void 0 : _d.level) === 1 && ((_e = obj.semantic) == null ? void 0 : _e.text)) {
+        if (obj?.semantic?.role === "heading" && obj.semantic?.level === 1 && obj.semantic?.text) {
           inferredTitle = obj.semantic.text;
           break;
         }
@@ -11796,17 +12054,17 @@ ${customStyles}
     }
     if (fixAltText) {
       for (const [id, obj] of Object.entries(ir.objects)) {
-        if ((obj == null ? void 0 : obj.type) === "image" && !obj.accessibility) {
+        if (obj?.type === "image" && !obj.accessibility) {
           obj.accessibility = {};
         }
-        if ((obj == null ? void 0 : obj.type) === "image" && !((_f = obj.accessibility) == null ? void 0 : _f.alt) && ((_g = obj.accessibility) == null ? void 0 : _g.alt) !== "") {
+        if (obj?.type === "image" && !obj.accessibility?.alt && obj.accessibility?.alt !== "") {
           if (markDecorativeImages) {
             obj.accessibility.alt = "";
             obj.accessibility.decorative = true;
             report.fixes.push({ type: "alt_text", element: id, action: "Marked as decorative image" });
           } else {
-            const caption = ((_h = obj.semantic) == null ? void 0 : _h.caption) || "";
-            const role = ((_i = obj.semantic) == null ? void 0 : _i.role) || "";
+            const caption = obj.semantic?.caption || "";
+            const role = obj.semantic?.role || "";
             obj.accessibility.alt = caption || (role ? `${role} image` : "Image");
             report.fixes.push({ type: "alt_text", element: id, action: `Added alt text: "${obj.accessibility.alt}"` });
           }
@@ -11820,7 +12078,7 @@ ${customStyles}
         if (!page) continue;
         for (const objId of page.content || []) {
           const obj = ir.objects[objId];
-          if (((_j = obj == null ? void 0 : obj.semantic) == null ? void 0 : _j.role) === "heading") {
+          if (obj?.semantic?.role === "heading") {
             let level = obj.semantic.level || 1;
             if (level > currentLevel + 1 && currentLevel > 0) {
               const oldLevel = level;
@@ -11839,10 +12097,10 @@ ${customStyles}
     }
     if (fixFormLabels) {
       for (const [id, obj] of Object.entries(ir.objects)) {
-        if (((_k = obj == null ? void 0 : obj.semantic) == null ? void 0 : _k.role) === "form_field") {
+        if (obj?.semantic?.role === "form_field") {
           if (!obj.accessibility) obj.accessibility = {};
           if (!obj.accessibility.label && !obj.accessibility.labelledby) {
-            const name = ((_l = obj.semantic) == null ? void 0 : _l.fieldName) || id;
+            const name = obj.semantic?.fieldName || id;
             obj.accessibility.label = name.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
             report.fixes.push({
               type: "form_label",
@@ -11947,23 +12205,22 @@ ${customStyles}
       terminology: { aliases: {}, acronyms: {}, definitions: {} }
     };
     workspace.add = async function(docOrGraph, options2 = {}) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
       let doc, graph, docId;
       if (docOrGraph._contentGraph) {
         graph = docOrGraph;
-        docId = ((_b = (_a = graph._ir) == null ? void 0 : _a.document) == null ? void 0 : _b.id) || `doc_${this.documents.size + 1}`;
+        docId = graph._ir?.document?.id || `doc_${this.documents.size + 1}`;
       } else {
         doc = docOrGraph;
         graph = await doc.analyze({ ocr: false, ...options2 });
-        docId = ((_d = (_c = graph._ir) == null ? void 0 : _c.document) == null ? void 0 : _d.id) || `doc_${this.documents.size + 1}`;
+        docId = graph._ir?.document?.id || `doc_${this.documents.size + 1}`;
       }
       this.documents.set(docId, {
         doc,
         graph,
         fingerprint: graph._fingerprint || null,
         conceptGraph: graph._conceptGraph || null,
-        metadata: ((_f = (_e = graph._ir) == null ? void 0 : _e.document) == null ? void 0 : _f.metadata) || {},
-        pageCount: ((_i = (_h = (_g = graph._ir) == null ? void 0 : _g.document) == null ? void 0 : _h.pages) == null ? void 0 : _i.length) || 0
+        metadata: graph._ir?.document?.metadata || {},
+        pageCount: graph._ir?.document?.pages?.length || 0
       });
       this._buildCrossDocRelationships();
       this._learnTerminology();
@@ -11978,7 +12235,7 @@ ${customStyles}
       const allResults = [];
       for (const [docId, entry] of this.documents) {
         const graph = entry.graph;
-        if (!(graph == null ? void 0 : graph.hybridSearch)) continue;
+        if (!graph?.hybridSearch) continue;
         const results = graph.hybridSearch(query, {
           maxResults: perDocLimit,
           rerank: false,
@@ -12019,7 +12276,7 @@ ${customStyles}
       const reasoningResults = [];
       for (const [docId, entry] of this.documents) {
         const graph = entry.graph;
-        if (!(graph == null ? void 0 : graph.executeReasoning)) continue;
+        if (!graph?.executeReasoning) continue;
         const reasoning = graph.executeReasoning(question);
         if (reasoning) {
           reasoningResults.push({ ...reasoning, docId, metadata: entry.metadata });
@@ -12033,15 +12290,14 @@ ${customStyles}
       };
     };
     workspace.getSummary = function() {
-      var _a, _b, _c, _d;
       let totalWords = 0;
       let totalPages = 0;
       const allEntityTypes = /* @__PURE__ */ new Map();
       for (const [, entry] of this.documents) {
-        const summary = ((_b = (_a = entry.graph) == null ? void 0 : _a.getSummary) == null ? void 0 : _b.call(_a)) || {};
+        const summary = entry.graph?.getSummary?.() || {};
         totalWords += summary.wordCount || 0;
         totalPages += entry.pageCount || 0;
-        const entities = ((_d = (_c = entry.graph) == null ? void 0 : _c._contentGraph) == null ? void 0 : _d.allEntities) || [];
+        const entities = entry.graph?._contentGraph?.allEntities || [];
         for (const e of entities) {
           allEntityTypes.set(e.type, (allEntityTypes.get(e.type) || 0) + 1);
         }
@@ -12068,19 +12324,18 @@ ${customStyles}
       };
     };
     workspace._buildCrossDocRelationships = function() {
-      var _a, _b, _c, _d, _e, _f;
       this.crossDocRelationships = [];
       const docEntries = Array.from(this.documents.entries());
       for (let i = 0; i < docEntries.length; i++) {
         for (let j = i + 1; j < docEntries.length; j++) {
           const [, entry1] = docEntries[i];
           const [, entry2] = docEntries[j];
-          const entities1 = ((_b = (_a = entry1.graph) == null ? void 0 : _a._contentGraph) == null ? void 0 : _b.allEntities) || [];
-          const entities2 = ((_d = (_c = entry2.graph) == null ? void 0 : _c._contentGraph) == null ? void 0 : _d.allEntities) || [];
+          const entities1 = entry1.graph?._contentGraph?.allEntities || [];
+          const entities2 = entry2.graph?._contentGraph?.allEntities || [];
           const shared = [];
           for (const e1 of entities1) {
             for (const e2 of entities2) {
-              if (e1.type === e2.type && ((_e = e1.value) == null ? void 0 : _e.toLowerCase()) === ((_f = e2.value) == null ? void 0 : _f.toLowerCase())) {
+              if (e1.type === e2.type && e1.value?.toLowerCase() === e2.value?.toLowerCase()) {
                 shared.push({ type: e1.type, value: e1.value });
               }
             }
@@ -12097,10 +12352,9 @@ ${customStyles}
       }
     };
     workspace._learnTerminology = function() {
-      var _a, _b;
       const allPages = [];
       for (const [, entry] of this.documents) {
-        const pages = ((_b = (_a = entry.graph) == null ? void 0 : _a.text) == null ? void 0 : _b.pages) || [];
+        const pages = entry.graph?.text?.pages || [];
         allPages.push(...pages);
       }
       this.terminology = learnTerminology(allPages);
@@ -12238,13 +12492,15 @@ ${customStyles}
     }
     if (!ir.pages || typeof ir.pages !== "object") ir.pages = {};
     if (!ir.objects || typeof ir.objects !== "object") ir.objects = {};
+    if (!ir.forms || typeof ir.forms !== "object") ir.forms = { fields: [], byName: {} };
+    if (!Array.isArray(ir.forms.fields)) ir.forms.fields = [];
+    if (!ir.forms.byName || typeof ir.forms.byName !== "object") ir.forms.byName = {};
     if (!ir.document || typeof ir.document !== "object") ir.document = {};
     if (!ir.document.metadata || typeof ir.document.metadata !== "object") ir.document.metadata = {};
     if (!Array.isArray(ir.document.pages)) {
       ir.document.pages = Object.keys(ir.pages).sort((a, b) => {
-        var _a, _b, _c, _d;
-        const na = (_b = (_a = ir.pages[a]) == null ? void 0 : _a.num) != null ? _b : 0;
-        const nb = (_d = (_c = ir.pages[b]) == null ? void 0 : _c.num) != null ? _d : 0;
+        const na = ir.pages[a]?.num ?? 0;
+        const nb = ir.pages[b]?.num ?? 0;
         return na - nb;
       });
     }
@@ -12253,52 +12509,35 @@ ${customStyles}
       if (!page) continue;
       if (!Array.isArray(page.content)) page.content = [];
       if (!Array.isArray(page.annotations)) page.annotations = [];
+      if (!Array.isArray(page.forms)) page.forms = [];
     }
     return ir;
   }
   function hydrateGraph(json) {
-    var _a;
     if (!json || typeof json !== "object") {
       throw new TypeError("codbdocs: a document graph (or graph.toJSON() output) is required");
     }
     if (typeof json.getSummary === "function") return json;
     const pages = Array.isArray(json.pages) ? json.pages : [];
-    const pageOf = (n) => pages.find((p) => {
-      var _a2;
-      return ((_a2 = p.num) != null ? _a2 : p.pageNum) === n;
-    }) || null;
+    const pageOf = (n) => pages.find((p) => (p.num ?? p.pageNum) === n) || null;
     const listOf = (n, key) => {
-      var _a2;
       if (n == null) return pages.flatMap((p) => p[key] || []);
-      return ((_a2 = pageOf(n)) == null ? void 0 : _a2[key]) || [];
+      return pageOf(n)?.[key] || [];
     };
     const metaOf = (n, key) => {
-      var _a2, _b;
-      if (n == null) return pages.flatMap((p) => {
-        var _a3;
-        return ((_a3 = p.metadata) == null ? void 0 : _a3[key]) || [];
-      });
-      return ((_b = (_a2 = pageOf(n)) == null ? void 0 : _a2.metadata) == null ? void 0 : _b[key]) || [];
+      if (n == null) return pages.flatMap((p) => p.metadata?.[key] || []);
+      return pageOf(n)?.metadata?.[key] || [];
     };
-    const pageCount = (_a = json.pageCount) != null ? _a : pages.length;
+    const pageCount = json.pageCount ?? pages.length;
     const summary = json.summary || {
       pageCount,
       wordCount: pages.reduce((acc, p) => acc + String(p.text || "").split(/\s+/).filter(Boolean).length, 0),
       pageTypes: {},
       metadata: {},
       headings: pages.flatMap((p) => (p.headings || []).map((h) => h.text)),
-      tableCount: pages.reduce((acc, p) => {
-        var _a2;
-        return acc + (((_a2 = p.tables) == null ? void 0 : _a2.length) || 0);
-      }, 0),
-      formCount: pages.reduce((acc, p) => {
-        var _a2;
-        return acc + (((_a2 = p.forms) == null ? void 0 : _a2.length) || 0);
-      }, 0),
-      listCount: pages.reduce((acc, p) => {
-        var _a2;
-        return acc + (((_a2 = p.lists) == null ? void 0 : _a2.length) || 0);
-      }, 0)
+      tableCount: pages.reduce((acc, p) => acc + (p.tables?.length || 0), 0),
+      formCount: pages.reduce((acc, p) => acc + (p.forms?.length || 0), 0),
+      listCount: pages.reduce((acc, p) => acc + (p.lists?.length || 0), 0)
     };
     if (summary.pageCount == null) summary.pageCount = pageCount;
     return {
@@ -12308,14 +12547,8 @@ ${customStyles}
       getDocumentType: () => json.documentType || null,
       classifications: json.classifications || pages.map((p) => p.classification || null),
       text: {
-        pages: pages.map((p) => {
-          var _a2;
-          return { pageNum: (_a2 = p.num) != null ? _a2 : p.pageNum, text: p.text || "", source: p.source };
-        }),
-        getPageText: (n) => {
-          var _a2;
-          return ((_a2 = pageOf(n)) == null ? void 0 : _a2.text) || "";
-        }
+        pages: pages.map((p) => ({ pageNum: p.num ?? p.pageNum, text: p.text || "", source: p.source })),
+        getPageText: (n) => pageOf(n)?.text || ""
       },
       layout: {
         getHeadings: (n) => listOf(n, "headings"),
@@ -12351,7 +12584,6 @@ ${customStyles}
     return lib;
   }
   async function openStreaming(source, options = {}) {
-    var _a;
     const pdfjsLib2 = getPdfjs();
     const { rangeChunkSize = 262144, password } = options;
     let params;
@@ -12377,7 +12609,7 @@ ${customStyles}
       disableAutoFetch: true,
       disableStream: false,
       // Keep PDF.js internal caches small on huge files.
-      maxImageSize: (_a = options.maxImageSize) != null ? _a : 16777216
+      maxImageSize: options.maxImageSize ?? 16777216
     });
     const pdf = await task.promise;
     const release = async () => {
@@ -12532,7 +12764,7 @@ ${customStyles}
         rasterQuality
       };
       for (let i = 0; i < numbers.length; i += batchSize) {
-        if (signal == null ? void 0 : signal.aborted) throw new Error("[codbdocs] aborted");
+        if (signal?.aborted) throw new Error("[codbdocs] aborted");
         const batch = numbers.slice(i, i + batchSize);
         const results = await Promise.all(batch.map((n) => extractPage(pdf, n, opts)));
         for (const result of results) {
@@ -12555,7 +12787,7 @@ ${customStyles}
           await pdf.cleanup();
         } catch {
         }
-        onProgress == null ? void 0 : onProgress({
+        onProgress?.({
           page: Math.min(i + batchSize, numbers.length),
           total: numbers.length,
           percent: Math.round(Math.min(i + batchSize, numbers.length) / numbers.length * 100)
@@ -12595,10 +12827,9 @@ ${customStyles}
     return Array.from({ length: total }, (_, i) => i + 1);
   }
   function flattenOutline(items, depth = 0, out = []) {
-    var _a, _b;
     for (const item of items || []) {
-      out.push({ title: item.title, level: depth, dest: (_a = item.dest) != null ? _a : null });
-      if ((_b = item.items) == null ? void 0 : _b.length) flattenOutline(item.items, depth + 1, out);
+      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
+      if (item.items?.length) flattenOutline(item.items, depth + 1, out);
     }
     return out;
   }
@@ -12689,14 +12920,13 @@ ${customStyles}
       keepPages: true,
       onProgress,
       onPage: async (page) => {
-        var _a;
         if (page.image) {
           const ext = page.image.type.split("/")[1].replace("jpeg", "jpg");
           const file = `pages/page-${String(page.page).padStart(4, "0")}.${ext}`;
           entries.push({ name: file, data: page.image.bytes });
           pageFiles.push(file);
         }
-        await ((_a = options.onPage) == null ? void 0 : _a.call(options, page));
+        await options.onPage?.(page);
       }
     });
     const transcript = result.pages.map((p) => `--- Page ${p.page} ---
@@ -12752,9 +12982,8 @@ ${p.text}`).join("\n\n");
     return out;
   }
   function shouldStream(input, { maxBytes = 25 * 1024 * 1024, maxPages = 60 } = {}) {
-    var _a, _b;
-    const size = typeof input === "number" ? input : (_a = input == null ? void 0 : input.size) != null ? _a : 0;
-    const pages = typeof input === "object" ? (_b = input == null ? void 0 : input.pageCount) != null ? _b : 0 : 0;
+    const size = typeof input === "number" ? input : input?.size ?? 0;
+    const pages = typeof input === "object" ? input?.pageCount ?? 0 : 0;
     return size > maxBytes || pages > maxPages;
   }
 
@@ -12779,11 +13008,11 @@ ${p.text}`).join("\n\n");
     if (typeof canvas.convertToBlob === "function") {
       const blob = await canvas.convertToBlob({ type, quality });
       const buf = new Uint8Array(await blob.arrayBuffer());
-      return `data:${type};base64,${bytesToBase64(buf)}`;
+      return `data:${type};base64,${bytesToBase643(buf)}`;
     }
     return canvas.toDataURL(type, quality);
   }
-  function bytesToBase64(bytes) {
+  function bytesToBase643(bytes) {
     let bin = "";
     const step = 32768;
     for (let i = 0; i < bytes.length; i += step) {
@@ -12792,9 +13021,8 @@ ${p.text}`).join("\n\n");
     return btoa(bin);
   }
   async function extractPageVector(page, options = {}) {
-    var _a;
     const pdfjsLib2 = getPdfjs2();
-    const scale = (_a = options.scale) != null ? _a : 1;
+    const scale = options.scale ?? 1;
     const viewport = page.getViewport({ scale });
     const opList = await page.getOperatorList();
     if (typeof pdfjsLib2.SVGGraphics === "function") {
@@ -12805,14 +13033,13 @@ ${p.text}`).join("\n\n");
         if (typeof XMLSerializer !== "undefined") {
           return new XMLSerializer().serializeToString(element);
         }
-        if (element == null ? void 0 : element.outerHTML) return element.outerHTML;
+        if (element?.outerHTML) return element.outerHTML;
       } catch {
       }
     }
     return buildSvgFromOperators(opList, viewport, pdfjsLib2);
   }
   function buildSvgFromOperators(opList, viewport, pdfjsLib2) {
-    var _a;
     const OPS = pdfjsLib2.OPS || {};
     const parts = [];
     let current = [];
@@ -12827,7 +13054,7 @@ ${p.text}`).join("\n\n");
       const args = opList.argsArray[i] || [];
       if (fn === OPS.setFillRGBColor) fill = rgb(args);
       else if (fn === OPS.setStrokeRGBColor) stroke = rgb(args);
-      else if (fn === OPS.setLineWidth) lineWidth = (_a = args[0]) != null ? _a : 1;
+      else if (fn === OPS.setLineWidth) lineWidth = args[0] ?? 1;
       else if (fn === OPS.constructPath) {
         const ops = args[0] || [];
         const coords = args[1] || [];
@@ -12878,15 +13105,14 @@ ${p.text}`).join("\n\n");
     return `rgb(${to(r)},${to(g)},${to(b)})`;
   }
   async function renderPageImage(page, options = {}) {
-    var _a, _b, _c, _d;
-    const dpi = (_a = options.dpi) != null ? _a : 150;
-    const scale = (_b = options.scale) != null ? _b : dpi / 72;
-    const type = (_c = options.type) != null ? _c : "image/png";
+    const dpi = options.dpi ?? 150;
+    const scale = options.scale ?? dpi / 72;
+    const type = options.type ?? "image/png";
     const viewport = page.getViewport({ scale });
     const canvas = makeCanvas(viewport.width, viewport.height);
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    const dataUri = await canvasToDataUri(canvas, type, (_d = options.quality) != null ? _d : 0.85);
+    const dataUri = await canvasToDataUri(canvas, type, options.quality ?? 0.85);
     const width = canvas.width;
     const height = canvas.height;
     canvas.width = 0;
@@ -12990,28 +13216,16 @@ ${p.text}`).join("\n\n");
       return "";
     }
   }
-  var TESSERACT_CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
   var ocrWorkerPromise = null;
-  async function loadTesseract() {
+  async function loadTesseract(provided) {
+    if (provided) return provided;
     if (typeof window !== "undefined" && window.Tesseract) return window.Tesseract;
-    if (typeof document === "undefined") throw new Error("[codbdocs] OCR requires a browser.");
-    await new Promise((resolve, reject) => {
-      const existing = document.querySelector(`script[src="${TESSERACT_CDN}"]`);
-      if (existing) return resolve();
-      const el = document.createElement("script");
-      el.src = TESSERACT_CDN;
-      el.async = true;
-      el.onload = () => resolve();
-      el.onerror = () => reject(new Error("[codbdocs] failed to load tesseract.js"));
-      document.head.appendChild(el);
-    });
-    if (!window.Tesseract) throw new Error("[codbdocs] tesseract.js unavailable.");
-    return window.Tesseract;
+    throw new Error("[codbdocs] Tesseract not found. Load or pass Tesseract before using OCR.");
   }
-  async function getOcrWorker(language) {
+  async function getOcrWorker(language, providedTesseract) {
     if (!ocrWorkerPromise) {
       ocrWorkerPromise = (async () => {
-        const Tesseract = await loadTesseract();
+        const Tesseract = await loadTesseract(providedTesseract);
         return Tesseract.createWorker(language || "eng");
       })();
     }
@@ -13027,18 +13241,16 @@ ${p.text}`).join("\n\n");
     ocrWorkerPromise = null;
   }
   async function ocrImage(image, options = {}) {
-    var _a, _b, _c, _d;
-    const worker = await getOcrWorker((_a = options.language) != null ? _a : "eng");
+    const worker = await getOcrWorker(options.language ?? "eng", options.tesseract);
     const { data } = await worker.recognize(image);
     return {
-      text: ((data == null ? void 0 : data.text) || "").trim(),
-      confidence: (_b = data == null ? void 0 : data.confidence) != null ? _b : null,
-      words: (_d = (_c = data == null ? void 0 : data.words) == null ? void 0 : _c.length) != null ? _d : 0
+      text: (data?.text || "").trim(),
+      confidence: data?.confidence ?? null,
+      words: data?.words?.length ?? 0
     };
   }
   async function ocrPage(page, options = {}) {
-    var _a;
-    const rendered = await renderPageImage(page, { dpi: (_a = options.dpi) != null ? _a : 200 });
+    const rendered = await renderPageImage(page, { dpi: options.dpi ?? 200 });
     const result = await ocrImage(rendered.dataUri, options);
     return { ...result, image: options.keepImage ? rendered : null };
   }
@@ -13049,6 +13261,7 @@ ${p.text}`).join("\n\n");
       aiContext = "",
       includeLayout = true,
       includeImages = true,
+      includeForms = true,
       includeVectors = true,
       includePageImages = false,
       includeOriginal = false,
@@ -13086,9 +13299,10 @@ ${p.text}`).join("\n\n");
     const layoutPages = [];
     const chunks = [];
     const headings = [];
+    const formFields = [];
     let ocrPages = 0;
     for (const num2 of numbers) {
-      if (signal == null ? void 0 : signal.aborted) throw new Error("[codbdocs] aborted");
+      if (signal?.aborted) throw new Error("[codbdocs] aborted");
       const page = await pdf.getPage(num2);
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
@@ -13111,11 +13325,21 @@ ${p.text}`).join("\n\n");
         text += item.str + (item.hasEOL ? "\n" : " ");
       }
       text = text.replace(/[ \t]+\n/g, "\n").trim();
+      let pageForms = [];
+      if (includeForms) {
+        try {
+          const annotations = await page.getAnnotations({ intent: "display" });
+          pageForms = annotations.filter((annotation) => annotation.subtype === "Widget" || annotation.fieldType).map((annotation) => normalizeFormField(annotation, num2)).filter(Boolean);
+          formFields.push(...pageForms);
+        } catch {
+          pageForms = [];
+        }
+      }
       let pageOcr = false;
       const wantOcr = ocr === true || ocr === "auto" && text.replace(/\s+/g, "").length < ocrMinChars;
       if (wantOcr) {
         try {
-          const result = await ocrPage(page, { language: options.ocrLanguage, dpi: Math.max(dpi, 200) });
+          const result = await ocrPage(page, { language: options.ocrLanguage, dpi: Math.max(dpi, 200), tesseract: options.tesseract });
           if (result.text) {
             text = result.text;
             pageOcr = true;
@@ -13142,6 +13366,7 @@ ${p.text}`).join("\n\n");
         words: text ? text.split(/\s+/).filter(Boolean).length : 0,
         spans: spans.length,
         images: 0,
+        form_fields: pageForms.length,
         ocr: pageOcr
       });
       chunks.push(...chunkText(text, num2, chunkSize, chunkOverlap, title));
@@ -13154,6 +13379,7 @@ ${p.text}`).join("\n\n");
           height: Math.round(viewport.height * 100) / 100,
           spans,
           images,
+          forms: pageForms,
           vector_svg: "",
           page_image: ""
         };
@@ -13177,7 +13403,7 @@ ${p.text}`).join("\n\n");
         page.cleanup();
       } catch {
       }
-      onProgress == null ? void 0 : onProgress({
+      onProgress?.({
         page: pages.length,
         total: numbers.length,
         percent: Math.round(pages.length / numbers.length * 100)
@@ -13185,10 +13411,7 @@ ${p.text}`).join("\n\n");
     }
     const transcript = pages.map((p) => `--- Page ${p.page_number} ---
 ${p.text}`).join("\n\n");
-    const outline = outlineRaw.length ? outlineRaw.map((o, i) => {
-      var _a;
-      return { text: o.title, level: o.level + 1, page: (_a = o.page) != null ? _a : null, id: `o${i}` };
-    }) : headings;
+    const outline = outlineRaw.length ? outlineRaw.map((o, i) => ({ text: o.title, level: o.level + 1, page: o.page ?? null, id: `o${i}` })) : headings;
     const payload = {
       document: {
         title,
@@ -13205,6 +13428,7 @@ ${p.text}`).join("\n\n");
         rag_chunks: chunks.length,
         rag_words: chunks.reduce((sum, c) => sum + c.words, 0),
         total_spans: pages.reduce((sum, p) => sum + p.spans, 0),
+        form_fields: formFields.length,
         text_pages: pages.filter((p) => !p.text.startsWith("(")).length,
         ocr_pages: ocrPages,
         characters: pages.reduce((sum, p) => sum + p.text.length, 0),
@@ -13217,8 +13441,9 @@ ${p.text}`).join("\n\n");
       transcript,
       ai_context: aiContext
     };
+    if (includeForms) payload.forms = formFields;
     if (includeLayout) payload.layout = { pages: layoutPages };
-    if (includeOriginal && bytes) payload.original_pdf_base64 = bytesToBase64(bytes);
+    if (includeOriginal && bytes) payload.original_pdf_base64 = bytesToBase643(bytes);
     try {
       await pdf.destroy();
     } catch {
@@ -13226,7 +13451,6 @@ ${p.text}`).join("\n\n");
     return payload;
   }
   async function packageDocumentFull(source, options = {}) {
-    var _a, _b, _c, _d;
     const data = await documentData(source, {
       ...options,
       includeLayout: true,
@@ -13237,13 +13461,14 @@ ${p.text}`).join("\n\n");
     const pageFiles = [];
     const vectorFiles = [];
     const bytes = await sourceBytes2(source);
+    const originalPdfSrc = options.includeOriginal !== false && bytes ? `data:application/pdf;base64,${bytesToBase643(bytes)}` : void 0;
     const html = options.html || buildFidelityHtml(dataToIR(data, options), {
       title: data.document.title,
       lang: data.document.language || "en",
       rag: { chunks: data.chunks },
       originalName: data.document.source,
-      originalPdfSrc: options.includeOriginal !== false ? "original.pdf" : void 0,
-      ...(_a = options.htmlOptions) != null ? _a : {}
+      originalPdfSrc,
+      ...options.htmlOptions ?? {}
     });
     entries.push({ name: "index.html", data: html });
     entries.push({ name: "transcript.txt", data: data.transcript });
@@ -13254,7 +13479,7 @@ ${p.text}`).join("\n\n");
       const pdf = await pdfjsLib2.getDocument({ data: bytes.slice(0) }).promise;
       for (const page of data.pages) {
         const p = await pdf.getPage(page.page_number);
-        const rendered = await renderPageImage(p, { dpi: (_b = options.dpi) != null ? _b : 150 });
+        const rendered = await renderPageImage(p, { dpi: options.dpi ?? 150 });
         const name = `pages/page-${String(page.page_number).padStart(4, "0")}.png`;
         entries.push({ name, data: dataUriToBytes(rendered.dataUri) });
         pageFiles.push(name);
@@ -13265,7 +13490,7 @@ ${p.text}`).join("\n\n");
       }
       await pdf.destroy();
     }
-    for (const page of (_d = (_c = data.layout) == null ? void 0 : _c.pages) != null ? _d : []) {
+    for (const page of data.layout?.pages ?? []) {
       if (!page.vector_svg) continue;
       const name = `vectors/page-${String(page.page_number).padStart(4, "0")}.svg`;
       entries.push({ name, data: page.vector_svg });
@@ -13324,10 +13549,9 @@ ${p.text}`).join("\n\n");
     return Array.from({ length: total }, (_, i) => i + 1);
   }
   function flattenOutline2(items, depth = 0, out = []) {
-    var _a, _b;
     for (const item of items || []) {
-      out.push({ title: item.title, level: depth, dest: (_a = item.dest) != null ? _a : null });
-      if ((_b = item.items) == null ? void 0 : _b.length) flattenOutline2(item.items, depth + 1, out);
+      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
+      if (item.items?.length) flattenOutline2(item.items, depth + 1, out);
     }
     return out;
   }
@@ -13348,84 +13572,133 @@ ${p.text}`).join("\n\n");
     return null;
   }
   function dataToIR(data, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
     const objects = {};
     const pages = {};
     const pageIds = [];
-    const layout = (_b = (_a = data.layout) == null ? void 0 : _a.pages) != null ? _b : [];
+    const forms = { fields: [], byName: {} };
+    const layout = data.layout?.pages ?? [];
     const byNumber = new Map(layout.map((p) => [p.page_number, p]));
     for (const page of data.pages) {
       const pid = `page-${page.page_number}`;
       pageIds.push(pid);
       const lay = byNumber.get(page.page_number);
       const content = [];
-      ((_c = lay == null ? void 0 : lay.spans) != null ? _c : []).forEach((run, i) => {
+      (lay?.spans ?? []).forEach((run, i) => {
         if (!run.text || !run.text.trim()) return;
         const id = `${pid}-t${i}`;
         const size = run.font_size || run.height || 11;
+        const height = run.height || size;
+        const bbox = [run.x, page.height - run.y - height, run.width, height];
         objects[id] = {
           id,
           type: "text",
-          bbox: [run.x, run.y, run.width, run.height || size],
+          bbox,
           raw: {
             text: run.text,
             font: run.font_family || "",
             fontSize: size,
-            bbox: [run.x, run.y, run.width, run.height || size]
+            bbox
           },
           semantic: { text: run.text, role: "paragraph" }
         };
         content.push(id);
       });
-      ((_d = lay == null ? void 0 : lay.images) != null ? _d : []).forEach((img, i) => {
+      (lay?.images ?? []).forEach((img, i) => {
         if (!img.data_uri) return;
         const id = `${pid}-img${i}`;
         objects[id] = {
           id,
           type: "image",
-          bbox: [img.x, img.y, img.width, img.height],
-          raw: { src: img.data_uri, bbox: [img.x, img.y, img.width, img.height] },
+          bbox: [img.x, page.height - img.y - img.height, img.width, img.height],
+          raw: { src: img.data_uri, bbox: [img.x, page.height - img.y - img.height, img.width, img.height] },
           semantic: { role: "figure", caption: `Image on page ${page.page_number}` },
           accessibility: { alt: `Image on page ${page.page_number}` }
         };
         content.push(id);
+      });
+      const pageForms = lay?.forms ?? (data.forms || []).filter((field) => field.page === page.page_number);
+      const formObjectIds = [];
+      pageForms.forEach((field, i) => {
+        const id = `${pid}-form${i}`;
+        const bbox = Array.isArray(field.bbox) ? field.bbox : Array.isArray(field.rect) && field.rect.length >= 4 ? [
+          Math.min(field.rect[0], field.rect[2]),
+          Math.min(field.rect[1], field.rect[3]),
+          Math.abs(field.rect[2] - field.rect[0]),
+          Math.abs(field.rect[3] - field.rect[1])
+        ] : null;
+        objects[id] = {
+          id,
+          type: "form_field",
+          bbox,
+          raw: { ...field, bbox },
+          semantic: {
+            role: "form_field",
+            fieldType: field.fieldType,
+            fieldName: field.name,
+            value: field.value,
+            defaultValue: field.defaultValue,
+            optionValue: field.optionValue,
+            checked: field.checked,
+            defaultChecked: field.defaultChecked,
+            options: field.options || [],
+            multiple: Boolean(field.multiple),
+            maxLength: field.maxLength ?? null
+          },
+          accessibility: {
+            role: "form",
+            label: field.label || field.name,
+            description: field.description || "",
+            required: Boolean(field.required),
+            readOnly: Boolean(field.readOnly)
+          },
+          provenance: { method: "annotation", confidence: 1 }
+        };
+        content.push(id);
+        formObjectIds.push(id);
+        forms.fields.push({ ...field, objectId: id, pageId: pid });
+        if (!Array.isArray(forms.byName[field.name])) forms.byName[field.name] = [];
+        forms.byName[field.name].push(id);
       });
       pages[pid] = {
         id: pid,
         num: page.page_number,
         width: page.width,
         height: page.height,
-        background: (lay == null ? void 0 : lay.page_image) || "",
-        content
+        background: lay?.page_image || "",
+        content,
+        forms: formObjectIds
       };
     }
     return {
       document: {
-        title: options.title || ((_e = data.document) == null ? void 0 : _e.title) || "Document",
+        title: options.title || data.document?.title || "Document",
         pages: pageIds,
-        metadata: { ...(_g = (_f = data.document) == null ? void 0 : _f.metadata) != null ? _g : {}, title: (_h = data.document) == null ? void 0 : _h.title, language: (_i = data.document) == null ? void 0 : _i.language }
+        metadata: { ...data.document?.metadata ?? {}, title: data.document?.title, language: data.document?.language }
       },
       pages,
-      objects
+      objects,
+      forms
     };
   }
   async function buildAccessibleHtml(source, options = {}) {
-    var _a, _b;
     const data = await documentData(source, {
       ...options,
       includeLayout: true,
       includeImages: options.includeImages !== false,
+      includeForms: options.includeForms !== false,
       includePageImages: options.pageBackgrounds !== false,
       includeVectors: options.includeVectors === true,
-      dpi: (_a = options.dpi) != null ? _a : 150
+      dpi: options.dpi ?? 150
     });
     const ir = dataToIR(data, options);
+    const bytes = options.includeOriginal === false ? null : await sourceBytes2(source);
     const html = buildFidelityHtml(ir, {
       title: data.document.title,
       lang: data.document.language || "en",
       rag: { chunks: data.chunks },
       originalName: data.document.source,
-      ...(_b = options.html) != null ? _b : {}
+      originalPdfSrc: bytes ? `data:application/pdf;base64,${bytesToBase643(bytes)}` : void 0,
+      ...options.html ?? {}
     });
     return { html, data, ir };
   }
@@ -13435,6 +13708,7 @@ ${p.text}`).join("\n\n");
       layout: true,
       images: true,
       vectors: true,
+      interactiveForms: true,
       pageImages: true,
       ocr: typeof document !== "undefined",
       rag: true,
@@ -13449,7 +13723,6 @@ ${p.text}`).join("\n\n");
 
   // packages/core/src/index.js
   function trackImageBboxes(pageOps) {
-    var _a, _b, _c;
     const imageBboxes = /* @__PURE__ */ new Map();
     const ctmStack = [];
     let ctm = [1, 0, 0, 1, 0, 0];
@@ -13458,12 +13731,12 @@ ${p.text}`).join("\n\n");
         ctmStack.push([...ctm]);
       } else if (op.fn === "restore") {
         ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
-      } else if (op.fn === "transform" && ((_a = op.args) == null ? void 0 : _a.length) === 6) {
+      } else if (op.fn === "transform" && op.args?.length === 6) {
         const [a, b, c, d, e, f] = op.args;
-        ctm = multiplyMatrix(ctm, [a, b, c, d, e, f]);
-      } else if (op.fn === "concatMatrix" && ((_b = op.args) == null ? void 0 : _b.length) === 6) {
+        ctm = multiplyMatrix2(ctm, [a, b, c, d, e, f]);
+      } else if (op.fn === "concatMatrix" && op.args?.length === 6) {
         ctm = [...op.args];
-      } else if (op.fn === "doXObject" && ((_c = op.args) == null ? void 0 : _c[0])) {
+      } else if (op.fn === "doXObject" && op.args?.[0]) {
         const name = op.args[0];
         imageBboxes.set(name, {
           bbox: applyMatrixToRect(ctm, [0, 0, 1, 1]),
@@ -13474,7 +13747,7 @@ ${p.text}`).join("\n\n");
     }
     return imageBboxes;
   }
-  function multiplyMatrix(m1, m2) {
+  function multiplyMatrix2(m1, m2) {
     const [a1, b1, c1, d1, e1, f1] = m1;
     const [a2, b2, c2, d2, e2, f2] = m2;
     return [
@@ -13524,6 +13797,15 @@ ${p.text}`).join("\n\n");
     }
   };
   var config = { ...DEFAULTS };
+  function bytesToBase644(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
+    let bin = "";
+    const step = 32768;
+    for (let i = 0; i < bytes.length; i += step) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    }
+    return btoa(bin);
+  }
   function configure(opts = {}) {
     if (opts.memory) {
       opts.memory = { ...config.memory, ...opts.memory };
@@ -13551,23 +13833,28 @@ ${p.text}`).join("\n\n");
   async function load(source) {
     const pdfjsLib2 = getPdfjs3();
     let data;
+    let sourceBytes3 = null;
     if (typeof source === "string") {
       data = { url: source };
     } else if (source instanceof ArrayBuffer) {
-      data = { data: source };
+      sourceBytes3 = new Uint8Array(source.slice(0));
+      data = { data: sourceBytes3.slice(0).buffer };
     } else if (source instanceof Uint8Array) {
-      data = { data: source.buffer };
+      sourceBytes3 = source.slice(0);
+      data = { data: sourceBytes3.slice(0).buffer };
     } else if (source && typeof source.arrayBuffer === "function") {
-      data = { data: await source.arrayBuffer() };
+      sourceBytes3 = new Uint8Array(await source.arrayBuffer());
+      data = { data: sourceBytes3.slice(0).buffer };
     } else {
       throw new Error("[codbdocs] Unsupported source. Pass a File, Blob, ArrayBuffer, Uint8Array, or URL string.");
     }
     const pdf = await pdfjsLib2.getDocument(data).promise;
-    return new CodbDoc(pdf);
+    return new CodbDoc(pdf, sourceBytes3);
   }
   var CodbDoc = class {
-    constructor(pdf) {
+    constructor(pdf, sourceBytes3 = null) {
       this._pdf = pdf;
+      this._sourceBytes = sourceBytes3;
       this.pageCount = pdf.numPages;
     }
     /**
@@ -13575,7 +13862,6 @@ ${p.text}`).join("\n\n");
      * Returns a DocumentGraph with spatial search, content graph, and ask().
      */
     async analyze(opts = {}) {
-      var _a, _b;
       const {
         ocr = true,
         visual = false,
@@ -13739,6 +14025,10 @@ ${p.text}`).join("\n\n");
             irPage.annotations = annotations;
             ir.annotations[`page_${num2}`] = annotations;
             for (const ann of annotations) {
+              if (ann.type === "form_field") {
+                registerFormField(ir, `page_${num2}`, ann, num2);
+                continue;
+              }
               if (ann.type && ann.type === "link") {
                 const href = ann.url || (ann.dest ? `#${ann.dest}` : null);
                 if (!href) continue;
@@ -13872,8 +14162,8 @@ ${p.text}`).join("\n\n");
                 addObject(ir, `page_${num2}`, {
                   type: "image",
                   raw: {
-                    src: img.dataUrl || ((_a = img.thumbnail) == null ? void 0 : _a.dataUrl) || "",
-                    thumb: ((_b = img.thumbnail) == null ? void 0 : _b.dataUrl) || null,
+                    src: img.dataUrl || img.thumbnail?.dataUrl || "",
+                    thumb: img.thumbnail?.dataUrl || null,
                     format: img.format,
                     width: img.width,
                     height: img.height
@@ -13961,7 +14251,7 @@ ${p.text}`).join("\n\n");
             spatial: !!spatial,
             structure: !!structures,
             metadata: !!metadata,
-            classification: classification == null ? void 0 : classification.type,
+            classification: classification?.type,
             contentBlocks: pageResult.contentBlocks,
             contentEntities: pageResult.contentEntities,
             vectors: pageResult.vectors
@@ -13985,6 +14275,7 @@ ${p.text}`).join("\n\n");
       graph._contentGraph = contentGraph;
       graph._doc = this;
       graph._ir = ir;
+      graph._sourceBytes = this._sourceBytes;
       graph._conceptGraph = conceptGraph;
       graph._fingerprint = fingerprint;
       graph.find = (query) => executeQuery(contentGraph, query, graph);
@@ -14009,9 +14300,8 @@ ${p.text}`).join("\n\n");
       graph.getAccessibilityTree = () => generateAccessibilityTree(ir);
       graph.toHTML = (options) => exportHTML(ir, options);
       graph.getVectors = (pageNum) => {
-        var _a2, _b2;
         const pageId = `page_${pageNum}`;
-        return ((_b2 = (_a2 = ir.pages[pageId]) == null ? void 0 : _a2.vectors) == null ? void 0 : _b2.map((id) => ir.vectors[id])) || [];
+        return ir.pages[pageId]?.vectors?.map((id) => ir.vectors[id]) || [];
       };
       graph.getStructureTree = (pageNum) => {
         const pageId = `page_${pageNum}`;
@@ -14021,10 +14311,7 @@ ${p.text}`).join("\n\n");
         const pageId = `page_${pageNum}`;
         return ir.annotations[pageId] || [];
       };
-      graph.getFormFields = () => {
-        var _a2;
-        return ((_a2 = ir.forms) == null ? void 0 : _a2.fields) || [];
-      };
+      graph.getFormFields = () => ir.forms?.fields || [];
       graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
       graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
       graph.getImages = (pageNum) => {
@@ -14095,34 +14382,29 @@ ${p.text}`).join("\n\n");
       graph.getPageLabels = () => ir.document.navigation.labels || [];
       graph.getSecurity = () => ir.document.security;
       graph.getMarkedContent = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.markedContent) || [];
+        return ir.pages[pageId]?.markedContent || [];
       };
       graph.getArtifacts = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.artifacts) || [];
+        return ir.pages[pageId]?.artifacts || [];
       };
       graph.getGlyphs = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.glyphs) || [];
+        return ir.pages[pageId]?.glyphs || [];
       };
       graph.getRemediations = () => {
         const audit = graph.auditAccessibility();
         return generateRemediations(audit, ir);
       };
       graph.getSignatures = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.signatures) || [];
+        return ir.pages[pageId]?.signatures || [];
       };
       graph.getSignatureSummary = () => {
-        var _a2;
         const allSignatures = [];
         for (const pageId of Object.keys(ir.pages)) {
-          if ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.signatures) {
+          if (ir.pages[pageId]?.signatures) {
             allSignatures.push(...ir.pages[pageId].signatures);
           }
         }
@@ -14135,15 +14417,13 @@ ${p.text}`).join("\n\n");
       graph.getActions = () => ir.document.actions || [];
       graph.getActionsSummary = () => buildActionsSummary(ir.document.actions || []);
       graph.getAppearanceStreams = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.appearanceStreams) || [];
+        return ir.pages[pageId]?.appearanceStreams || [];
       };
       graph.getAppearanceStreamsSummary = () => {
-        var _a2;
         const allAppearances = [];
         for (const pageId of Object.keys(ir.pages)) {
-          if ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.appearanceStreams) {
+          if (ir.pages[pageId]?.appearanceStreams) {
             allAppearances.push(...ir.pages[pageId].appearanceStreams);
           }
         }
@@ -14154,9 +14434,8 @@ ${p.text}`).join("\n\n");
       graph.getRevisions = () => ir.document.revisions || [];
       graph.getRevisionsSummary = () => buildRevisionsSummary(ir.document.revisions || []);
       graph.getGraphicsStateSummary = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        const states = ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.graphicsStates) || [];
+        const states = ir.pages[pageId]?.graphicsStates || [];
         return buildGraphicsStateSummary(states);
       };
       graph.wcagAudit = () => wcagAudit(ir);
@@ -14169,41 +14448,32 @@ ${p.text}`).join("\n\n");
       graph.getAccessibilityReport = () => generateAccessibilityReport(ir);
       graph.toPDF = (options) => createPDF(ir, options);
       graph.createTextPDF = (options) => createTextPDF(
-        Object.values(ir.pages).map((p) => {
-          var _a2;
-          return ((_a2 = p.content) == null ? void 0 : _a2.join("\n")) || "";
-        }),
+        Object.values(ir.pages).map((p) => p.content?.join("\n") || ""),
         options
       );
       graph.diagnose = () => diagnoseDocument(pageResults, graph);
       graph.normalize = (options) => normalizeDocument(graph, options);
       graph.getTextQuality = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.textQuality) || null;
+        return ir.pages[pageId]?.textQuality || null;
       };
       graph.getVisualComparison = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.visualComparison) || null;
+        return ir.pages[pageId]?.visualComparison || null;
       };
       graph.getRepeatedElements = () => {
-        var _a2;
-        return ((_a2 = pageResults[0]) == null ? void 0 : _a2.repeatedElements) || { watermarks: [], headers: [], footers: [], pageNumbers: [] };
+        return pageResults[0]?.repeatedElements || { watermarks: [], headers: [], footers: [], pageNumbers: [] };
       };
       graph.getRedactions = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.redactions) || [];
+        return ir.pages[pageId]?.redactions || [];
       };
       graph.getTagValidation = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.tagValidation) || { valid: false, issues: [] };
+        return ir.pages[pageId]?.tagValidation || { valid: false, issues: [] };
       };
       graph.getRAGReadiness = () => {
-        var _a2;
-        const readiness = calculateRAGReadiness(pageResults, null, null, ((_a2 = pageResults[0]) == null ? void 0 : _a2.repeatedElements) || {});
+        const readiness = calculateRAGReadiness(pageResults, null, null, pageResults[0]?.repeatedElements || {});
         return {
           score: Math.round(readiness.score * 100),
           factors: readiness.factors,
@@ -14211,49 +14481,39 @@ ${p.text}`).join("\n\n");
         };
       };
       graph.getRotationSkew = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.rotationSkew) || { rotation: 0, skewAngle: 0, isRotated: false, isSkewed: false };
+        return ir.pages[pageId]?.rotationSkew || { rotation: 0, skewAngle: 0, isRotated: false, isSkewed: false };
       };
       graph.getGlyphIssues = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.glyphIssues) || { issues: [], hasGlyphIssues: false };
+        return ir.pages[pageId]?.glyphIssues || { issues: [], hasGlyphIssues: false };
       };
       graph.getOutlinedText = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.outlinedText) || { hasOutlinedText: false, candidates: [], count: 0 };
+        return ir.pages[pageId]?.outlinedText || { hasOutlinedText: false, candidates: [], count: 0 };
       };
       graph.getFlattenedForms = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.flattenedForms) || { hasFlattenedForms: false, candidates: [], recoveredFields: [] };
+        return ir.pages[pageId]?.flattenedForms || { hasFlattenedForms: false, candidates: [], recoveredFields: [] };
       };
       graph.getCheckboxes = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.checkboxes) || { count: 0, checkboxes: [], checked: 0, unchecked: 0 };
+        return ir.pages[pageId]?.checkboxes || { count: 0, checkboxes: [], checked: 0, unchecked: 0 };
       };
       graph.getFootnotes = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.footnotes) || { footnotes: [], footnoteRefs: [], associations: [], count: 0 };
+        return ir.pages[pageId]?.footnotes || { footnotes: [], footnoteRefs: [], associations: [], count: 0 };
       };
       graph.getLanguage = (pageNum) => {
-        var _a2;
         const pageId = `page_${pageNum}`;
-        return ((_a2 = ir.pages[pageId]) == null ? void 0 : _a2.language) || { language: "unknown", confidence: 0 };
+        return ir.pages[pageId]?.language || { language: "unknown", confidence: 0 };
       };
       graph.getCrossPageTables = () => detectCrossPageTables(pageResults, ir);
       graph.associateCaptions = (pageNum) => {
         const pageId = `page_${pageNum}`;
         const pageData = ir.pages[pageId];
-        const images = (pageData == null ? void 0 : pageData.images) || [];
-        const contentItems = ((pageData == null ? void 0 : pageData.content) || []).map((id) => {
-          var _a2;
-          return (_a2 = ir.objects) == null ? void 0 : _a2[id];
-        }).filter(Boolean).map((obj) => obj.raw);
+        const images = pageData?.images || [];
+        const contentItems = (pageData?.content || []).map((id) => ir.objects?.[id]).filter(Boolean).map((obj) => obj.raw);
         return associateCaptionsWithImages(pageData, contentItems, images);
       };
       graph.getConceptGraph = () => conceptGraph;
@@ -14394,24 +14654,21 @@ ${p.text}`).join("\n\n");
       };
       graph.expandQuery = (query, options) => expandQuery(query, options);
       graph.fuzzySearch = (query, options) => {
-        var _a2;
-        const pages = ((_a2 = graph.text) == null ? void 0 : _a2.pages) || [];
+        const pages = graph.text?.pages || [];
         return fuzzySearch(query, pages, options);
       };
       graph.getTerminology = () => graph._terminology || { aliases: {}, acronyms: {}, definitions: {} };
       graph.getAcronyms = () => {
-        var _a2;
         const allAcronyms = [];
-        for (const page of ((_a2 = graph.text) == null ? void 0 : _a2.pages) || []) {
+        for (const page of graph.text?.pages || []) {
           const text = page.text || "";
           allAcronyms.push(...detectAcronyms(text));
         }
         return allAcronyms;
       };
       graph.getDefinitions = () => {
-        var _a2;
         const allDefs = [];
-        for (const page of ((_a2 = graph.text) == null ? void 0 : _a2.pages) || []) {
+        for (const page of graph.text?.pages || []) {
           const text = page.text || "";
           allDefs.push(...detectDefinitions(text));
         }
@@ -14635,6 +14892,24 @@ ${p.text}`).join("\n\n")
           if (annotations.length > 0) {
             irPage.annotations = annotations;
             ir.annotations[`page_${num2}`] = annotations;
+            for (const ann of annotations) {
+              if (ann.type === "form_field") {
+                registerFormField(ir, `page_${num2}`, ann, num2);
+                continue;
+              }
+              if (ann.type === "link") {
+                const href = ann.url || (ann.dest ? `#${ann.dest}` : null);
+                if (!href) continue;
+                addObject(ir, `page_${num2}`, {
+                  type: "link",
+                  raw: { url: ann.url || null, dest: ann.dest || null, href, rect: ann.rect || null },
+                  semantic: { role: "link", text: ann.contents || null },
+                  accessibility: { role: "link" },
+                  bbox: ann.rect ? [ann.rect[0], ann.rect[1], ann.rect[2] - ann.rect[0], ann.rect[3] - ann.rect[1]] : null,
+                  provenance: { method: "annotation", confidence: 1 }
+                });
+              }
+            }
           }
           if (structureTree) ir.structure[`page_${num2}`] = structureTree;
           if (extractExtended) {
@@ -14706,16 +14981,10 @@ ${p.text}`).join("\n\n")
       graph.auditAccessibility = () => auditAccessibility(ir);
       graph.getAccessibilityTree = () => generateAccessibilityTree(ir);
       graph.toHTML = (options) => exportHTML(ir, options);
-      graph.getVectors = (pageNum) => {
-        var _a, _b;
-        return ((_b = (_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.vectors) == null ? void 0 : _b.map((id) => ir.vectors[id])) || [];
-      };
+      graph.getVectors = (pageNum) => ir.pages[`page_${pageNum}`]?.vectors?.map((id) => ir.vectors[id]) || [];
       graph.getStructureTree = (pageNum) => ir.structure[`page_${pageNum}`] || null;
       graph.getAnnotations = (pageNum) => ir.annotations[`page_${pageNum}`] || [];
-      graph.getFormFields = () => {
-        var _a;
-        return ((_a = ir.forms) == null ? void 0 : _a.fields) || [];
-      };
+      graph.getFormFields = () => ir.forms?.fields || [];
       graph.getReadingOrder = (pageNum) => detectReadingOrder(ir, pageNum);
       graph.getReadingOrderSequence = (pageNum) => getReadingOrderSequence(ir, pageNum);
       graph.getMetadata = () => ir.document.metadata;
@@ -14723,18 +14992,9 @@ ${p.text}`).join("\n\n")
       graph.getNamedDestinations = () => ir.document.navigation.destinations || {};
       graph.getPageLabels = () => ir.document.navigation.labels || [];
       graph.getSecurity = () => ir.document.security;
-      graph.getMarkedContent = (pageNum) => {
-        var _a;
-        return ((_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.markedContent) || [];
-      };
-      graph.getArtifacts = (pageNum) => {
-        var _a;
-        return ((_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.artifacts) || [];
-      };
-      graph.getGlyphs = (pageNum) => {
-        var _a;
-        return ((_a = ir.pages[`page_${pageNum}`]) == null ? void 0 : _a.glyphs) || [];
-      };
+      graph.getMarkedContent = (pageNum) => ir.pages[`page_${pageNum}`]?.markedContent || [];
+      graph.getArtifacts = (pageNum) => ir.pages[`page_${pageNum}`]?.artifacts || [];
+      graph.getGlyphs = (pageNum) => ir.pages[`page_${pageNum}`]?.glyphs || [];
       graph.getRemediations = () => generateRemediations(graph.auditAccessibility(), ir);
       graph.wcagAudit = () => wcagAudit(ir);
       graph.toAccessibleHTML = (options) => exportAccessibleHTML(ir, options);
@@ -14767,9 +15027,8 @@ ${p.text}`).join("\n\n")
     const nonPrintRatio = allText.length > 0 ? nonPrintable / allText.length : 0;
     if (nonPrintRatio > 0.3) score -= 0.3;
     const outsideBounds = contentItems.filter((item) => {
-      var _a, _b;
-      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+      const x = item.transform?.[4] || 0;
+      const y = item.transform?.[5] || 0;
       return x < 0 || x > pageSize.width || y < 0 || y > pageSize.height;
     }).length;
     const outsideRatio = contentItems.length > 0 ? outsideBounds / contentItems.length : 0;
@@ -14807,8 +15066,7 @@ ${p.text}`).join("\n\n")
     }
     if (img.originalWidth < 50 && img.originalHeight < 50) return "icon";
     const nearbyText = contentItems.filter((item) => {
-      var _a;
-      const y = ((_a = item.transform) == null ? void 0 : _a[5]) || 0;
+      const y = item.transform?.[5] || 0;
       return Math.abs(y - imgY) < 100;
     }).map((item) => item.str || "").join(" ");
     if (/figure|fig\.|chart|graph|diagram|image|photo|picture/i.test(nearbyText)) return "figure";
@@ -14839,16 +15097,14 @@ ${p.text}`).join("\n\n")
     const imgLeft = img.bbox.x || 0;
     const imgRight = imgLeft + (img.bbox.width || 0);
     const candidates = contentItems.filter((item) => {
-      var _a, _b;
-      const y = ((_a = item.transform) == null ? void 0 : _a[5]) || 0;
-      const x = ((_b = item.transform) == null ? void 0 : _b[4]) || 0;
+      const y = item.transform?.[5] || 0;
+      const x = item.transform?.[4] || 0;
       const below = y < imgBottom && y > imgBottom - 100;
       const overlap = x >= imgLeft - 50 && x <= imgRight + 50;
       return below && overlap && item.str && item.str.trim().length > 5;
     }).sort((a, b) => {
-      var _a, _b;
-      const distA = imgBottom - (((_a = a.transform) == null ? void 0 : _a[5]) || 0);
-      const distB = imgBottom - (((_b = b.transform) == null ? void 0 : _b[5]) || 0);
+      const distA = imgBottom - (a.transform?.[5] || 0);
+      const distB = imgBottom - (b.transform?.[5] || 0);
       return distA - distB;
     });
     if (candidates.length === 0) return null;
@@ -14866,16 +15122,14 @@ ${p.text}`).join("\n\n")
     const imgH = img.bbox[3] || 0;
     const margin = 150;
     const nearby = contentItems.filter((item) => {
-      var _a, _b;
-      const x = ((_a = item.transform) == null ? void 0 : _a[4]) || 0;
-      const y = ((_b = item.transform) == null ? void 0 : _b[5]) || 0;
+      const x = item.transform?.[4] || 0;
+      const y = item.transform?.[5] || 0;
       const inX = x >= imgX - margin && x <= imgX + imgW + margin;
       const inY = y >= imgY - margin && y <= imgY + imgH + margin;
       return inX && inY && item.str && item.str.trim().length > 0;
     }).sort((a, b) => {
-      var _a, _b, _c, _d;
-      const aDist = Math.abs((((_a = a.transform) == null ? void 0 : _a[4]) || 0) - imgX) + Math.abs((((_b = a.transform) == null ? void 0 : _b[5]) || 0) - imgY);
-      const bDist = Math.abs((((_c = b.transform) == null ? void 0 : _c[4]) || 0) - imgX) + Math.abs((((_d = b.transform) == null ? void 0 : _d[5]) || 0) - imgY);
+      const aDist = Math.abs((a.transform?.[4] || 0) - imgX) + Math.abs((a.transform?.[5] || 0) - imgY);
+      const bDist = Math.abs((b.transform?.[4] || 0) - imgX) + Math.abs((b.transform?.[5] || 0) - imgY);
       return aDist - bDist;
     }).slice(0, 20).map((item) => item.str.trim()).join(" ");
     return nearby;
@@ -14892,8 +15146,7 @@ ${p.text}`).join("\n\n")
   var CodbDocs = { load, configure, canUseWorkers };
   var index_default = CodbDocs;
   function exportFidelityHTML(graph, options = {}) {
-    var _a, _b, _c, _d;
-    const ir = typeof (graph == null ? void 0 : graph.getIR) === "function" ? graph.getIR() : graph;
+    const ir = typeof graph?.getIR === "function" ? graph.getIR() : graph;
     const safe = (fn) => {
       try {
         return fn();
@@ -14901,19 +15154,20 @@ ${p.text}`).join("\n\n")
         return void 0;
       }
     };
-    const audit = (_a = options.audit) != null ? _a : safe(() => graph.wcagAudit());
-    const remediations = (_b = options.remediations) != null ? _b : safe(() => graph.getRemediations());
-    const rag = (_c = options.rag) != null ? _c : safe(() => graph.toRAG());
-    const tags = (_d = options.tags) != null ? _d : safe(() => graph.getAccessibilityTree());
-    return buildFidelityHtml(ir, { ...options, audit, remediations, rag, tags });
+    const audit = options.audit ?? safe(() => graph.wcagAudit());
+    const remediations = options.remediations ?? safe(() => graph.getRemediations());
+    const rag = options.rag ?? safe(() => graph.toRAG());
+    const tags = options.tags ?? safe(() => graph.getAccessibilityTree());
+    const sourceBytes3 = graph?._sourceBytes || graph?._doc?._sourceBytes || null;
+    const originalPdfSrc = options.originalPdfSrc || (options.includeOriginal !== false && sourceBytes3 ? `data:application/pdf;base64,${bytesToBase644(sourceBytes3)}` : void 0);
+    return buildFidelityHtml(ir, { ...options, audit, remediations, rag, tags, originalPdfSrc });
   }
   async function packageDocument2(source, options = {}) {
-    var _a;
     if (options.mode === "stream") return packageDocument(source, options);
     try {
       return await packageDocumentFull(source, options);
     } catch (err) {
-      const html = (_a = options.html) != null ? _a : null;
+      const html = options.html ?? null;
       return packageDocument(source, { ...options, html, packagerFallbackError: String(err) });
     }
   }

@@ -139,11 +139,81 @@ function pushElement(ctx, el) {
   ctx.elements.push({ ...el, id });
   return id;
 }
+function formFieldData(o) {
+  return { ...(o && o.raw || {}), ...(o && o.semantic || {}) };
+}
+function renderFormControl(o, view, pageHeight) {
+  const field = formFieldData(o);
+  const type = String(field.fieldType || "text");
+  const name = String(field.fieldName || field.name || o.id || "field");
+  const label = String(o.accessibility && o.accessibility.label || field.label || name);
+  const description = String(o.accessibility && o.accessibility.description || field.description || "");
+  const value = field.value == null ? "" : field.value;
+  const values = Array.isArray(value) ? value.map(String) : [String(value)];
+  const id = `fx-form-${String(o.id || name).replace(/[^A-Za-z0-9_-]/g, "-")}-${view}`;
+  const required = Boolean(o.accessibility && o.accessibility.required || field.required);
+  const readOnly = Boolean(o.accessibility && o.accessibility.readOnly || field.readOnly);
+  const defaultData = encodeURIComponent(JSON.stringify(value));
+  const optionValue = String(field.optionValue || "On");
+  const attrs = ` id="${esc(id)}" name="${esc(name)}__${esc(view)}" class="fx-form-input"` +
+    ` data-form-name="${esc(name)}" data-form-type="${esc(type)}" data-form-view="${esc(view)}"` +
+    ` data-form-option="${esc(optionValue)}" data-form-default="${esc(defaultData)}" aria-label="${esc(label)}"` +
+    (required ? ` required aria-required="true"` : "") +
+    (readOnly && ["text", "password", "textarea"].includes(type) ? ` readonly aria-readonly="true"` : "") +
+    (readOnly && !["text", "password", "textarea"].includes(type) ? ` disabled aria-readonly="true"` : "");
+
+  if (field.hidden) return `<input type="hidden"${attrs} value="${esc(values[0])}">`;
+
+  let control = "";
+  if (type === "checkbox" || type === "radio") {
+    control = `<input type="${type}"${attrs} value="${esc(optionValue)}"${field.checked ? ' checked data-default-checked="true"' : ""}>`;
+  } else if (type === "dropdown" || type === "listbox") {
+    const choices = Array.isArray(field.options) ? field.options : [];
+    const options = choices.map((option) => {
+      const optionValue2 = String(option && typeof option === "object" ? option.value != null ? option.value : option.label || "" : option || "");
+      const optionLabel = String(option && typeof option === "object" ? option.label != null ? option.label : optionValue2 : optionValue2);
+      return `<option value="${esc(optionValue2)}"${values.includes(optionValue2) ? " selected" : ""}>${esc(optionLabel)}</option>`;
+    }).join("");
+    control = `<select${attrs}${field.multiple ? " multiple" : ""}${type === "listbox" ? ` size="${Math.min(8, Math.max(2, choices.length || 2))}"` : ""}>${options}</select>`;
+  } else if (type === "textarea") {
+    control = `<textarea${attrs}${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>${esc(values[0])}</textarea>`;
+  } else if (type === "button") {
+    control = `<button type="button"${attrs} disabled title="Embedded PDF actions are not run in HTML">${esc(label)}</button>`;
+  } else if (type === "signature") {
+    control = `<output${attrs.replace('class="fx-form-input"', 'class="fx-form-input fx-form-signature"')}>${esc(values[0] || "Unsigned")}</output>`;
+  } else {
+    control = `<input type="${type === "password" ? "password" : "text"}"${attrs} value="${esc(values[0])}"${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>`;
+  }
+
+  if (view === "pdf") {
+    const [x = 0, y = 0, w = 0, h = 0] = Array.isArray(o.bbox) ? o.bbox : [];
+    return `<div class="fx-pdf-field fx-pdf-field-${esc(type)}" data-form-container="${esc(name)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px"><label class="fx-status" for="${esc(id)}">${esc(label)}</label>${control}</div>`;
+  }
+  if (type === "checkbox" || type === "radio") {
+    return `<div class="fx-reflow-field fx-reflow-choice" data-form-container="${esc(name)}">${control}<label for="${esc(id)}">${esc(label)}</label>${description ? `<small>${esc(description)}</small>` : ""}</div>`;
+  }
+  return `<div class="fx-reflow-field" data-form-container="${esc(name)}"><label for="${esc(id)}">${esc(label)}${required ? ` <span aria-hidden="true">*</span>` : ""}</label>${control}${description ? `<small>${esc(description)}</small>` : ""}</div>`;
+}
 function renderTextLayer(ir, page, ctx, pageNum) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
   const pageHeight = num(page.height, 792);
   let html = "";
   for (const o of pageObjects(ir, page)) {
+    if (o.type === "form_field") {
+      const field = formFieldData(o);
+      const label = String(o.accessibility && o.accessibility.label || field.label || field.fieldName || field.name || "Form field");
+      const elId = pushElement(ctx, {
+        id: String(o.id || ""),
+        page: pageNum,
+        kind: "form",
+        label,
+        text: `${label}: ${Array.isArray(field.value) ? field.value.join(", ") : field.value || ""}`,
+        detail: { fieldType: field.fieldType || "text", fieldName: field.fieldName || field.name || "", required: Boolean(field.required) }
+      });
+      ctx.index.push({ p: pageNum, role: "form", t: label });
+      html += renderFormControl(o, "pdf", pageHeight).replace("class=\"fx-pdf-field", `data-el="${esc(elId)}" class="fx-pdf-field`);
+      continue;
+    }
     if (o.type === "image") {
       const src = (_a = o.raw) == null ? void 0 : _a.src;
       const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
@@ -277,6 +347,21 @@ function renderVectorLayer(ir, page) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
   return `<img class="fx-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase64(svg)}">`;
 }
+function reflowPageObjects(ir, page, pageHeight) {
+  const objects = pageObjects(ir, page);
+  const fields = objects.filter((o) => o.type === "form_field").sort((a, b) => {
+    const topDiff = cssTop(pageHeight, a.bbox, num(a.bbox && a.bbox[3])) - cssTop(pageHeight, b.bbox, num(b.bbox && b.bbox[3]));
+    return Math.abs(topDiff) > 2 ? topDiff : num(a.bbox && a.bbox[0]) - num(b.bbox && b.bbox[0]);
+  });
+  if (!fields.length) return objects;
+  const ordered = objects.filter((o) => o.type !== "form_field");
+  fields.forEach((field) => {
+    const fieldTop = cssTop(pageHeight, field.bbox, num(field.bbox && field.bbox[3]));
+    const index = ordered.findIndex((o) => Array.isArray(o.bbox) && cssTop(pageHeight, o.bbox, num(o.bbox[3])) > fieldTop + 2);
+    ordered.splice(index < 0 ? ordered.length : index, 0, field);
+  });
+  return ordered;
+}
 function hasNativeText(page, ir) {
   return pageObjects(ir, page).some((o) => {
     if (!o || o.type !== "text" || !objText(o).trim()) return false;
@@ -316,7 +401,16 @@ function renderReflow(ir, page, headingIds, ctx) {
     }
     pending.push({ text, top, left, fontSize });
   };
-  for (const o of pageObjects(ir, page)) {
+  for (const o of reflowPageObjects(ir, page, pageHeight)) {
+    if (o.type === "form_field") {
+      flushParagraph();
+      if (openList) {
+        html += "</ul>";
+        openList = false;
+      }
+      html += renderFormControl(o, "reflow", pageHeight);
+      continue;
+    }
     const inferredLevel = ctx.inferred.get(o.id);
     const declared = (_a = o.semantic) == null ? void 0 : _a.role;
     const role = o.type === "image" ? "image" : inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
@@ -433,6 +527,8 @@ function buildFidelityHtml(ir, options = {}) {
   const showDataControls = options.showDataControls === true;
   const initialView = options.view === "reflow" ? "reflow" : "fidelity";
   const ctx = newDocCtx();
+  const formFields = pages.flatMap((pageId) => pageObjects(ir, ir.pages && ir.pages[pageId] || {})).filter((o) => o.type === "form_field");
+  const hasForms = formFields.length > 0;
   if (options.inferHeadings !== false) ctx.inferred = inferHeadingLevels(ir);
   let thumbs = "";
   let body = "";
@@ -540,6 +636,17 @@ function buildFidelityHtml(ir, options = {}) {
       var _a2;
       return { id: e.id, page: e.page, label: e.label, ...(_a2 = e.detail) != null ? _a2 : {} };
     }),
+    forms: formFields.map((o) => {
+      const field = formFieldData(o);
+      return {
+        id: o.id || null,
+        name: field.fieldName || field.name || "",
+        label: o.accessibility && o.accessibility.label || field.label || field.fieldName || field.name || "Form field",
+        type: field.fieldType || "text",
+        required: Boolean(o.accessibility && o.accessibility.required || field.required),
+        readOnly: Boolean(o.accessibility && o.accessibility.readOnly || field.readOnly)
+      };
+    }),
     capabilities: [
       "ask",
       "summarize",
@@ -548,6 +655,7 @@ function buildFidelityHtml(ir, options = {}) {
       "translate",
       "retrieve",
       "speak",
+      "forms",
       "elements",
       "explainElement",
       "explainPage"
@@ -567,6 +675,7 @@ function buildFidelityHtml(ir, options = {}) {
     jsonScript("codbdocs-rag", rag),
     jsonScript("codbdocs-knowledge", knowledgePack),
     jsonScript("codbdocs-elements", ctx.elements),
+    jsonScript("codbdocs-forms", knowledgePack.forms),
   ].join("\n");
   return `<!DOCTYPE html>
 <html lang="${esc(lang)}" data-view="${initialView}">
@@ -642,6 +751,14 @@ main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:
 .fx-img{position:absolute;object-fit:contain;z-index:1}
 .fx-link{position:absolute;display:block;color:transparent;overflow:hidden;border-bottom:1px solid transparent}
 .fx-link:hover,.fx-link:focus{border-bottom-color:var(--accent-2);background:rgba(20,115,230,.12)}
+.fx-pdf-field{position:absolute;z-index:4;display:block;overflow:visible}
+.fx-pdf-field input:not([type=checkbox]):not([type=radio]),.fx-pdf-field select,.fx-pdf-field textarea,
+.fx-pdf-field button,.fx-pdf-field output{display:block;width:100%;height:100%;min-width:0;margin:0;padding:1px 3px;
+  border:1px solid #6b7280;border-radius:1px;background:#fff;color:#111;font:10px Arial,sans-serif;line-height:1.15}
+.fx-pdf-field textarea{resize:none}
+.fx-pdf-field input[type=checkbox],.fx-pdf-field input[type=radio]{display:block;width:100%;height:100%;margin:0;accent-color:#1473e6}
+.fx-pdf-field input:focus,.fx-pdf-field select:focus,.fx-pdf-field textarea:focus{outline:2px solid #1473e6;outline-offset:1px}
+.fx-form-signature{align-items:center;color:#4b5563;background:#f3f4f6!important}
 .fx-reflow{display:none}
 html[data-view=reflow] .fx-canvas{display:none}
 html[data-view=reflow] .fx-page{width:min(58rem,100%);height:auto;margin-bottom:3rem}
@@ -652,6 +769,17 @@ html[data-view=reflow] .fx-reflow p{margin:.35rem 0 1rem;max-width:72ch}
 html[data-view=reflow] .fx-reflow p+p{margin-top:.2rem}
 html[data-view=reflow] .fx-reflow h1,html[data-view=reflow] .fx-reflow h2,html[data-view=reflow] .fx-reflow h3{line-height:1.25;letter-spacing:-.01em}
 html[data-view=reflow] .fx-reflow img{max-width:100%;height:auto}
+.fx-reflow-field{display:grid;gap:.35rem;margin:.9rem 0 1.15rem;max-width:42rem}
+.fx-reflow-field>label{font-weight:650;line-height:1.35}
+.fx-reflow-field input:not([type=checkbox]):not([type=radio]),.fx-reflow-field select,.fx-reflow-field textarea,
+.fx-reflow-field button,.fx-reflow-field output{width:100%;min-height:2.6rem;border:1px solid #9ba3ad;border-radius:6px;
+  padding:.55rem .65rem;background:#fff;color:#16181a;font:inherit;line-height:1.35}
+.fx-reflow-field textarea{min-height:7rem;resize:vertical}
+.fx-reflow-field small{color:#5a6068;line-height:1.4}
+.fx-reflow-choice{grid-template-columns:auto minmax(0,1fr);align-items:start}
+.fx-reflow-choice input{width:1.2rem;height:1.2rem;margin:.18rem 0 0;accent-color:#1473e6}
+.fx-reflow-choice small{grid-column:2}
+.fx-reflow-field :disabled,.fx-reflow-field [readonly]{background:#f0f2f4;color:#4b5563}
 html.fx-contrast body,html.fx-contrast .fx-reflow,html.fx-contrast main.fx-stage{background:#000;color:#fff}
 html.fx-contrast .fx-raster{filter:invert(1) hue-rotate(180deg)}
 html.fx-contrast .fx-reflow a{color:#ffd400}
@@ -906,13 +1034,13 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   <button type="button" class="fx-dialog-close" data-close aria-label="Close content explorer">&#10005;</button>
   <h2 id="fx-ex-h">Explore every part of this document</h2>
   <p class="fx-lang-note">Every heading, paragraph, list, link, image, chart, vector drawing and table is listed
-    here. Choose an item to jump to it, hear it read aloud, or have the AI explain it in plain language.</p>
+    here, including interactive form fields. Choose an item to jump to it, hear it read aloud, or have the AI explain it in plain language.</p>
   <div class="fx-field">
     <label for="fx-ex-filter">Find an item</label>
     <input id="fx-ex-filter" type="search" placeholder="e.g. budget table, logo, deadline">
   </div>
   <div class="fx-ex-tabs" role="group" aria-label="Filter by type" id="fx-ex-tabs">
-    ${["all", "heading", "text", "list", "table", "image", "chart", "vector", "link"].map(
+    ${["all", "heading", "text", "list", "form", "table", "image", "chart", "vector", "link"].map(
     (k) => `<button type="button" data-kind="${k}" aria-pressed="${k === "all"}">${k === "all" ? "Everything" : k.charAt(0).toUpperCase() + k.slice(1) + "s"}</button>`
   ).join("")}
   </div>
@@ -948,6 +1076,7 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
     ${options.originalUrl ? `<li><a href="${esc(options.originalUrl)}" download target="_blank" rel="noopener">Original document${options.originalName ? ` (${esc(options.originalName)})` : ""}</a></li>` : ""}
     <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
     <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
+    ${hasForms ? `<li><button type="button" class="fx-primary" id="fx-dl-forms">Completed form data (JSON)</button></li>` : ""}
     ${showDataControls && rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
     ${showDataControls ? `<li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>` : ""}
 
@@ -1233,6 +1362,93 @@ ${backendDataScripts}
   var outline=readJson('codbdocs-outline')||[], ragData=readJson('codbdocs-rag');
   var knowledge=readJson('codbdocs-knowledge')||{};
   var elements=readJson('codbdocs-elements')||[];
+  var formDefinitions=readJson('codbdocs-forms')||[];
+
+  // ---- interactive PDF forms -------------------------------------------
+  var formInputs=[].slice.call(document.querySelectorAll('.fx-form-input'));
+  function formControls(name){ return formInputs.filter(function(el){ return el.dataset.formName===name; }); }
+  function formNames(){ var seen={}; return formInputs.map(function(el){ return el.dataset.formName; })
+    .filter(function(name){ if(!name||seen[name]) return false; seen[name]=true; return true; }); }
+  function preferredControl(controls){
+    return controls.filter(function(el){ return el.dataset.formView==='pdf'; })[0]||controls[0]||null;
+  }
+  function getFormValue(name){
+    var controls=formControls(name); if(!controls.length) return null;
+    var type=controls[0].dataset.formType||controls[0].type||'text';
+    if(type==='radio'){
+      var checked=controls.filter(function(el){ return el.checked; })[0];
+      return checked?checked.value:null;
+    }
+    if(type==='checkbox'){
+      var byOption={}, selected=[];
+      controls.forEach(function(el){ var option=el.dataset.formOption||el.value||'On';
+        if(!byOption[option]) byOption[option]=el; else if(el.checked) byOption[option]=el; });
+      Object.keys(byOption).forEach(function(option){ if(byOption[option].checked) selected.push(option); });
+      return Object.keys(byOption).length<=1?(selected[0]||null):selected;
+    }
+    var control=preferredControl(controls); if(!control) return null;
+    if(control.tagName==='SELECT'&&control.multiple){
+      return [].slice.call(control.options).filter(function(opt){ return opt.selected; }).map(function(opt){ return opt.value; });
+    }
+    if(control.tagName==='OUTPUT') return control.textContent||'';
+    return control.value;
+  }
+  function getFormValues(){ var out={}; formNames().forEach(function(name){ out[name]=getFormValue(name); }); return out; }
+  function announceFormChange(name){
+    var detail={name:name,value:getFormValue(name),values:getFormValues()};
+    document.dispatchEvent(new CustomEvent('codbdocs:formchange',{detail:detail}));
+  }
+  function syncFormControl(source){
+    var name=source.dataset.formName; if(!name) return;
+    var type=source.dataset.formType||source.type||'text';
+    formControls(name).forEach(function(target){
+      if(target===source) return;
+      if(type==='radio') target.checked=source.checked&&target.dataset.formOption===source.dataset.formOption;
+      else if(type==='checkbox'&&target.dataset.formOption===source.dataset.formOption) target.checked=source.checked;
+      else if(target.tagName==='SELECT'&&target.multiple){
+        var selected=[].slice.call(source.options).filter(function(opt){ return opt.selected; }).map(function(opt){ return opt.value; });
+        [].slice.call(target.options).forEach(function(opt){ opt.selected=selected.indexOf(opt.value)!==-1; });
+      } else if('value' in target) target.value=source.value;
+      else if(target.tagName==='OUTPUT') target.textContent=source.textContent;
+    });
+    announceFormChange(name);
+  }
+  function setFormValues(values, silent){
+    Object.keys(values||{}).forEach(function(name){
+      var controls=formControls(name), next=values[name];
+      controls.forEach(function(el){
+        var type=el.dataset.formType||el.type||'text', option=el.dataset.formOption||el.value;
+        if(type==='radio') el.checked=String(next)==String(option);
+        else if(type==='checkbox') el.checked=next===true||String(next)==String(option)||(Array.isArray(next)&&next.map(String).indexOf(String(option))!==-1);
+        else if(el.tagName==='SELECT'&&el.multiple){ var list=Array.isArray(next)?next.map(String):[String(next)];
+          [].slice.call(el.options).forEach(function(opt){ opt.selected=list.indexOf(String(opt.value))!==-1; }); }
+        else if(el.tagName==='OUTPUT') el.textContent=next==null?'':String(next);
+        else el.value=next==null?'':String(next);
+      });
+      if(!silent) announceFormChange(name);
+    });
+    return getFormValues();
+  }
+  function resetFormValues(){
+    formInputs.forEach(function(el){
+      var type=el.dataset.formType||el.type||'text';
+      if(type==='radio'||type==='checkbox') el.checked=el.dataset.defaultChecked==='true';
+      else if(el.tagName==='SELECT') [].slice.call(el.options).forEach(function(opt){ opt.selected=opt.defaultSelected; });
+      else { var value=''; try{ value=JSON.parse(decodeURIComponent(el.dataset.formDefault||'')); }catch(e){}
+        value=Array.isArray(value)?value[0]||'':value; if(el.tagName==='OUTPUT') el.textContent=value||'Unsigned'; else el.value=value==null?'':String(value); }
+    });
+    formNames().forEach(announceFormChange); return getFormValues();
+  }
+  formInputs.forEach(function(el){
+    el.addEventListener('input',function(){ syncFormControl(el); });
+    el.addEventListener('change',function(){ syncFormControl(el); });
+  });
+  window.CodbDocsForms={
+    definitions:formDefinitions,
+    getValues:getFormValues,
+    setValues:setFormValues,
+    reset:resetFormValues
+  };
 
 
   // ---- accessible dialogs (focus trap, Escape to close) ---------------
@@ -1600,8 +1816,19 @@ ${backendDataScripts}
     say('Download started: '+name);
   }
   var base=(cfg.title||'document').replace(/[^A-Za-z0-9._-]+/g,'-').slice(0,80)||'document';
+  function reflectFormState(){
+    formInputs.forEach(function(el){
+      if(el.type==='checkbox'||el.type==='radio'){
+        if(el.checked) el.setAttribute('checked',''); else el.removeAttribute('checked');
+      } else if(el.tagName==='SELECT'){
+        [].slice.call(el.options).forEach(function(opt){ if(opt.selected) opt.setAttribute('selected',''); else opt.removeAttribute('selected'); });
+      } else if(el.tagName==='TEXTAREA') el.textContent=el.value;
+      else if(el.tagName==='OUTPUT') el.textContent=el.textContent||'';
+      else el.setAttribute('value',el.value||'');
+    });
+  }
   var dh=document.getElementById('fx-dl-html');
-  if(dh) dh.onclick=function(){ download(base+'-accessible.html',
+  if(dh) dh.onclick=function(){ reflectFormState(); download(base+'-accessible.html',
     '<!DOCTYPE html>'+document.documentElement.outerHTML,'text/html;charset=utf-8'); };
   var dt=document.getElementById('fx-dl-txt');
   if(dt) dt.onclick=function(){ download(base+'-transcript.txt',
@@ -1613,6 +1840,9 @@ ${backendDataScripts}
   var dj=document.getElementById('fx-dl-json');
   if(dj) dj.onclick=function(){ download(base+'-data.json',
     JSON.stringify(ragData,null,2),'application/json'); };
+  var df=document.getElementById('fx-dl-forms');
+  if(df) df.onclick=function(){ download(base+'-form-data.json',
+    JSON.stringify({document:cfg.title||null,values:getFormValues()},null,2),'application/json'); };
 
   // ---- accessibility feedback loop -------------------------------------
   var fbForm=document.getElementById('fx-fb-form'), fbOut=document.getElementById('fx-fb-result');
