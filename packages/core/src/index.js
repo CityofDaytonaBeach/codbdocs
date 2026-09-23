@@ -26,6 +26,12 @@
 
 import { buildFidelityHtml as _buildFidelityHtml } from './fidelity.js';
 import {
+  BROWSER_ONLY_PROFILES,
+  browserOnlyCapabilities,
+  createBrowserOnlySDK,
+  recommendBrowserOnlyProfile,
+} from './browser.js';
+import {
   analyzeSpatialLayout,
   detectStructure,
   extractMetadata,
@@ -1987,7 +1993,15 @@ async function renderPageToCanvas(page, scale) {
 
 export { load, configure, canUseWorkers };
 export { extractXfaFormFields };
-export const CodbDocs = { load, configure, canUseWorkers };
+export const CodbDocs = {
+  load,
+  configure,
+  canUseWorkers,
+  BROWSER_ONLY_PROFILES,
+  browserOnlyCapabilities,
+  createBrowserOnlySDK,
+  recommendBrowserOnlyProfile,
+};
 export default CodbDocs;
 
 // Export classes for advanced usage
@@ -2189,3 +2203,11 @@ export {
   terminateOcr,
   serverlessCapabilities,
 } from './serverless.js';
+export {
+  BROWSER_ONLY_PROFILES,
+  browserOnlyCapabilities,
+  createBrowserOnlySDK,
+  recommendBrowserOnlyProfile,
+  retrieveBrowserOnly,
+  summarizeBrowserOnly,
+} from './browser.js';

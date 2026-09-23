@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "test:browser": "node --test test/browser-only.test.mjs",
     "test:visual": "node test/visual/compare-pdf-html.mjs"
   },
   "license": "MIT",

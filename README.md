@@ -4,6 +4,33 @@
 
 No server. No external APIs. Pure browser JavaScript. Use the CDN or host the files yourself.
 
+### Explicit browser-only editions
+
+Use `createBrowserOnlySDK()` when the application must never depend on a CodbDocs backend. The same ESM file exposes three profiles:
+
+| Profile | Intended use | Included |
+|---|---|---|
+| `lite` | Low-memory devices and very large PDFs | Reflow, forms, XFA, local retrieval; no OCR or page backgrounds |
+| `standard` | Default public document experience | OCR, faithful HTML, forms, XFA, local PDF saving and grounded Q&A |
+| `max` | Complete downloadable packages | Everything in `standard`, plus vectors, page images and embedded original PDF |
+
+```javascript
+import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+
+const sdk = CodbDocs.createBrowserOnlySDK({
+  profile: 'standard',
+  localFilesOnly: true,
+});
+
+const { html, data } = await sdk.buildHtml(file);
+const answer = await sdk.ask(data, 'What amount was approved?');
+console.log(answer.answer, answer.citations);
+```
+
+The built-in Q&A fallback is extractive and always cites document chunks. Generative answers, translation, and image descriptions can be added through local WebGPU or WebAssembly providers. Browser-only mode rejects remote AI, translation, feedback, and PDF-submit endpoint options.
+
+`sdk.capabilities()` reports the actual browser features and known limits. In particular, fully tagged PDF/UA rewriting, certificate-backed signatures, unattended cross-origin crawling, and real-time collaboration are not claimed by the current browser runtime.
+
 **Created by the City of Daytona Beach.**
 
 Lead developer: **Daniel Gurczynski**.

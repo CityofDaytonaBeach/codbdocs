@@ -5,6 +5,7 @@ A comprehensive guide to using CodbDocs for browser-based document processing.
 ## Table of Contents
 
 - [Installation](#installation)
+- [Browser-Only Profiles](#browser-only-profiles)
 - [Quick Start](#quick-start)
 - [Core API](#core-api)
 - [Document Analysis](#document-analysis)
@@ -14,6 +15,41 @@ A comprehensive guide to using CodbDocs for browser-based document processing.
 - [React Integration](#react-integration)
 - [Configuration](#configuration)
 - [Examples](#examples)
+
+---
+
+## Browser-Only Profiles
+
+`createBrowserOnlySDK()` prevents accidental backend endpoint configuration and provides resource-scaled browser profiles.
+
+```javascript
+const sdk = CodbDocs.createBrowserOnlySDK({ profile: 'standard' });
+const recommendation = sdk.recommendProfile(file);
+const capabilities = sdk.capabilities();
+
+const { html, data } = await sdk.buildHtml(file);
+const result = await sdk.ask(data, 'When does the contract begin?');
+```
+
+Available profiles are `lite`, `standard`, and `max`. Use `localFilesOnly: true` to reject URL input as well as remote service endpoints.
+
+Local model adapters are optional:
+
+```javascript
+const sdk = CodbDocs.createBrowserOnlySDK({
+  profile: 'max',
+  providers: {
+    ai: {
+      ask: ({ question, passages }) => localModel.answer(question, passages),
+      summarize: ({ data }) => localModel.summarize(data.transcript),
+    },
+    translation: ({ text, target }) => localTranslator.translate(text, target),
+    vision: ({ image, context }) => localVision.describe(image, context),
+  },
+});
+```
+
+Providers run in the host page. CodbDocs does not supply, transmit, or retain an API key.
 
 ---
 
