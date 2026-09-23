@@ -787,7 +787,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   .fx-shell{display:block;min-height:auto}.fx-rail{display:none}
   main.fx-stage{padding:1rem;gap:2rem;overflow-x:hidden}
   .fx-page{max-width:100%;overflow:visible}
-  .fx-canvas{max-width:100%;height:auto;transform-origin:top center}
+  .fx-canvas{max-width:none;height:var(--ph);transform-origin:top left}
   .fx-drawer{top:0;width:100%;max-width:none}.fx-dialog{width:calc(100vw - 1rem);max-height:92vh;padding:1.25rem}
 }
 @media (max-width:520px){
@@ -802,7 +802,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 <a class="fx-skip" href="#fx-content">Skip to document content</a>
 <header class="fx-bar" role="banner">
   <div class="fx-brand">
-    <span class="fx-brand-mark" aria-hidden="true">DA</span>
+    <span class="fx-brand-mark" aria-hidden="true">CD</span>
     <h1>${esc(title)}</h1>
   </div>
   <nav class="fx-group" aria-label="Page navigation">
@@ -1006,10 +1006,11 @@ ${backendDataScripts}
   if(sel) sel.onchange=function(){ goto(Number(sel.value)); };
   document.getElementById('fx-zoom-in').onclick=function(){ setZoom(zoom+.15); };
   document.getElementById('fx-zoom-out').onclick=function(){ setZoom(zoom-.15); };
-  document.getElementById('fx-fit').onclick=function(){
+  function fitWidth(){
     var p=pages[current-1]; if(!p) return;
     var w=parseFloat(getComputedStyle(p).getPropertyValue('--pw'))||612;
-    var avail=document.querySelector('.fx-stage').clientWidth-48; setZoom(avail/w); };
+    var avail=document.querySelector('.fx-stage').clientWidth-48; setZoom(avail/w); }
+  document.getElementById('fx-fit').onclick=fitWidth;
   document.getElementById('fx-print').onclick=function(){ window.print(); };
   function setView(v){ root.dataset.view=v;
     document.getElementById('fx-view-fidelity').setAttribute('aria-pressed', String(v==='fidelity'));
@@ -1639,7 +1640,9 @@ ${backendDataScripts}
     }
   });
 
-  setZoom(1); goto(1);
+  if(window.matchMedia&&window.matchMedia('(max-width:900px)').matches) fitWidth();
+  else setZoom(1);
+  goto(1);
 })();
 <\/script>
 </body>

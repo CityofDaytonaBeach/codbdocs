@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodbDocs document administration</title>
+  <link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-block">
+      <strong>CodbDocs</strong>
+      <span>Document administration</span>
+    </div>
+    <div class="header-actions" aria-label="Manifest actions">
+      <button id="importButton" type="button" class="secondary">Import JSON</button>
+      <input id="importInput" type="file" accept="application/json,.json" hidden>
+      <button id="copyButton" type="button" class="secondary">Copy JSON</button>
+      <button id="exportButton" type="button">Export JSON</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-heading" aria-labelledby="pageTitle">
+      <div>
+        <h1 id="pageTitle">Document inventory</h1>
+        <p id="manifestSource">Loading manifest...</p>
+      </div>
+      <button id="addButton" type="button">Add document</button>
+    </section>
+
+    <section class="metrics" aria-label="Document summary">
+      <div class="metric"><span>Total</span><strong id="totalMetric">0</strong></div>
+      <div class="metric"><span>Enabled</span><strong id="enabledMetric">0</strong></div>
+      <div class="metric"><span>Ready</span><strong id="readyMetric">0</strong></div>
+      <div class="metric warning"><span>Needs attention</span><strong id="attentionMetric">0</strong></div>
+    </section>
+
+    <section class="inventory" aria-labelledby="inventoryTitle">
+      <div class="section-bar">
+        <h2 id="inventoryTitle">Documents</h2>
+        <div class="filters">
+          <label>
+            <span class="sr-only">Search documents</span>
+            <input id="searchInput" type="search" placeholder="Search title or URL">
+          </label>
+          <label>
+            <span class="sr-only">Filter by status</span>
+            <select id="statusFilter">
+              <option value="">All statuses</option>
+              <option value="unscanned">Unscanned</option>
+              <option value="processing">Processing</option>
+              <option value="ready">Ready</option>
+              <option value="needs-review">Needs review</option>
+              <option value="failed">Failed</option>
+            </select>
+          </label>
+          <label>
+            <span class="sr-only">Filter by enabled state</span>
+            <select id="enabledFilter">
+              <option value="">All documents</option>
+              <option value="enabled">Enabled</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Document</th>
+              <th scope="col">Status</th>
+              <th scope="col">Score</th>
+              <th scope="col">Issues</th>
+              <th scope="col">Pages</th>
+              <th scope="col">Last scanned</th>
+              <th scope="col">Enabled</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="documentRows"></tbody>
+        </table>
+        <div id="emptyRows" class="empty-rows" hidden>No documents match the current filters.</div>
+      </div>
+    </section>
+
+    <section class="settings" aria-labelledby="settingsTitle">
+      <div class="section-bar">
+        <h2 id="settingsTitle">Site settings</h2>
+        <span id="draftStatus" class="draft-status" role="status"></span>
+      </div>
+      <form id="settingsForm" class="settings-grid">
+        <label>
+          Site name
+          <input id="siteName" name="siteName" type="text">
+        </label>
+        <label>
+          Base URL
+          <input id="baseUrl" name="baseUrl" type="url" placeholder="https://www.example.gov/">
+        </label>
+        <label class="wide">
+          Viewer URL
+          <input id="viewerUrl" name="viewerUrl" type="text" required>
+        </label>
+        <label>
+          Open mode
+          <select id="openMode" name="openMode">
+            <option value="new-tab">New tab</option>
+            <option value="lightbox">Lightbox</option>
+          </select>
+        </label>
+        <label>
+          Default language
+          <input id="language" name="language" type="text" maxlength="20" placeholder="en">
+        </label>
+        <label>
+          Feedback email
+          <input id="feedbackEmail" name="feedbackEmail" type="email">
+        </label>
+        <label>
+          Live help URL
+          <input id="airaUrl" name="airaUrl" type="url">
+        </label>
+        <div class="settings-actions wide">
+          <button id="resetButton" type="button" class="danger-secondary">Reset draft</button>
+          <button type="submit">Save settings</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <dialog id="documentDialog" aria-labelledby="dialogTitle">
+    <form id="documentForm" method="dialog">
+      <div class="dialog-heading">
+        <h2 id="dialogTitle">Add document</h2>
+        <button id="closeDialogButton" type="button" class="quiet">Close</button>
+      </div>
+      <input id="editIndex" type="hidden">
+      <div class="form-grid">
+        <label class="wide">
+          Title
+          <input id="documentTitle" type="text" required>
+        </label>
+        <label class="wide">
+          PDF URL
+          <input id="documentUrl" type="text" required>
+        </label>
+        <label class="wide">
+          Accessible page URL
+          <input id="accessibleUrl" type="text">
+        </label>
+        <label>
+          Document ID
+          <input id="documentId" type="text">
+        </label>
+        <label>
+          Status
+          <select id="documentStatus">
+            <option value="unscanned">Unscanned</option>
+            <option value="processing">Processing</option>
+            <option value="ready">Ready</option>
+            <option value="needs-review">Needs review</option>
+            <option value="failed">Failed</option>
+          </select>
+        </label>
+        <label>
+          Accessibility score
+          <input id="documentScore" type="number" min="0" max="100">
+        </label>
+        <label>
+          Issue count
+          <input id="documentIssues" type="number" min="0" step="1">
+        </label>
+        <label>
+          Page count
+          <input id="documentPages" type="number" min="0" step="1">
+        </label>
+        <label>
+          Last scanned
+          <input id="lastScanned" type="datetime-local">
+        </label>
+        <label class="check-row wide">
+          <input id="documentEnabled" type="checkbox">
+          Enable accessible viewer
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button id="cancelDialogButton" type="button" class="secondary">Cancel</button>
+        <button type="submit">Save document</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="./admin.js"></script>
+</body>
+</html>

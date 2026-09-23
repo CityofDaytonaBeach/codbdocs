@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodbDocs accessible viewer</title>
+  <link rel="stylesheet" href="./viewer.css">
+</head>
+<body>
+  <header class="viewer-bar">
+    <div class="viewer-identity">
+      <strong>CodbDocs</strong>
+      <span id="documentTitle">Accessible document viewer</span>
+    </div>
+    <a id="sourceLink" class="source-link" href="#" target="_blank" rel="noopener" hidden>Original PDF</a>
+  </header>
+
+  <main id="viewerMain">
+    <section id="emptyState" class="empty-state" aria-labelledby="emptyTitle">
+      <div class="empty-panel">
+        <h1 id="emptyTitle">Open a PDF</h1>
+        <p>Select a document to build its accessible browser view.</p>
+        <label class="file-button" for="fileInput">Choose PDF</label>
+        <input id="fileInput" type="file" accept="application/pdf,.pdf">
+      </div>
+    </section>
+
+    <section id="loadingState" class="loading-state" aria-live="polite" hidden>
+      <div class="loading-panel">
+        <h1 id="loadingTitle">Preparing accessible document</h1>
+        <p id="loadingMessage">Loading PDF...</p>
+        <progress id="loadingProgress" max="100" value="0"></progress>
+      </div>
+    </section>
+
+    <section id="errorState" class="error-state" role="alert" hidden>
+      <div class="error-panel">
+        <h1>Document could not be opened</h1>
+        <p id="errorMessage"></p>
+        <div class="error-actions">
+          <a id="errorSourceLink" href="#" target="_blank" rel="noopener" hidden>Open original PDF</a>
+          <label class="file-button secondary" for="errorFileInput">Choose local copy</label>
+          <input id="errorFileInput" type="file" accept="application/pdf,.pdf">
+        </div>
+      </div>
+    </section>
+
+    <iframe
+      id="documentFrame"
+      title="Accessible document"
+      sandbox="allow-scripts allow-downloads allow-forms allow-modals allow-popups"
+      hidden
+    ></iframe>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.min.js"></script>
+  <script>
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.worker.min.js';
+  </script>
+  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/tesseract.js/tesseract.min.js"></script>
+  <script type="module" src="./viewer.js"></script>
+</body>
+</html>

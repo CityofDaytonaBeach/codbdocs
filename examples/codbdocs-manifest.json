@@ -1,0 +1,20 @@
+{
+  "$schema": "../schema/codbdocs-manifest.schema.json",
+  "version": 1,
+  "site": {
+    "name": "City document library",
+    "baseUrl": "https://www.example.gov/",
+    "viewerUrl": "./viewer/index.html",
+    "openMode": "new-tab",
+    "selector": "a[href]",
+    "language": "en",
+    "feedbackEmail": "accessibility@example.gov",
+    "translation": false,
+    "priorityLanguages": ["es", "fr", "de"]
+  },
+  "defaults": {
+    "enabled": false,
+    "openMode": "new-tab"
+  },
+  "documents": []
+}

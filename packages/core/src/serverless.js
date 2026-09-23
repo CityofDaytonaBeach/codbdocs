@@ -714,15 +714,17 @@ export function dataToIR(data, options = {}) {
       if (!run.text || !run.text.trim()) return;
       const id = `${pid}-t${i}`;
       const size = run.font_size || run.height || 11;
+      const height = run.height || size;
+      const bbox = [run.x, page.height - run.y - height, run.width, height];
       objects[id] = {
         id,
         type: 'text',
-        bbox: [run.x, run.y, run.width, run.height || size],
+        bbox,
         raw: {
           text: run.text,
           font: run.font_family || '',
           fontSize: size,
-          bbox: [run.x, run.y, run.width, run.height || size],
+          bbox,
         },
         semantic: { text: run.text, role: 'paragraph' },
       };
@@ -735,8 +737,8 @@ export function dataToIR(data, options = {}) {
       objects[id] = {
         id,
         type: 'image',
-        bbox: [img.x, img.y, img.width, img.height],
-        raw: { src: img.data_uri, bbox: [img.x, img.y, img.width, img.height] },
+        bbox: [img.x, page.height - img.y - img.height, img.width, img.height],
+        raw: { src: img.data_uri, bbox: [img.x, page.height - img.y - img.height, img.width, img.height] },
         semantic: { role: 'figure', caption: `Image on page ${page.page_number}` },
         accessibility: { alt: `Image on page ${page.page_number}` },
       };

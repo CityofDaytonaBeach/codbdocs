@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CityofDaytonaBeach/codbdocs/schema/codbdocs-manifest.schema.json",
+  "title": "CodbDocs website manifest",
+  "type": "object",
+  "required": ["version", "site", "documents"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "site": {
+      "type": "object",
+      "required": ["viewerUrl"],
+      "properties": {
+        "name": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "viewerUrl": { "type": "string" },
+        "openMode": { "enum": ["new-tab", "lightbox"] },
+        "selector": { "type": "string" },
+        "language": { "type": "string" },
+        "feedbackEmail": { "type": "string" },
+        "airaUrl": { "type": "string" },
+        "qaEndpoint": { "type": "string" },
+        "aiEndpoint": { "type": "string" },
+        "translation": { "type": "boolean" },
+        "priorityLanguages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "openMode": { "enum": ["new-tab", "lightbox"] }
+      },
+      "additionalProperties": true
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "id": { "type": "string" },
+          "url": { "type": "string" },
+          "title": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "accessibleUrl": { "type": "string" },
+          "viewerUrl": { "type": "string" },
+          "openMode": { "enum": ["new-tab", "lightbox"] },
+          "status": { "enum": ["unscanned", "processing", "ready", "needs-review", "failed"] },
+          "score": { "type": "number", "minimum": 0, "maximum": 100 },
+          "issues": { "type": "integer", "minimum": 0 },
+          "pages": { "type": "integer", "minimum": 0 },
+          "lastScanned": { "type": "string" },
+          "language": { "type": "string" },
+          "ocr": { "enum": ["auto", true, false] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

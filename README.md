@@ -1213,6 +1213,66 @@ For the retrieval engine specifically: CodbDocs handles the **exact factual look
 
 ---
 
+## Website Integration
+
+CodbDocs includes a manifest-driven website helper, a browser viewer, and a static administration dashboard. They can be served directly from this repository or copied to the website that owns the PDFs.
+
+### 1. Publish a manifest
+
+Start with [`examples/codbdocs-manifest.json`](examples/codbdocs-manifest.json). The contract is documented by [`schema/codbdocs-manifest.schema.json`](schema/codbdocs-manifest.schema.json).
+
+Only exact URLs listed in `documents` are upgraded. Set `enabled` to `true` on a document after it is ready. A document can use the browser viewer or point to a pre-generated accessible package with `accessibleUrl`.
+
+```json
+{
+  "$schema": "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/schema/codbdocs-manifest.schema.json",
+  "version": 1,
+  "site": {
+    "baseUrl": "https://www.example.gov/",
+    "viewerUrl": "https://www.example.gov/codbdocs/viewer/",
+    "openMode": "new-tab",
+    "language": "en"
+  },
+  "defaults": { "enabled": false },
+  "documents": [
+    {
+      "id": "council-agenda-2026-09-23",
+      "title": "City Council Agenda",
+      "url": "/documents/council-agenda-2026-09-23.pdf",
+      "enabled": true,
+      "status": "ready"
+    }
+  ]
+}
+```
+
+### 2. Load the helper
+
+Add the helper once in the website template. It watches for dynamically added links and preserves the original PDF URL when JavaScript is unavailable.
+
+```html
+<script
+  async
+  data-codbdocs
+  data-manifest="/codbdocs-manifest.json"
+  src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/embed.js">
+</script>
+```
+
+The manifest controls whether the viewer opens in a new tab or a keyboard-accessible lightbox. Page-level overrides are available through `data-viewer`, `data-open-mode`, and `data-selector`.
+
+The helper emits `codbdocs:ready` and `codbdocs:error` events and exposes `window.CodbDocsEmbed` for manual initialization, refresh, and teardown.
+
+### 3. Host the viewer and dashboard
+
+- [`examples/viewer/`](examples/viewer/) is the public browser viewer. Host it on the same origin as the PDFs when possible so browser CORS rules do not block PDF loading.
+- [`examples/admin/`](examples/admin/) loads the manifest as an inventory, provides filters and enable controls, and exports the updated JSON.
+- The dashboard stores drafts in the browser. It does not write to GitHub or require a repository token. Export the JSON and publish it through the normal site deployment.
+
+Public AI or translation endpoints may be listed in the manifest. API keys and other secrets must remain on a server and must never be placed in the JSON file.
+
+---
+
 ## Hosting
 
 The browser module entrypoint is committed under `packages/core/src/index.js`. Push to GitHub and jsDelivr serves that updated module directly from the `main` branch.
