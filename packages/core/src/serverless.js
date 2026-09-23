@@ -11,6 +11,7 @@
 
 import { processLargeDocument, createZip } from './large.js';
 import { buildFidelityHtml } from './fidelity.js';
+import { normalizeFormField } from './pdfir.js';
 
 function getPdfjs() {
   const lib =
@@ -336,6 +337,7 @@ export async function ocrPage(page, options = {}) {
  *   title, language, aiContext
  *   includeLayout   (default true)  positioned text runs per page
  *   includeImages   (default true)  embedded images as data URIs
+ *   includeForms    (default true)  interactive AcroForm fields
  *   includeVectors  (default true)  per-page SVG rendition
  *   includePageImages (default false) full-page PNG per page
  *   includeOriginal (default false) original PDF as base64
@@ -350,6 +352,7 @@ export async function documentData(source, options = {}) {
     aiContext = '',
     includeLayout = true,
     includeImages = true,
+    includeForms = true,
     includeVectors = true,
     includePageImages = false,
     includeOriginal = false,
@@ -392,6 +395,7 @@ export async function documentData(source, options = {}) {
   const layoutPages = [];
   const chunks = [];
   const headings = [];
+  const formFields = [];
   let ocrPages = 0;
 
   for (const num of numbers) {
@@ -419,6 +423,20 @@ export async function documentData(source, options = {}) {
       text += item.str + (item.hasEOL ? '\n' : ' ');
     }
     text = text.replace(/[ \t]+\n/g, '\n').trim();
+
+    let pageForms = [];
+    if (includeForms) {
+      try {
+        const annotations = await page.getAnnotations({ intent: 'display' });
+        pageForms = annotations
+          .filter(annotation => annotation.subtype === 'Widget' || annotation.fieldType)
+          .map(annotation => normalizeFormField(annotation, num))
+          .filter(Boolean);
+        formFields.push(...pageForms);
+      } catch {
+        pageForms = [];
+      }
+    }
 
     let pageOcr = false;
     const wantOcr = ocr === true || (ocr === 'auto' && text.replace(/\s+/g, '').length < ocrMinChars);
@@ -454,6 +472,7 @@ export async function documentData(source, options = {}) {
       words: text ? text.split(/\s+/).filter(Boolean).length : 0,
       spans: spans.length,
       images: 0,
+      form_fields: pageForms.length,
       ocr: pageOcr,
     });
 
@@ -468,6 +487,7 @@ export async function documentData(source, options = {}) {
         height: Math.round(viewport.height * 100) / 100,
         spans,
         images,
+        forms: pageForms,
         vector_svg: '',
         page_image: '',
       };
@@ -521,6 +541,7 @@ export async function documentData(source, options = {}) {
       rag_chunks: chunks.length,
       rag_words: chunks.reduce((sum, c) => sum + c.words, 0),
       total_spans: pages.reduce((sum, p) => sum + p.spans, 0),
+      form_fields: formFields.length,
       text_pages: pages.filter((p) => !p.text.startsWith('(')).length,
       ocr_pages: ocrPages,
       characters: pages.reduce((sum, p) => sum + p.text.length, 0),
@@ -534,6 +555,7 @@ export async function documentData(source, options = {}) {
     ai_context: aiContext,
   };
 
+  if (includeForms) payload.forms = formFields;
   if (includeLayout) payload.layout = { pages: layoutPages };
   if (includeOriginal && bytes) payload.original_pdf_base64 = bytesToBase64(bytes);
 
@@ -701,6 +723,7 @@ export function dataToIR(data, options = {}) {
   const objects = {};
   const pages = {};
   const pageIds = [];
+  const forms = { fields: [], byName: {} };
   const layout = data.layout?.pages ?? [];
   const byNumber = new Map(layout.map((p) => [p.page_number, p]));
 
@@ -745,6 +768,54 @@ export function dataToIR(data, options = {}) {
       content.push(id);
     });
 
+    const pageForms = lay?.forms ?? (data.forms || []).filter(field => field.page === page.page_number);
+    const formObjectIds = [];
+    pageForms.forEach((field, i) => {
+      const id = `${pid}-form${i}`;
+      const bbox = Array.isArray(field.bbox)
+        ? field.bbox
+        : Array.isArray(field.rect) && field.rect.length >= 4
+          ? [
+              Math.min(field.rect[0], field.rect[2]),
+              Math.min(field.rect[1], field.rect[3]),
+              Math.abs(field.rect[2] - field.rect[0]),
+              Math.abs(field.rect[3] - field.rect[1]),
+            ]
+          : null;
+      objects[id] = {
+        id,
+        type: 'form_field',
+        bbox,
+        raw: { ...field, bbox },
+        semantic: {
+          role: 'form_field',
+          fieldType: field.fieldType,
+          fieldName: field.name,
+          value: field.value,
+          defaultValue: field.defaultValue,
+          optionValue: field.optionValue,
+          checked: field.checked,
+          defaultChecked: field.defaultChecked,
+          options: field.options || [],
+          multiple: Boolean(field.multiple),
+          maxLength: field.maxLength ?? null,
+        },
+        accessibility: {
+          role: 'form',
+          label: field.label || field.name,
+          description: field.description || '',
+          required: Boolean(field.required),
+          readOnly: Boolean(field.readOnly),
+        },
+        provenance: { method: 'annotation', confidence: 1 },
+      };
+      content.push(id);
+      formObjectIds.push(id);
+      forms.fields.push({ ...field, objectId: id, pageId: pid });
+      if (!Array.isArray(forms.byName[field.name])) forms.byName[field.name] = [];
+      forms.byName[field.name].push(id);
+    });
+
     pages[pid] = {
       id: pid,
       num: page.page_number,
@@ -752,6 +823,7 @@ export function dataToIR(data, options = {}) {
       height: page.height,
       background: lay?.page_image || '',
       content,
+      forms: formObjectIds,
     };
   }
 
@@ -763,6 +835,7 @@ export function dataToIR(data, options = {}) {
     },
     pages,
     objects,
+    forms,
   };
 }
 
@@ -776,6 +849,7 @@ export async function buildAccessibleHtml(source, options = {}) {
     ...options,
     includeLayout: true,
     includeImages: options.includeImages !== false,
+    includeForms: options.includeForms !== false,
     includePageImages: options.pageBackgrounds !== false,
     includeVectors: options.includeVectors === true,
     dpi: options.dpi ?? 150,
@@ -800,6 +874,7 @@ export function serverlessCapabilities() {
     layout: true,
     images: true,
     vectors: true,
+    interactiveForms: true,
     pageImages: true,
     ocr: typeof document !== 'undefined',
     rag: true,

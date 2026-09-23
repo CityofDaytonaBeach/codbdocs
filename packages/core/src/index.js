@@ -148,6 +148,7 @@ import {
   extractStructureTree,
   extractAnnotations,
   extractFormFields,
+  registerFormField,
   detectReadingOrder,
   getReadingOrderSequence,
   validateReadingOrder,
@@ -611,6 +612,10 @@ class CodbDoc {
           // Register link annotations as IR objects so renderers can emit
           // real <a> links and RAG/JSON exports carry navigation objects.
           for (const ann of annotations) {
+            if (ann.type === 'form_field') {
+              registerFormField(ir, `page_${num}`, ann, num);
+              continue;
+            }
             if (ann.type && ann.type === 'link') {
               const href = ann.url || (ann.dest ? `#${ann.dest}` : null);
               if (!href) continue;
@@ -1609,6 +1614,26 @@ class CodbDoc {
         if (annotations.length > 0) {
           irPage.annotations = annotations;
           ir.annotations[`page_${num}`] = annotations;
+          for (const ann of annotations) {
+            if (ann.type === 'form_field') {
+              registerFormField(ir, `page_${num}`, ann, num);
+              continue;
+            }
+            if (ann.type === 'link') {
+              const href = ann.url || (ann.dest ? `#${ann.dest}` : null);
+              if (!href) continue;
+              addObject(ir, `page_${num}`, {
+                type: 'link',
+                raw: { url: ann.url || null, dest: ann.dest || null, href, rect: ann.rect || null },
+                semantic: { role: 'link', text: ann.contents || null },
+                accessibility: { role: 'link' },
+                bbox: ann.rect
+                  ? [ann.rect[0], ann.rect[1], ann.rect[2] - ann.rect[0], ann.rect[3] - ann.rect[1]]
+                  : null,
+                provenance: { method: 'annotation', confidence: 1.0 },
+              });
+            }
+          }
         }
         if (structureTree) ir.structure[`page_${num}`] = structureTree;
 

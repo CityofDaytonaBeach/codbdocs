@@ -67,7 +67,7 @@ export function createIR() {
     concepts: {},
     images: {},
     tables: {},
-    forms: {},
+    forms: { fields: [], byName: {} },
     annotations: {},
     vectors: {},
     resources: {},
@@ -225,6 +225,144 @@ export function addObject(ir, pageId, data) {
   };
   ir.pages[pageId]?.content.push(id);
   return ir.objects[id];
+}
+
+function humanizeFieldName(name) {
+  return String(name || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[._\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, char => char.toUpperCase());
+}
+
+function normalizeFieldOptions(options) {
+  return (Array.isArray(options) ? options : []).map(option => {
+    if (option && typeof option === 'object') {
+      const value = option.exportValue ?? option.value ?? option.displayValue ?? option.label ?? '';
+      const label = option.displayValue ?? option.label ?? option.exportValue ?? option.value ?? '';
+      return { value: String(value), label: String(label) };
+    }
+    return { value: String(option ?? ''), label: String(option ?? '') };
+  });
+}
+
+function normalizeFieldValue(value) {
+  if (Array.isArray(value)) return value.map(item => String(item ?? ''));
+  return value == null ? '' : String(value);
+}
+
+function normalizeFieldRect(rect) {
+  if (!Array.isArray(rect) || rect.length < 4) return null;
+  const x1 = Number(rect[0]) || 0;
+  const y1 = Number(rect[1]) || 0;
+  const x2 = Number(rect[2]) || 0;
+  const y2 = Number(rect[3]) || 0;
+  return [Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)];
+}
+
+/** Normalize a PDF.js Widget annotation or getFieldObjects() entry. */
+export function normalizeFormField(field, pageNumber = null) {
+  if (!field || (field.subtype && field.subtype !== 'Widget' && field.type !== 'form_field')) return null;
+
+  const pdfType = String(field.fieldType || field.type || '').toLowerCase();
+  let fieldType = 'text';
+  if (pdfType === 'tx' || pdfType === 'text') {
+    fieldType = field.password ? 'password' : field.multiLine ? 'textarea' : 'text';
+  } else if (pdfType === 'ch' || pdfType === 'choice' || pdfType === 'combobox' || pdfType === 'listbox') {
+    fieldType = field.combo || pdfType === 'combobox' ? 'dropdown' : 'listbox';
+  } else if (pdfType === 'btn' || pdfType === 'button' || pdfType === 'checkbox' || pdfType === 'radiobutton') {
+    fieldType = field.pushButton ? 'button' : field.radioButton || pdfType === 'radiobutton' ? 'radio' : 'checkbox';
+  } else if (pdfType === 'sig' || pdfType === 'signature') {
+    fieldType = 'signature';
+  }
+
+  const fieldName = String(field.fieldName || field.name || field.id || 'field');
+  const optionValue = String(field.buttonValue ?? field.exportValue ?? field.optionValue ?? 'On');
+  const value = normalizeFieldValue(field.fieldValue ?? field.value);
+  const defaultValue = normalizeFieldValue(field.defaultFieldValue ?? field.defaultValue);
+  const scalarValue = Array.isArray(value) ? value[0] ?? '' : value;
+  const checked = fieldType === 'radio'
+    ? scalarValue === optionValue
+    : fieldType === 'checkbox'
+      ? Boolean(scalarValue && scalarValue !== 'Off' && (scalarValue === optionValue || /^(true|yes|on|1|x)$/i.test(scalarValue)))
+      : false;
+  const baseLabel = String(field.alternativeText || field.alternateFieldName || field.label || humanizeFieldName(fieldName));
+  const label = fieldType === 'radio' && optionValue && !baseLabel.toLowerCase().includes(optionValue.toLowerCase())
+    ? `${baseLabel}: ${humanizeFieldName(optionValue)}`
+    : baseLabel;
+
+  return {
+    id: field.id || null,
+    page: pageNumber ?? (Number.isInteger(field.page) ? field.page + 1 : null),
+    name: fieldName,
+    label,
+    description: String(field.contents || field.description || ''),
+    fieldType,
+    pdfFieldType: field.fieldType || field.type || null,
+    value,
+    defaultValue,
+    optionValue,
+    checked,
+    defaultChecked: fieldType === 'radio'
+      ? String(Array.isArray(defaultValue) ? defaultValue[0] ?? '' : defaultValue) === optionValue
+      : fieldType === 'checkbox'
+        ? Boolean(defaultValue && defaultValue !== 'Off')
+        : false,
+    options: normalizeFieldOptions(field.options),
+    multiple: Boolean(field.multiSelect),
+    required: Boolean(field.required),
+    readOnly: Boolean(field.readOnly),
+    hidden: Boolean(field.hidden),
+    maxLength: Number.isFinite(Number(field.maxLen ?? field.maxLength)) ? Number(field.maxLen ?? field.maxLength) : null,
+    rect: Array.isArray(field.rect) ? field.rect.map(Number) : null,
+    bbox: normalizeFieldRect(field.rect),
+    actions: field.actions || null,
+    url: field.url || null,
+  };
+}
+
+/** Register a normalized PDF form widget as an interactive IR object. */
+export function registerFormField(ir, pageId, field, pageNumber = null) {
+  const normalized = normalizeFormField(field, pageNumber);
+  if (!normalized) return null;
+
+  const obj = addObject(ir, pageId, {
+    type: 'form_field',
+    raw: { ...normalized },
+    semantic: {
+      role: 'form_field',
+      fieldType: normalized.fieldType,
+      fieldName: normalized.name,
+      value: normalized.value,
+      defaultValue: normalized.defaultValue,
+      optionValue: normalized.optionValue,
+      checked: normalized.checked,
+      defaultChecked: normalized.defaultChecked,
+      options: normalized.options,
+      multiple: normalized.multiple,
+      maxLength: normalized.maxLength,
+    },
+    accessibility: {
+      role: 'form',
+      label: normalized.label,
+      description: normalized.description,
+      required: normalized.required,
+      readOnly: normalized.readOnly,
+    },
+    bbox: normalized.bbox,
+    provenance: { method: 'annotation', confidence: 1.0 },
+  });
+
+  if (!ir.forms || typeof ir.forms !== 'object') ir.forms = { fields: [], byName: {} };
+  if (!Array.isArray(ir.forms.fields)) ir.forms.fields = [];
+  if (!ir.forms.byName || typeof ir.forms.byName !== 'object') ir.forms.byName = {};
+  const record = { ...normalized, objectId: obj.id, pageId };
+  ir.forms.fields.push(record);
+  if (!Array.isArray(ir.forms.byName[normalized.name])) ir.forms.byName[normalized.name] = [];
+  ir.forms.byName[normalized.name].push(obj.id);
+  if (ir.pages[pageId] && !ir.pages[pageId].forms.includes(obj.id)) ir.pages[pageId].forms.push(obj.id);
+  return obj;
 }
 
 // ─── Vector Extraction ───────────────────────────────────────────────────────
@@ -777,6 +915,49 @@ function buildRAGPayload(ir) {
   return buildRAGContext(ir, null);
 }
 
+function formFieldMarkup(obj, page, positioned = true) {
+  const field = { ...(obj.raw || {}), ...(obj.semantic || {}) };
+  const type = field.fieldType || 'text';
+  const name = field.fieldName || field.name || obj.id || 'field';
+  const label = obj.accessibility?.label || field.label || humanizeFieldName(name);
+  const value = field.value ?? '';
+  const values = Array.isArray(value) ? value.map(String) : [String(value ?? '')];
+  const id = `pdf-form-${obj.id}`;
+  const readOnly = obj.accessibility?.readOnly || field.readOnly;
+  const required = obj.accessibility?.required || field.required;
+  const common = ` id="${escapeHTML(id)}" name="${escapeHTML(name)}" aria-label="${escapeHTML(label)}"` +
+    (required ? ' required aria-required="true"' : '') +
+    (readOnly && !['text', 'password', 'textarea'].includes(type) ? ' disabled aria-readonly="true"' : '') +
+    (readOnly && ['text', 'password', 'textarea'].includes(type) ? ' readonly aria-readonly="true"' : '');
+
+  if (field.hidden) return `<input type="hidden"${common} value="${escapeHTML(values[0])}">`;
+
+  let control = '';
+  if (type === 'checkbox' || type === 'radio') {
+    control = `<input type="${type}"${common} value="${escapeHTML(field.optionValue || 'On')}"${field.checked ? ' checked' : ''}>`;
+  } else if (type === 'dropdown' || type === 'listbox') {
+    const options = (field.options || []).map(option => {
+      const optionValue = String(option?.value ?? option ?? '');
+      const optionLabel = String(option?.label ?? optionValue);
+      return `<option value="${escapeHTML(optionValue)}"${values.includes(optionValue) ? ' selected' : ''}>${escapeHTML(optionLabel)}</option>`;
+    }).join('');
+    control = `<select${common}${field.multiple ? ' multiple' : ''}${type === 'listbox' ? ` size="${Math.min(8, Math.max(2, (field.options || []).length || 2))}"` : ''}>${options}</select>`;
+  } else if (type === 'textarea') {
+    control = `<textarea${common}${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ''}>${escapeHTML(values[0])}</textarea>`;
+  } else if (type === 'button') {
+    control = `<button type="button"${common} disabled>${escapeHTML(label)}</button>`;
+  } else if (type === 'signature') {
+    control = `<output${common} class="pdf-signature">${escapeHTML(values[0] || 'Unsigned')}</output>`;
+  } else {
+    control = `<input type="${type === 'password' ? 'password' : 'text'}"${common} value="${escapeHTML(values[0])}"${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ''}>`;
+  }
+
+  const data = ` data-pdf-object="${escapeHTML(obj.id)}" data-form-name="${escapeHTML(name)}"`;
+  if (!positioned) return `<div class="pdf-form-field"${data}><label for="${escapeHTML(id)}">${escapeHTML(label)}</label>${control}</div>\n`;
+  const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+  return `<div class="pdf-form-field pdf-form-field-positioned"${data} style="left:${Number(x) || 0}px;top:${cssTop(page, y, h)}px;width:${Number(w) || 0}px;height:${Number(h) || 0}px"><label class="pdf-sr-only" for="${escapeHTML(id)}">${escapeHTML(label)}</label>${control}</div>\n`;
+}
+
 function renderPageVisual(page, ir, attrs) {
   let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + 'px;height:' + (page.height || 0) + 'px;">\n';
 
@@ -839,6 +1020,8 @@ function renderPagePositionedText(page, ir, attrs) {
       const href = escapeHTML(obj.raw?.href || '#');
       const text = escapeHTML(obj.semantic?.text || obj.raw?.url || 'link');
       html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>\n`;
+    } else if (obj.type === 'form_field') {
+      html += formFieldMarkup(obj, page, true);
     }
   }
 
@@ -879,6 +1062,8 @@ function renderPageAccessible(page, ir, attrs, mode) {
     } else if (obj.type === 'link') {
       const href = escapeHTML(obj.raw?.href || '#');
       html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML(obj.semantic?.text || obj.raw?.url || 'link')}</a>\n`;
+    } else if (obj.type === 'form_field') {
+      html += formFieldMarkup(obj, page, true);
     } else if (obj.type === 'text' && obj.semantic?.text) {
       const style = textRunStyle(obj);
       html += `<p${dataAttr}${style ? ' style="' + style + '"' : ''}>${escapeHTML(obj.semantic.text)}</p>\n`;
@@ -989,6 +1174,16 @@ function generateVisualStyles(ir) {
     body[data-codbdocs-view="text"] .pdf-page[data-native-text="0"] .pdf-text { color: #111 !important; }
     .pdf-image { border: 1px dashed #ccc; }
     .pdf-rect { border: 1px solid #000; }
+    .pdf-form-field-positioned { position: absolute; z-index: 5; }
+    .pdf-form-field-positioned input:not([type="checkbox"]):not([type="radio"]),
+    .pdf-form-field-positioned select,
+    .pdf-form-field-positioned textarea,
+    .pdf-form-field-positioned button,
+    .pdf-form-field-positioned output { box-sizing: border-box; width: 100%; height: 100%; min-width: 0; margin: 0; font: inherit; }
+    .pdf-form-field-positioned input[type="checkbox"],
+    .pdf-form-field-positioned input[type="radio"] { width: 100%; height: 100%; margin: 0; }
+    .pdf-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .pdf-signature { display: flex; align-items: center; padding: 2px 4px; border: 1px solid #777; background: #f7f7f7; }
     .ai-generated { color: #999; font-style: italic; }
   </style>\n`;
 }
@@ -1112,7 +1307,7 @@ function convertStructTreeNode(node) {
  */
 export async function extractAnnotations(page) {
   try {
-    const annotations = await page.getAnnotations();
+    const annotations = await page.getAnnotations({ intent: 'display' });
     if (!annotations || annotations.length === 0) return [];
 
     return annotations.map(ann => ({
@@ -1127,10 +1322,30 @@ export async function extractAnnotations(page) {
       creationDate: ann.creationDate,
       flags: ann.flags,
       // Form-specific
+      fieldName: ann.fieldName,
       fieldType: ann.fieldType,
       fieldValue: ann.fieldValue,
+      defaultFieldValue: ann.defaultFieldValue,
+      alternativeText: ann.alternativeText,
+      fieldFlags: ann.fieldFlags,
+      readOnly: ann.readOnly,
+      required: ann.required,
+      hidden: ann.hidden,
+      maxLen: ann.maxLen,
+      multiLine: ann.multiLine,
+      password: ann.password,
+      comb: ann.comb,
+      doNotScroll: ann.doNotScroll,
+      combo: ann.combo,
+      multiSelect: ann.multiSelect,
+      checkBox: ann.checkBox,
+      radioButton: ann.radioButton,
+      pushButton: ann.pushButton,
+      buttonValue: ann.buttonValue,
+      exportValue: ann.exportValue,
       buttonWidgetType: ann.buttonWidgetType,
       options: ann.options,
+      actions: ann.actions,
       // Link-specific
       url: ann.url,
       dest: ann.dest,
@@ -1184,38 +1399,20 @@ function mapAnnotationType(subtype) {
  */
 export async function extractFormFields(pdf) {
   try {
-    const form = await pdf.getAcroForm();
-    if (!form) return [];
+    if (typeof pdf.getFieldObjects !== 'function') return [];
+    const fieldObjects = await pdf.getFieldObjects();
+    if (!fieldObjects || typeof fieldObjects !== 'object') return [];
 
     const fields = [];
-    const fieldObjects = form.getFields();
-
-    for (const field of fieldObjects) {
-      const fieldData = {
-        id: field.id,
-        name: field.name,
-        type: field.type,
-        value: field.value,
-        defaultValue: field.defaultValue,
-        alternateFieldName: field.alternateFieldName,
-        fieldType: field.fieldType,
-        // Widget-specific
-        rect: field.rect,
-        page: field.page,
-        // Text field
-        maxLength: field.maxLen,
-        // Choice field
-        options: field.options,
-        // Signature field
-        lock: field.lock,
-      };
-
-      fields.push(fieldData);
+    for (const [name, widgets] of Object.entries(fieldObjects)) {
+      for (const widget of Array.isArray(widgets) ? widgets : []) {
+        const normalized = normalizeFormField({ ...widget, fieldName: widget.fieldName || name });
+        if (normalized) fields.push(normalized);
+      }
     }
-
     return fields;
   } catch (e) {
-    // PDF has no AcroForm
+    // PDF has no AcroForm, or this PDF.js build does not expose field objects.
     return [];
   }
 }
@@ -1351,6 +1548,6 @@ function generateId(prefix) {
 }
 
 function escapeHTML(str) {
-  if (!str) return '';
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  if (str == null) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
