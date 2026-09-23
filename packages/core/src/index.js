@@ -148,6 +148,7 @@ import {
   extractStructureTree,
   extractAnnotations,
   extractFormFields,
+  extractXfaFormFields,
   registerFormField,
   detectReadingOrder,
   getReadingOrderSequence,
@@ -355,7 +356,7 @@ function getTesseract() {
 
 // ─── Load ────────────────────────────────────────────────────────────────────
 
-async function load(source) {
+async function load(source, options = {}) {
   const pdfjsLib = getPdfjs();
 
   let data;
@@ -375,7 +376,7 @@ async function load(source) {
     throw new Error('[codbdocs] Unsupported source. Pass a File, Blob, ArrayBuffer, Uint8Array, or URL string.');
   }
 
-  const pdf = await pdfjsLib.getDocument(data).promise;
+  const pdf = await pdfjsLib.getDocument({ ...data, enableXfa: options.enableXfa !== false }).promise;
   return new CodbDoc(pdf, sourceBytes);
 }
 
@@ -386,6 +387,7 @@ class CodbDoc {
     this._pdf = pdf;
     this._sourceBytes = sourceBytes;
     this.pageCount = pdf.numPages;
+    this.isPureXfa = Boolean(pdf.isPureXfa);
   }
 
   /**
@@ -571,6 +573,16 @@ class CodbDoc {
           cropBox: page.cropBox,
           labels: page.labels || null,
         });
+        if (this.isPureXfa && typeof page.getXfa === 'function') {
+          try {
+            irPage.xfa = await page.getXfa();
+            ir.document.formType = 'xfa';
+            for (const field of extractXfaFormFields(irPage.xfa, num)) {
+              const object = registerFormField(ir, `page_${num}`, field, num);
+              if (object) irPage.content = irPage.content.filter(id => id !== object.id);
+            }
+          } catch { /* keep extracted fallback */ }
+        }
 
         // Add vectors to IR
         for (const vec of vectors) {
@@ -579,7 +591,7 @@ class CodbDoc {
 
         // Add text objects to IR
         for (const item of content.items) {
-          if (item.str && item.str.trim()) {
+          if (item.str && item.str.trim() && Array.isArray(item.transform) && item.transform.length >= 6) {
             addTextObject(ir, `page_${num}`, {
               text: item.str,
               bbox: [item.transform[4], item.transform[5], item.width, item.height],
@@ -1597,10 +1609,20 @@ class CodbDoc {
           mediaBox: page.mediaBox,
           cropBox: page.cropBox,
         });
+        if (this.isPureXfa && typeof page.getXfa === 'function') {
+          try {
+            irPage.xfa = await page.getXfa();
+            ir.document.formType = 'xfa';
+            for (const field of extractXfaFormFields(irPage.xfa, num)) {
+              const object = registerFormField(ir, `page_${num}`, field, num);
+              if (object) irPage.content = irPage.content.filter(id => id !== object.id);
+            }
+          } catch { /* keep extracted fallback */ }
+        }
 
         for (const vec of vectors) addVectorObject(ir, `page_${num}`, vec);
         for (const item of content.items) {
-          if (item.str && item.str.trim()) {
+          if (item.str && item.str.trim() && Array.isArray(item.transform) && item.transform.length >= 6) {
             addTextObject(ir, `page_${num}`, {
               text: item.str,
               bbox: [item.transform[4], item.transform[5], item.width, item.height],
@@ -1964,6 +1986,7 @@ async function renderPageToCanvas(page, scale) {
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
 export { load, configure, canUseWorkers };
+export { extractXfaFormFields };
 export const CodbDocs = { load, configure, canUseWorkers };
 export default CodbDocs;
 
@@ -2131,6 +2154,7 @@ export function exportFidelityHTML(graph, options = {}) {
 
 export { normalizeIR, hydrateGraph } from './guards.js';
 export { buildFidelityHtml } from './fidelity.js';
+export { saveFilledPdf, applyFormValuesToStorage, parseAcrobatFormRules } from './forms.js';
 export { createWorkspace } from './workspace.js';
 export { saveToCache, loadFromCache, clearCache, getCacheStats } from './persistence.js';
 export { processLargeDocument, createZip, shouldStream } from './large.js';

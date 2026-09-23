@@ -294,6 +294,7 @@ export function normalizeFormField(field, pageNumber = null) {
 
   return {
     id: field.id || null,
+    annotationId: field.annotationId || field.id || null,
     page: pageNumber ?? (Number.isInteger(field.page) ? field.page + 1 : null),
     name: fieldName,
     label,
@@ -319,7 +320,70 @@ export function normalizeFormField(field, pageNumber = null) {
     bbox: normalizeFieldRect(field.rect),
     actions: field.actions || null,
     url: field.url || null,
+    action: field.action || null,
+    resetForm: field.resetForm || null,
+    newWindow: Boolean(field.newWindow),
+    xfa: Boolean(field.xfa),
+    dataId: field.dataId || null,
+    fieldId: field.fieldId || null,
+    xfaOn: field.xfaOn ?? null,
+    xfaOff: field.xfaOff ?? null,
   };
+}
+
+/** Extract normalized controls from the HTML tree returned by PDFPageProxy.getXfa(). */
+export function extractXfaFormFields(tree, pageNumber = null) {
+  const fields = [];
+  const walk = node => {
+    if (!node || typeof node !== 'object') return;
+    if (['input', 'textarea', 'select', 'button'].includes(node.name)) {
+      const attrs = node.attributes || {};
+      const inputType = String(attrs.type || '').toLowerCase();
+      const fieldType = node.name === 'textarea' ? 'textarea'
+        : node.name === 'select' ? (attrs.multiple ? 'listbox' : 'dropdown')
+          : node.name === 'button' ? 'button'
+            : inputType === 'radio' || inputType === 'checkbox' || inputType === 'password' ? inputType : 'text';
+      const name = String(attrs.dataId || attrs.fieldId || attrs.name || attrs.id || `xfa-field-${fields.length + 1}`);
+      const optionValue = String(attrs.xfaOn ?? attrs.value ?? 'On');
+      const checked = Boolean(attrs.checked);
+      fields.push({
+        id: attrs.fieldId || attrs.id || null,
+        annotationId: attrs.dataId || null,
+        dataId: attrs.dataId || null,
+        fieldId: attrs.fieldId || null,
+        page: pageNumber,
+        name,
+        label: String(attrs['aria-label'] || attrs.xfaName || name.replace(/\d+$/, '').replace(/[_-]+/g, ' ')),
+        description: '',
+        fieldType,
+        pdfFieldType: 'XFA',
+        value: checked ? optionValue : attrs.value ?? attrs.textContent ?? '',
+        defaultValue: checked ? optionValue : attrs.value ?? attrs.textContent ?? '',
+        optionValue,
+        xfaOn: attrs.xfaOn ?? optionValue,
+        xfaOff: attrs.xfaOff ?? 'off',
+        checked,
+        defaultChecked: checked,
+        options: node.name === 'select' ? (node.children || []).filter(child => child?.name === 'option').map(child => ({
+          value: String(child.attributes?.value ?? child.value ?? ''),
+          label: String(child.value ?? child.attributes?.value ?? ''),
+        })) : [],
+        multiple: Boolean(attrs.multiple),
+        required: Boolean(attrs.required || attrs['aria-required']),
+        readOnly: Boolean(attrs.readOnly || attrs.readonly || attrs.disabled),
+        hidden: inputType === 'hidden',
+        maxLength: Number.isFinite(Number(attrs.maxLength)) ? Number(attrs.maxLength) : null,
+        rect: null,
+        bbox: null,
+        actions: null,
+        url: null,
+        xfa: true,
+      });
+    }
+    for (const child of node.children || []) walk(child);
+  };
+  walk(tree);
+  return fields;
 }
 
 /** Register a normalized PDF form widget as an interactive IR object. */
@@ -1346,8 +1410,12 @@ export async function extractAnnotations(page) {
       buttonWidgetType: ann.buttonWidgetType,
       options: ann.options,
       actions: ann.actions,
+      action: ann.action,
+      resetForm: ann.resetForm,
       // Link-specific
       url: ann.url,
+      unsafeUrl: ann.unsafeUrl,
+      newWindow: ann.newWindow,
       dest: ann.dest,
       // Markup-specific
       strokeWidth: ann.strokeWidth,

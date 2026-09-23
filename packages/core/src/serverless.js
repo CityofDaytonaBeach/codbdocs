@@ -11,7 +11,7 @@
 
 import { processLargeDocument, createZip } from './large.js';
 import { buildFidelityHtml } from './fidelity.js';
-import { normalizeFormField } from './pdfir.js';
+import { extractXfaFormFields, normalizeFormField } from './pdfir.js';
 
 function getPdfjs() {
   const lib =
@@ -338,6 +338,7 @@ export async function ocrPage(page, options = {}) {
  *   includeLayout   (default true)  positioned text runs per page
  *   includeImages   (default true)  embedded images as data URIs
  *   includeForms    (default true)  interactive AcroForm fields
+ *   enableXfa       (default true)  render and retain pure XFA forms
  *   includeVectors  (default true)  per-page SVG rendition
  *   includePageImages (default false) full-page PNG per page
  *   includeOriginal (default false) original PDF as base64
@@ -372,6 +373,7 @@ export async function documentData(source, options = {}) {
     data: bytes ? bytes.slice(0) : undefined,
     url: !bytes && typeof source === 'string' ? source : undefined,
     disableAutoFetch: true,
+    enableXfa: options.enableXfa !== false,
   });
   const pdf = await loadingTask.promise;
 
@@ -425,13 +427,19 @@ export async function documentData(source, options = {}) {
     text = text.replace(/[ \t]+\n/g, '\n').trim();
 
     let pageForms = [];
+    let pageXfa = null;
     if (includeForms) {
       try {
-        const annotations = await page.getAnnotations({ intent: 'display' });
-        pageForms = annotations
-          .filter(annotation => annotation.subtype === 'Widget' || annotation.fieldType)
-          .map(annotation => normalizeFormField(annotation, num))
-          .filter(Boolean);
+        if (pdf.isPureXfa && typeof page.getXfa === 'function') {
+          pageXfa = await page.getXfa();
+          pageForms = extractXfaFormFields(pageXfa, num);
+        } else {
+          const annotations = await page.getAnnotations({ intent: 'display' });
+          pageForms = annotations
+            .filter(annotation => annotation.subtype === 'Widget' || annotation.fieldType)
+            .map(annotation => normalizeFormField(annotation, num))
+            .filter(Boolean);
+        }
         formFields.push(...pageForms);
       } catch {
         pageForms = [];
@@ -488,6 +496,7 @@ export async function documentData(source, options = {}) {
         spans,
         images,
         forms: pageForms,
+        xfa: pageXfa,
         vector_svg: '',
         page_image: '',
       };
@@ -534,6 +543,7 @@ export async function documentData(source, options = {}) {
       bytes: bytes ? bytes.length : 0,
       generated_at: new Date().toISOString(),
       metadata,
+      form_type: pdf.isPureXfa ? 'xfa' : formFields.length ? 'acroform' : 'none',
     },
     metrics: {
       pages: pages.length,
@@ -556,6 +566,7 @@ export async function documentData(source, options = {}) {
   };
 
   if (includeForms) payload.forms = formFields;
+  if (pdf.isPureXfa) payload.xfa = { pure: true, enabled: options.enableXfa !== false, pages: numbers.length };
   if (includeLayout) payload.layout = { pages: layoutPages };
   if (includeOriginal && bytes) payload.original_pdf_base64 = bytesToBase64(bytes);
 
@@ -595,6 +606,9 @@ export async function packageDocumentFull(source, options = {}) {
       rag: { chunks: data.chunks },
       originalName: data.document.source,
       originalPdfSrc,
+      formSubmitEndpoint: options.formSubmitEndpoint || null,
+      allowPdfSubmitActions: options.allowPdfSubmitActions === true,
+      formRules: options.formRules || null,
       ...(options.htmlOptions ?? {}),
     });
   entries.push({ name: 'index.html', data: html });
@@ -809,7 +823,7 @@ export function dataToIR(data, options = {}) {
         },
         provenance: { method: 'annotation', confidence: 1 },
       };
-      content.push(id);
+      if (!field.xfa) content.push(id);
       formObjectIds.push(id);
       forms.fields.push({ ...field, objectId: id, pageId: pid });
       if (!Array.isArray(forms.byName[field.name])) forms.byName[field.name] = [];
@@ -824,6 +838,7 @@ export function dataToIR(data, options = {}) {
       background: lay?.page_image || '',
       content,
       forms: formObjectIds,
+      xfa: lay?.xfa || null,
     };
   }
 
@@ -862,6 +877,9 @@ export async function buildAccessibleHtml(source, options = {}) {
     rag: { chunks: data.chunks },
     originalName: data.document.source,
     originalPdfSrc: bytes ? `data:application/pdf;base64,${bytesToBase64(bytes)}` : undefined,
+    formSubmitEndpoint: options.formSubmitEndpoint || null,
+    allowPdfSubmitActions: options.allowPdfSubmitActions === true,
+    formRules: options.formRules || null,
     ...(options.html ?? {}),
   });
   return { html, data, ir };
@@ -875,6 +893,9 @@ export function serverlessCapabilities() {
     images: true,
     vectors: true,
     interactiveForms: true,
+    saveFilledPdf: true,
+    electronicSignatures: true,
+    xfa: true,
     pageImages: true,
     ocr: typeof document !== 'undefined',
     rag: true,

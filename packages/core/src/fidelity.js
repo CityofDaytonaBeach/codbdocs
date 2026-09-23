@@ -178,9 +178,10 @@ function renderFormControl(o, view, pageHeight) {
   } else if (type === "textarea") {
     control = `<textarea${attrs}${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>${esc(values[0])}</textarea>`;
   } else if (type === "button") {
-    control = `<button type="button"${attrs} disabled title="Embedded PDF actions are not run in HTML">${esc(label)}</button>`;
+    const formAction = field.resetForm ? "reset" : field.url || String(field.action || "").toLowerCase().includes("submit") ? "submit" : "";
+    control = `<button type="button"${attrs}${formAction ? ` data-form-action="${formAction}"${field.url ? ` data-form-endpoint="${esc(field.url)}"` : ""}` : " disabled"}>${esc(label)}</button>`;
   } else if (type === "signature") {
-    control = `<output${attrs.replace('class="fx-form-input"', 'class="fx-form-input fx-form-signature"')}>${esc(values[0] || "Unsigned")}</output>`;
+    control = `<input type="hidden"${attrs} value="${esc(values[0])}"><button type="button" class="fx-signature-open" data-signature-name="${esc(name)}"${readOnly ? " disabled" : ""}>${esc(values[0] ? "Review signature" : "Add signature")}</button><output class="fx-form-signature-preview" data-signature-preview="${esc(name)}">${esc(values[0] || "Unsigned")}</output>`;
   } else {
     control = `<input type="${type === "password" ? "password" : "text"}"${attrs} value="${esc(values[0])}"${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>`;
   }
@@ -496,7 +497,7 @@ function tagPanel(tags) {
     <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
   </section>`;
 }
-const PDFJS_URL = null;
+const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.min.js";
 const CONFORMANCE = [
   "WCAG 2.1 Level A",
   "WCAG 2.1 Level AA",
@@ -528,7 +529,49 @@ function buildFidelityHtml(ir, options = {}) {
   const initialView = options.view === "reflow" ? "reflow" : "fidelity";
   const ctx = newDocCtx();
   const formFields = pages.flatMap((pageId) => pageObjects(ir, ir.pages && ir.pages[pageId] || {})).filter((o) => o.type === "form_field");
-  const hasForms = formFields.length > 0;
+  const formDefinitions = [];
+  const formKeys = new Set();
+  const addFormDefinition = (field, object = null) => {
+    const name = String(field.fieldName || field.name || "");
+    const annotationId = field.annotationId || field.id || object?.raw?.id || null;
+    const key = `${annotationId || object?.id || name}:${field.optionValue || ""}:${field.page || ""}`;
+    if (!name || formKeys.has(key)) return;
+    formKeys.add(key);
+    formDefinitions.push({
+      id: object?.id || field.objectId || field.id || null,
+      annotationId,
+      dataId: field.dataId || null,
+      page: field.page || null,
+      name,
+      label: object?.accessibility?.label || field.label || name || "Form field",
+      type: field.fieldType || "text",
+      value: field.value ?? "",
+      defaultValue: field.defaultValue ?? "",
+      optionValue: field.optionValue || "On",
+      checked: Boolean(field.checked),
+      defaultChecked: Boolean(field.defaultChecked),
+      options: Array.isArray(field.options) ? field.options : [],
+      multiple: Boolean(field.multiple),
+      hidden: Boolean(field.hidden),
+      maxLength: field.maxLength ?? null,
+      description: field.description || "",
+      xfaOn: field.xfaOn || null,
+      xfaOff: field.xfaOff || null,
+      required: Boolean(object?.accessibility?.required || field.required),
+      readOnly: Boolean(object?.accessibility?.readOnly || field.readOnly),
+      xfa: Boolean(field.xfa),
+      actions: field.actions || null,
+      rules: parseAcrobatFormRules(field.actions),
+      url: field.url || null,
+      action: field.action || null,
+      resetForm: field.resetForm || null,
+    });
+  };
+  formFields.forEach((object) => addFormDefinition(formFieldData(object), object));
+  (ir.forms?.fields || []).forEach((field) => addFormDefinition(field));
+  const xfaPages = pages.map((pageId, index) => ({ page: index + 1, tree: ir.pages?.[pageId]?.xfa || null })).filter(item => item.tree);
+  const hasXfa = xfaPages.length > 0;
+  const hasForms = formDefinitions.length > 0 || hasXfa;
   if (options.inferHeadings !== false) ctx.inferred = inferHeadingLevels(ir);
   let thumbs = "";
   let body = "";
@@ -542,6 +585,12 @@ function buildFidelityHtml(ir, options = {}) {
     const nativeText = hasNativeText(page, ir);
     const pageBg = embeddedImageSrc(page.background);
     const label = ((_b2 = page.labels) == null ? void 0 : _b2.print) || `Page ${(_c2 = page.num) != null ? _c2 : index + 1}`;
+    const xfaReflow = page.xfa ? formDefinitions.filter(field => field.xfa && Number(field.page || index + 1) === index + 1).map((field, fieldIndex) => renderFormControl({
+      id: field.id || `xfa-${index + 1}-${fieldIndex}`,
+      raw: { ...field, fieldName: field.name, fieldType: field.type },
+      semantic: { fieldName: field.name, fieldType: field.type, value: field.value },
+      accessibility: { label: field.label, required: field.required, readOnly: field.readOnly },
+    }, "reflow", h)).join("") : "";
     const vectorCount = Array.isArray(page.vectors) ? page.vectors.length : pageObjects(ir, page).filter((o) => o.type === "vector" || o.type === "path" || o.type === "shape").length;
     if (vectorCount) ctx.vectors[String(index + 1)] = vectorCount;
     nav += `<option value="${index + 1}">${esc(label)}</option>`;
@@ -555,13 +604,14 @@ function buildFidelityHtml(ir, options = {}) {
         ${pageBg ? `<img class="fx-raster" src="${esc(pageBg)}" alt="" aria-hidden="true" width="${w}" height="${h}">` : ""}
         ${renderVectorLayer(ir, page)}
         <div class="fx-textlayer" aria-label="${esc(label)} text">${renderTextLayer(ir, page, ctx, index + 1)}</div>
+        ${page.xfa ? `<div class="fx-xfa-host" data-xfa-page="${index + 1}" aria-label="${esc(label)} XFA form"></div>` : ""}
       </div>
       <div class="fx-reflow">${renderReflow(
       ir,
       page,
       ctx.outline.filter((e) => e.page === index + 1).map((e) => e.i),
       ctx
-    )}</div>
+    )}${xfaReflow ? `<section class="fx-xfa-reflow" aria-label="XFA form fields"><h2>Form fields</h2>${xfaReflow}</section>` : ""}</div>
     </section>`;
   });
   const rag = options.rag || null;
@@ -579,6 +629,9 @@ function buildFidelityHtml(ir, options = {}) {
     knowledge: options.knowledge || options.documentContext || options.siteContext || null,
     feedbackEndpoint: options.feedbackEndpoint || null,
     feedbackEmail: options.feedbackEmail || null,
+    formSubmitEndpoint: options.formSubmitEndpoint || null,
+    allowPdfSubmitActions: options.allowPdfSubmitActions === true,
+    formRules: options.formRules || null,
     originalUrl: options.originalUrl || null,
     originalName: options.originalName || null,
     permalink: options.permalink || null,
@@ -636,17 +689,7 @@ function buildFidelityHtml(ir, options = {}) {
       var _a2;
       return { id: e.id, page: e.page, label: e.label, ...(_a2 = e.detail) != null ? _a2 : {} };
     }),
-    forms: formFields.map((o) => {
-      const field = formFieldData(o);
-      return {
-        id: o.id || null,
-        name: field.fieldName || field.name || "",
-        label: o.accessibility && o.accessibility.label || field.label || field.fieldName || field.name || "Form field",
-        type: field.fieldType || "text",
-        required: Boolean(o.accessibility && o.accessibility.required || field.required),
-        readOnly: Boolean(o.accessibility && o.accessibility.readOnly || field.readOnly)
-      };
-    }),
+    forms: formDefinitions,
     capabilities: [
       "ask",
       "summarize",
@@ -676,6 +719,7 @@ function buildFidelityHtml(ir, options = {}) {
     jsonScript("codbdocs-knowledge", knowledgePack),
     jsonScript("codbdocs-elements", ctx.elements),
     jsonScript("codbdocs-forms", knowledgePack.forms),
+    jsonScript("codbdocs-xfa", { pure: hasXfa, pages: xfaPages }),
   ].join("\n");
   return `<!DOCTYPE html>
 <html lang="${esc(lang)}" data-view="${initialView}">
@@ -759,6 +803,29 @@ main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:
 .fx-pdf-field input[type=checkbox],.fx-pdf-field input[type=radio]{display:block;width:100%;height:100%;margin:0;accent-color:#1473e6}
 .fx-pdf-field input:focus,.fx-pdf-field select:focus,.fx-pdf-field textarea:focus{outline:2px solid #1473e6;outline-offset:1px}
 .fx-form-signature{align-items:center;color:#4b5563;background:#f3f4f6!important}
+.fx-signature-open{cursor:pointer;background:#eef4fb!important;color:#0f5fc4!important}
+.fx-form-signature-preview{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#374151}
+.fx-xfa-host{position:absolute;inset:0;z-index:5;transform-origin:0 0;color:#000;line-height:1.2}
+.xfaPage{overflow:hidden;position:relative}.xfaContentarea{position:absolute}.xfaPrintOnly{display:none}
+.xfaLayer{position:absolute;text-align:initial;top:0;left:0;transform-origin:0 0;background:transparent;line-height:1.2}
+.xfaLayer *{color:inherit;font:inherit;font-style:inherit;font-weight:inherit;font-kerning:inherit;letter-spacing:0;
+  text-align:inherit;text-decoration:inherit;box-sizing:border-box;background-color:transparent;padding:0;margin:0;pointer-events:auto;line-height:inherit}
+.xfaLayer *:required{outline:1.5px solid #c5192d}.xfaLayer div,.xfaLayer svg,.xfaLayer svg *{pointer-events:none}
+.xfaLayer input,.xfaLayer textarea,.xfaLayer select,.xfaLayer button,.xfaLayer a{pointer-events:auto}
+.xfaFont{color:#000;font-weight:normal;font-kerning:none;font-size:10px;font-style:normal;letter-spacing:0;text-decoration:none;vertical-align:0}
+.xfaCaption{overflow:hidden;flex:0 0 auto}.xfaCaptionForCheckButton{overflow:hidden;flex:1 1 auto}.xfaLabel{height:100%;width:100%}
+.xfaLeft{display:flex;flex-direction:row;align-items:center}.xfaRight{display:flex;flex-direction:row-reverse;align-items:center}
+.xfaTop{display:flex;flex-direction:column;align-items:flex-start}.xfaBottom{display:flex;flex-direction:column-reverse;align-items:flex-start}
+.xfaBorder{background:transparent;position:absolute;pointer-events:none}.xfaWrapped{width:100%;height:100%}
+.xfaTextfield,.xfaSelect{height:100%;width:100%;flex:1 1 auto;border:0;resize:none;background:rgba(0,54,255,.13)}
+.xfaTextfield:focus,.xfaSelect:focus{background:transparent;outline:2px solid #1473e6;outline-offset:-1px}.xfaSelect{padding-inline:2px}
+.xfaButton{cursor:pointer;width:100%;height:100%;border:0;text-align:center}.xfaLink{width:100%;height:100%;position:absolute;inset:0}
+.xfaCheckbox,.xfaRadio{width:100%;height:100%;flex:0 0 auto;border:0}.xfaRich{white-space:pre-wrap;width:100%;height:100%}
+.xfaImage{object-position:left top;object-fit:contain;width:100%;height:100%}.xfaLrTb,.xfaRlTb,.xfaTb{display:flex;flex-direction:column;align-items:stretch}
+.xfaLr{display:flex;flex-direction:row;align-items:stretch}.xfaRl{display:flex;flex-direction:row-reverse;align-items:stretch}
+.xfaPosition,.xfaArea{position:relative}.xfaValignMiddle{display:flex;align-items:center}.xfaTable{display:flex;flex-direction:column;align-items:stretch}
+.xfaTable .xfaRow{display:flex;flex-direction:row;align-items:stretch}.xfaTable .xfaRlRow{display:flex;flex-direction:row-reverse;align-items:stretch;flex:1}
+.xfaNonInteractive input,.xfaNonInteractive textarea,.xfaDisabled input,.xfaDisabled textarea,.xfaReadOnly input,.xfaReadOnly textarea{background:initial}
 .fx-reflow{display:none}
 html[data-view=reflow] .fx-canvas{display:none}
 html[data-view=reflow] .fx-page{width:min(58rem,100%);height:auto;margin-bottom:3rem}
@@ -841,6 +908,10 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-field label{font-weight:600;font-size:.9rem;color:#303846}
 .fx-field input,.fx-field textarea,.fx-field select{width:100%;border:1px solid #cfd6df;border-radius:9px;padding:.58rem .7rem;font:inherit;line-height:1.35;background:#fff;color:#16181a}
 .fx-dialog .fx-primary{margin:.25rem .35rem .25rem 0}
+.fx-form-actions{display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem 0;border-top:1px solid #e2e6ea}
+.fx-signature-canvas{width:100%;height:12rem;border:1px solid #9ba3ad;border-radius:6px;background:#fff;touch-action:none}
+.fx-signature-preview-large{min-height:4rem;display:flex;align-items:center;justify-content:center;border:1px dashed #9ba3ad;padding:.75rem;overflow:hidden}
+.fx-signature-preview-large img{max-width:100%;max-height:9rem}.fx-signature-typed{font-family:cursive;font-size:2rem}
 .fx-switch{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:0 .25rem}
 .fx-switch input{appearance:none;-webkit-appearance:none;width:28px;height:15px;border-radius:999px;
   background:#4b5563;position:relative;cursor:pointer;transition:background .15s;margin:0;flex:0 0 28px}
@@ -958,6 +1029,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 
     <button type="button" id="fx-read" aria-pressed="false">Read aloud</button>
     <button type="button" id="fx-print">Print</button>
+    ${hasForms ? `<button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>` : ""}
     ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
     <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
     <button type="button" id="fx-fb-open" aria-haspopup="dialog">Report</button>
@@ -1077,11 +1149,23 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
     <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
     <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
     ${hasForms ? `<li><button type="button" class="fx-primary" id="fx-dl-forms">Completed form data (JSON)</button></li>` : ""}
+    ${hasForms && options.originalPdfSrc ? `<li><button type="button" class="fx-primary" id="fx-dl-pdf">Completed PDF</button></li>` : ""}
     ${showDataControls && rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
     ${showDataControls ? `<li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>` : ""}
 
   </ul>
 </div>
+
+${hasForms ? `<div class="fx-dialog" id="fx-signature" role="dialog" aria-modal="true" aria-labelledby="fx-signature-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close signature dialog">&#10005;</button>
+  <h2 id="fx-signature-h">Add an electronic signature</h2>
+  <p class="fx-note">This captures an electronic signature in the HTML form. It is not a certificate-backed digital signature.</p>
+  <div class="fx-field"><label for="fx-signature-name">Type your name</label><input id="fx-signature-name" type="text" autocomplete="name"></div>
+  <canvas class="fx-signature-canvas" id="fx-signature-canvas" width="900" height="240" aria-label="Draw your signature"></canvas>
+  <div class="fx-field"><label for="fx-signature-file">Or use a signature image</label><input id="fx-signature-file" type="file" accept="image/png,image/jpeg,image/webp"></div>
+  <div class="fx-signature-preview-large" id="fx-signature-preview-large" aria-live="polite">No signature selected</div>
+  <div class="fx-form-actions"><button type="button" class="fx-primary" id="fx-signature-apply">Apply signature</button><button type="button" id="fx-signature-clear">Clear</button></div>
+</div>` : ""}
 
 <div class="fx-dialog" id="fx-fb" role="dialog" aria-modal="true" aria-labelledby="fx-fb-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close issue report">&#10005;</button>
@@ -1298,36 +1382,80 @@ ${backendDataScripts}
     });
   });
   // ---- original PDF switch -------------------------------------------
+  var pdfSrc=${JSON.stringify(options.originalPdfSrc || "")}, pdfJsUrl=${JSON.stringify(options.pdfJsUrl || PDFJS_URL)};
+  var pdfJsPromise=null, activePdfDocument=null;
+  function toBytes(src){
+    var i=String(src||'').indexOf('base64,');
+    if(i<0) return null;
+    var bin=atob(src.slice(i+7)), out=new Uint8Array(bin.length);
+    for(var k=0;k<bin.length;k++) out[k]=bin.charCodeAt(k);
+    return out;
+  }
+  function configurePdfJs(lib){
+    lib=lib&&lib.getDocument?lib:window.pdfjsLib;
+    if(!lib||!lib.getDocument) throw new Error('PDF.js did not load.');
+    if(pdfJsUrl&&lib.GlobalWorkerOptions) lib.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.js(?:\\?.*)?$/,'pdf.worker$1.js');
+    return lib;
+  }
+  function loadPdfJs(){
+    if(window.pdfjsLib) return Promise.resolve(configurePdfJs(window.pdfjsLib));
+    if(pdfJsPromise) return pdfJsPromise;
+    if(!pdfJsUrl) return Promise.reject(new Error('PDF.js is not configured.'));
+    pdfJsPromise=new Promise(function(resolve,reject){
+      var script=document.createElement('script'); script.src=pdfJsUrl; script.async=true;
+      script.onload=function(){ try{ resolve(configurePdfJs(window.pdfjsLib)); }catch(err){ reject(err); } };
+      script.onerror=function(){ reject(new Error('PDF.js could not be loaded.')); };
+      document.head.appendChild(script);
+    });
+    return pdfJsPromise;
+  }
+  function ensurePdfDocument(){
+    if(activePdfDocument) return Promise.resolve(activePdfDocument);
+    if(!pdfSrc) return Promise.reject(new Error('No original PDF is embedded in this document.'));
+    return loadPdfJs().then(function(pdfjs){
+      var bytes=toBytes(pdfSrc); if(!bytes) throw new Error('The embedded PDF data is invalid.');
+      return pdfjs.getDocument({data:bytes.slice(0),enableXfa:true}).promise;
+    }).then(function(doc){ activePdfDocument=doc; return doc; });
+  }
+  function addSafeLinkAttributes(el,url,newWindow){
+    if(!url) return;
+    try{
+      var parsed=new URL(url,location.href);
+      if(!/^(https?:|mailto:|tel:)$/.test(parsed.protocol)&&String(url).charAt(0)!=='#') return;
+      el.href=String(url).charAt(0)==='#'?String(url):parsed.href;
+      if(newWindow) el.target='_blank'; el.rel='noopener noreferrer';
+    }catch(e){}
+  }
   var pdfToggle=document.getElementById('fx-pdf-toggle');
   if(pdfToggle){
     var origPane=document.getElementById('fx-original'), accPane=document.getElementById('fx-accessible');
-    var pdfSrc=${JSON.stringify(options.originalPdfSrc || "")}, pdfJsUrl=${JSON.stringify(options.pdfJsUrl || PDFJS_URL)};
     var pdfLoaded=false, pdfLoading=false;
     function opStatus(m){ var s=document.getElementById('fx-op-status'); if(s) s.textContent=m; }
-    function toBytes(src){
-      var i=src.indexOf('base64,');
-      if(i<0) return null;
-      var bin=atob(src.slice(i+7)), out=new Uint8Array(bin.length);
-      for(var k=0;k<bin.length;k++) out[k]=bin.charCodeAt(k);
-      return out;
-    }
     function renderOriginal(){
       if(pdfLoaded||pdfLoading) return; pdfLoading=true;
       if(!pdfSrc){ pdfLoading=false; opStatus('No original PDF is embedded in this document.'); return; }
       opStatus('Rendering the original PDF\u2026');
-      var pdfjsReady=window.pdfjsLib ? Promise.resolve(window.pdfjsLib) : (pdfJsUrl ? import(pdfJsUrl) : Promise.reject(new Error('PDF.js is not loaded.')));
-      pdfjsReady.then(function(pdfjs){
-        if(pdfJsUrl&&pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.mjs$/,'pdf.worker$1.mjs');
-        var bytes=toBytes(pdfSrc);
-        var task=bytes?pdfjs.getDocument({data:bytes}):pdfjs.getDocument(pdfSrc);
-        return task.promise;
-      }).then(function(doc){
+      ensurePdfDocument().then(function(doc){
         var host=document.getElementById('fx-op-pages'); if(host) host.textContent='';
         var chain=Promise.resolve();
         for(var n=1;n<=doc.numPages;n++)(function(n){
           chain=chain.then(function(){ return doc.getPage(n); }).then(function(page){
             var base=page.getViewport({scale:1});
             var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/base.width);
+            if(doc.isPureXfa){
+              return page.getXfa().then(function(tree){
+                var wrap=document.createElement('div'); wrap.className='fx-op-page';
+                var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
+                var xfa=document.createElement('div'); xfa.style.width=base.width+'px'; xfa.style.height=base.height+'px';
+                xfa.style.position='relative'; xfa.style.transform='scale('+scale+')'; xfa.style.transformOrigin='top left';
+                wrap.style.width=(base.width*scale)+'px'; wrap.style.minHeight=(base.height*scale)+'px';
+                wrap.appendChild(lab); wrap.appendChild(xfa); if(host) host.appendChild(wrap);
+                return loadPdfJs().then(function(pdfjs){ pdfjs.XfaLayer.render({
+                  div:xfa,xfaHtml:tree,annotationStorage:doc.annotationStorage,intent:'display',
+                  linkService:{addLinkAttributes:addSafeLinkAttributes}
+                }); });
+              });
+            }
             var cssVp=page.getViewport({scale:scale});
             var vp=page.getViewport({scale:scale*(window.devicePixelRatio||1)});
             var wrap=document.createElement('div'); wrap.className='fx-op-page';
@@ -1363,17 +1491,32 @@ ${backendDataScripts}
   var knowledge=readJson('codbdocs-knowledge')||{};
   var elements=readJson('codbdocs-elements')||[];
   var formDefinitions=readJson('codbdocs-forms')||[];
+  var xfaData=readJson('codbdocs-xfa')||{pages:[]};
 
   // ---- interactive PDF forms -------------------------------------------
-  var formInputs=[].slice.call(document.querySelectorAll('.fx-form-input'));
+  var formInputs=[], formState={}, calculating=false;
+  formDefinitions.forEach(function(def){
+    if(!Object.prototype.hasOwnProperty.call(formState,def.name)) formState[def.name]=def.value!=null?def.value:def.defaultValue;
+    if(def.type==='radio'&&def.value!==def.optionValue&&def.defaultValue!==def.optionValue&&formState[def.name]===def.value) formState[def.name]=null;
+  });
+  function refreshFormInputs(){
+    formInputs=[].slice.call(document.querySelectorAll('.fx-form-input'));
+    formInputs.forEach(function(el){
+      if(el.dataset.codbdocsWired==='true') return;
+      el.dataset.codbdocsWired='true';
+      el.addEventListener('input',function(){ syncFormControl(el); });
+      el.addEventListener('change',function(){ syncFormControl(el); });
+      el.addEventListener('blur',function(){ formatFormControl(el); });
+    });
+  }
   function formControls(name){ return formInputs.filter(function(el){ return el.dataset.formName===name; }); }
-  function formNames(){ var seen={}; return formInputs.map(function(el){ return el.dataset.formName; })
+  function formNames(){ var seen={}; return formDefinitions.map(function(def){ return def.name; }).concat(formInputs.map(function(el){ return el.dataset.formName; }))
     .filter(function(name){ if(!name||seen[name]) return false; seen[name]=true; return true; }); }
   function preferredControl(controls){
     return controls.filter(function(el){ return el.dataset.formView==='pdf'; })[0]||controls[0]||null;
   }
   function getFormValue(name){
-    var controls=formControls(name); if(!controls.length) return null;
+    var controls=formControls(name); if(!controls.length) return Object.prototype.hasOwnProperty.call(formState,name)?formState[name]:null;
     var type=controls[0].dataset.formType||controls[0].type||'text';
     if(type==='radio'){
       var checked=controls.filter(function(el){ return el.checked; })[0];
@@ -1391,6 +1534,7 @@ ${backendDataScripts}
       return [].slice.call(control.options).filter(function(opt){ return opt.selected; }).map(function(opt){ return opt.value; });
     }
     if(control.tagName==='OUTPUT') return control.textContent||'';
+    if(type==='signature') { try{ return JSON.parse(control.value||'null'); }catch(e){ return control.value||null; } }
     return control.value;
   }
   function getFormValues(){ var out={}; formNames().forEach(function(name){ out[name]=getFormValue(name); }); return out; }
@@ -1411,7 +1555,19 @@ ${backendDataScripts}
       } else if('value' in target) target.value=source.value;
       else if(target.tagName==='OUTPUT') target.textContent=source.textContent;
     });
+    formState[name]=getFormValue(name);
+    if(!calculating) recalculateForm();
+    validateForm(false);
     announceFormChange(name);
+  }
+  function updateSignaturePreview(name,value){
+    [].forEach.call(document.querySelectorAll('[data-signature-preview]'),function(out){
+      if(out.dataset.signaturePreview!==name) return;
+      out.textContent='';
+      if(value&&value.data){ var img=document.createElement('img'); img.alt='Electronic signature'; img.src=value.data; img.style.maxWidth='100%'; img.style.maxHeight='100%'; out.appendChild(img); }
+      else out.textContent=value&&value.name?value.name:'Unsigned';
+    });
+    [].forEach.call(document.querySelectorAll('[data-signature-name]'),function(btn){ if(btn.dataset.signatureName===name) btn.textContent=value?'Review signature':'Add signature'; });
   }
   function setFormValues(values, silent){
     Object.keys(values||{}).forEach(function(name){
@@ -1422,9 +1578,12 @@ ${backendDataScripts}
         else if(type==='checkbox') el.checked=next===true||String(next)==String(option)||(Array.isArray(next)&&next.map(String).indexOf(String(option))!==-1);
         else if(el.tagName==='SELECT'&&el.multiple){ var list=Array.isArray(next)?next.map(String):[String(next)];
           [].slice.call(el.options).forEach(function(opt){ opt.selected=list.indexOf(String(opt.value))!==-1; }); }
+        else if(type==='signature') el.value=next==null?'':JSON.stringify(next);
         else if(el.tagName==='OUTPUT') el.textContent=next==null?'':String(next);
         else el.value=next==null?'':String(next);
       });
+      formState[name]=next;
+      if(controls.some(function(el){ return (el.dataset.formType||'')==='signature'; })) updateSignaturePreview(name,next);
       if(!silent) announceFormChange(name);
     });
     return getFormValues();
@@ -1437,18 +1596,179 @@ ${backendDataScripts}
       else { var value=''; try{ value=JSON.parse(decodeURIComponent(el.dataset.formDefault||'')); }catch(e){}
         value=Array.isArray(value)?value[0]||'':value; if(el.tagName==='OUTPUT') el.textContent=value||'Unsigned'; else el.value=value==null?'':String(value); }
     });
-    formNames().forEach(announceFormChange); return getFormValues();
+    formNames().forEach(function(name){ formState[name]=getFormValue(name); announceFormChange(name); });
+    recalculateForm(); validateForm(false); return getFormValues();
   }
-  formInputs.forEach(function(el){
-    el.addEventListener('input',function(){ syncFormControl(el); });
-    el.addEventListener('change',function(){ syncFormControl(el); });
-  });
+  function rulesFor(def){
+    var custom=cfg.formRules&&cfg.formRules[def.name]||{};
+    return {calculations:(def.rules&&def.rules.calculations||[]).concat(custom.calculations||custom.calculate||[]),
+      formats:(def.rules&&def.rules.formats||[]).concat(custom.formats||custom.format||[]),
+      validations:(def.rules&&def.rules.validations||[]).concat(custom.validations||custom.validate||[])};
+  }
+  function numberValue(value){ var n=Number(String(value==null?'':value).replace(/[^0-9+-.]/g,'')); return isFinite(n)?n:0; }
+  function recalculateForm(){
+    if(calculating) return getFormValues(); calculating=true;
+    try{
+      formDefinitions.forEach(function(def){
+        rulesFor(def).calculations.forEach(function(rule){
+          if(!rule||rule.type!=='aggregate'||!Array.isArray(rule.fields)) return;
+          var values=rule.fields.map(function(name){ return numberValue(getFormValue(name)); }), next=0;
+          if(rule.operation==='SUM') next=values.reduce(function(a,b){ return a+b; },0);
+          else if(rule.operation==='AVG') next=values.length?values.reduce(function(a,b){ return a+b; },0)/values.length:0;
+          else if(rule.operation==='PRD') next=values.reduce(function(a,b){ return a*b; },values.length?1:0);
+          else if(rule.operation==='MIN') next=values.length?Math.min.apply(Math,values):0;
+          else if(rule.operation==='MAX') next=values.length?Math.max.apply(Math,values):0;
+          setFormValues((function(){ var out={}; out[def.name]=String(next); return out; })(),true);
+        });
+      });
+    } finally { calculating=false; }
+    return getFormValues();
+  }
+  function formatFormControl(el){
+    var def=formDefinitions.filter(function(item){ return item.name===el.dataset.formName; })[0];
+    if(!def||el.type==='checkbox'||el.type==='radio') return;
+    var format=rulesFor(def).formats[0]; if(!format||!el.value) return;
+    if(format.type==='number'||format.type==='percent'){
+      var n=numberValue(el.value); if(format.type==='percent') n*=100;
+      el.value=n.toFixed(Number(format.decimals)||0)+(format.type==='percent'?'%':''); syncFormControl(el);
+    }
+    if(format.type==='date'){
+      var date=new Date(el.value); if(isNaN(date.getTime())) return;
+      var pad=function(value){ return String(value).padStart(2,'0'); }, pattern=format.pattern||'mm/dd/yyyy';
+      el.value=pattern.replace(/yyyy/gi,String(date.getFullYear())).replace(/yy/gi,String(date.getFullYear()).slice(-2))
+        .replace(/mm/gi,pad(date.getMonth()+1)).replace(/dd/gi,pad(date.getDate())); syncFormControl(el);
+    }
+  }
+  function validateForm(report){
+    var errors=[];
+    formNames().forEach(function(name){
+      var controls=formControls(name), value=getFormValue(name);
+      controls.forEach(function(el){ if(el.setCustomValidity) el.setCustomValidity(''); });
+      var defs=formDefinitions.filter(function(def){ return def.name===name; });
+      var required=defs.some(function(def){ return def.required; });
+      var message='';
+      if(required&&(value==null||value===''||(Array.isArray(value)&&!value.length))) message='This field is required.';
+      defs.forEach(function(def){ rulesFor(def).validations.forEach(function(rule){
+        if(message||value==null||value==='') return;
+        if(rule.type==='number'&&!isFinite(Number(String(value).replace(/,/g,'')))) message='Enter a valid number.';
+        if(rule.type==='date'&&isNaN(Date.parse(String(value)))) message='Enter a valid date.';
+        if(rule.type==='range'){ var n=numberValue(value); if(rule.minimum!=null&&n<rule.minimum) message='Enter a value of at least '+rule.minimum+'.';
+          if(rule.maximum!=null&&n>rule.maximum) message='Enter a value no greater than '+rule.maximum+'.'; }
+        if(rule.type!=='date'&&rule.pattern){ try{ if(!(new RegExp(rule.pattern)).test(String(value))) message=rule.message||'Enter a value in the required format.'; }catch(e){} }
+      }); });
+      if(message){ errors.push({name:name,message:message}); controls.forEach(function(el){ if(el.setCustomValidity) el.setCustomValidity(message); el.setAttribute('aria-invalid','true'); }); }
+      else controls.forEach(function(el){ el.removeAttribute('aria-invalid'); });
+    });
+    var first=formInputs.filter(function(el){ return el.validationMessage; })[0];
+    if(report&&first&&first.reportValidity) first.reportValidity();
+    return {valid:errors.length===0,errors:errors,values:getFormValues()};
+  }
+  function safeEndpoint(endpoint){
+    if(!endpoint) return null;
+    try{ var url=new URL(endpoint,location.href); return /^(https?:)$/.test(url.protocol)?url.href:null; }catch(e){ return null; }
+  }
+  function submitForm(endpoint){
+    var result=validateForm(true); if(!result.valid) return Promise.reject(new Error('Complete the required form fields.'));
+    var detail={documentId:cfg.documentId||null,title:cfg.title||null,values:result.values,endpoint:endpoint||cfg.formSubmitEndpoint||null};
+    var event=new CustomEvent('codbdocs:formsubmit',{detail:detail,cancelable:true});
+    var unhandled=document.dispatchEvent(event);
+    var url=safeEndpoint(endpoint||cfg.formSubmitEndpoint);
+    if(!url){ if(unhandled) say('Form data is ready for the host application.'); return Promise.resolve({submitted:!unhandled,values:result.values}); }
+    say('Submitting form…');
+    return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(detail)}).then(function(response){
+      if(!response.ok) throw new Error('The form service returned '+response.status+'.');
+      say('Form submitted.'); return {submitted:true,status:response.status,values:result.values};
+    });
+  }
+  function applyValuesToPdf(pdf){
+    var values=getFormValues(), stored={};
+    formDefinitions.forEach(function(def){
+      var id=def.annotationId||def.dataId; if(!id||!Object.prototype.hasOwnProperty.call(values,def.name)||def.type==='button'||def.type==='signature') return;
+      var value=values[def.name], next=value;
+      if(def.xfa&&def.type==='radio'){
+        if(stored[id]) return; stored[id]=true;
+        var selected=formDefinitions.filter(function(item){ return item.xfa&&item.name===def.name&&String(item.optionValue)===String(value); })[0];
+        next=selected?(selected.xfaOn||selected.optionValue):(def.xfaOff||'off');
+        pdf.annotationStorage.setValue(id,{value:next}); return;
+      }
+      if(def.type==='radio'||def.type==='checkbox'){
+        var checked=Array.isArray(value)?value.map(String).indexOf(String(def.optionValue))!==-1:String(value)===String(def.optionValue)||value===true;
+        next=def.xfa?(checked?(def.xfaOn||def.optionValue||'1'):(def.xfaOff||'0')):checked;
+      }
+      pdf.annotationStorage.setValue(id,{value:next==null?'':next});
+    });
+  }
+  function saveCompletedPdf(){
+    say('Preparing the completed PDF…');
+    return ensurePdfDocument().then(function(pdf){ applyValuesToPdf(pdf); return pdf.saveDocument(); }).then(function(bytes){
+      download(base+'-completed.pdf',new Uint8Array(bytes),'application/pdf'); return bytes;
+    }).catch(function(err){ say('The completed PDF could not be saved: '+(err&&err.message||err)); throw err; });
+  }
+
+  function memoryStorage(){ var values={}; return {getValue:function(id,fallback){ return values[id]||fallback; },setValue:function(id,value){ values[id]=Object.assign(values[id]||{},value); }}; }
+  function xfaDescriptors(tree,out){ out=out||[]; if(!tree) return out;
+    if(['input','textarea','select','button'].indexOf(tree.name)!==-1) out.push(tree.attributes||{});
+    (tree.children||[]).forEach(function(child){ xfaDescriptors(child,out); }); return out; }
+  function annotateXfa(host,tree){
+    var descriptors=xfaDescriptors(tree), controls=[].slice.call(host.querySelectorAll('input,textarea,select,button'));
+    controls.forEach(function(el,index){ var attrs=descriptors[index]||{}, name=attrs.dataId||attrs.fieldId||attrs.name||('xfa-'+index);
+      var type=el.tagName==='TEXTAREA'?'textarea':el.tagName==='SELECT'?(el.multiple?'listbox':'dropdown'):el.tagName==='BUTTON'?'button':(attrs.type||'text');
+      el.classList.add('fx-form-input'); el.dataset.formName=String(name); el.dataset.formType=String(type); el.dataset.formView='xfa';
+      el.dataset.formOption=String(attrs.xfaOn||attrs.value||'On'); el.dataset.formDefault=encodeURIComponent(JSON.stringify(el.value||attrs.textContent||''));
+      if(el.checked) el.dataset.defaultChecked='true';
+      if(type==='button'){
+        var caption=(el.textContent||'').trim().toLowerCase();
+        if(/clear|reset/.test(caption)) el.dataset.formAction='reset';
+        else if(/submit|send/.test(caption)) el.dataset.formAction='submit';
+        else if(/validate|check/.test(caption)) el.dataset.formAction='validate';
+      }
+      if(!formDefinitions.some(function(def){ return def.annotationId===attrs.dataId&&def.optionValue===el.dataset.formOption; })){
+        formDefinitions.push({id:attrs.fieldId||null,annotationId:attrs.dataId||null,dataId:attrs.dataId||null,name:String(name),
+          label:attrs['aria-label']||String(name),type:String(type),value:el.checked?el.dataset.formOption:el.value||'',defaultValue:el.value||'',
+          optionValue:el.dataset.formOption,xfaOn:attrs.xfaOn||null,xfaOff:attrs.xfaOff||null,required:Boolean(attrs.required),readOnly:Boolean(attrs.readOnly||attrs.disabled),xfa:true,
+          rules:{calculations:[],formats:[],validations:[],unsupportedScripts:[]}});
+      }
+    });
+  }
+  function renderXfaLayers(){
+    if(!xfaData.pages||!xfaData.pages.length) return Promise.resolve(false);
+    return loadPdfJs().then(function(pdfjs){
+      return ensurePdfDocument().catch(function(){ return null; }).then(function(pdf){
+        var storage=pdf&&pdf.annotationStorage||memoryStorage();
+        var chain=Promise.resolve();
+        xfaData.pages.forEach(function(item){
+          chain=chain.then(function(){
+            if(!pdf) return item.tree;
+            return pdf.getPage(item.page).then(function(page){ return page.getXfa(); });
+          }).then(function(tree){
+            var host=document.querySelector('.fx-xfa-host[data-xfa-page="'+item.page+'"]'); if(!host||!tree) return;
+            host.textContent=''; var layer=document.createElement('div'); host.appendChild(layer);
+            pdfjs.XfaLayer.render({div:layer,xfaHtml:tree,annotationStorage:storage,intent:'display',
+              linkService:{addLinkAttributes:addSafeLinkAttributes}});
+            annotateXfa(layer,tree);
+          });
+        });
+        return chain.then(function(){
+          refreshFormInputs(); setFormValues(formState,true); validateForm(false);
+          document.dispatchEvent(new CustomEvent('codbdocs:xfa-ready',{detail:{pages:xfaData.pages.length}})); return true;
+        });
+      });
+    }).catch(function(err){ say('The XFA form layer could not be loaded: '+(err&&err.message||err)); return false; });
+  }
+
+  refreshFormInputs();
   window.CodbDocsForms={
     definitions:formDefinitions,
     getValues:getFormValues,
     setValues:setFormValues,
-    reset:resetFormValues
+    reset:resetFormValues,
+    validate:validateForm,
+    recalculate:recalculateForm,
+    submit:submitForm,
+    savePdf:saveCompletedPdf,
+    xfaReady:null
   };
+  window.CodbDocsForms.xfaReady=renderXfaLayers();
 
 
   // ---- accessible dialogs (focus trap, Escape to close) ---------------
@@ -1481,6 +1801,73 @@ ${backendDataScripts}
   wire('fx-ex-open','fx-ex',function(){ renderElements(); });
   wire('fx-dl-open','fx-dl');
   wire('fx-fb-open','fx-fb');
+
+  var formResetButton=document.getElementById('fx-form-reset');
+  if(formResetButton) formResetButton.onclick=function(){ resetFormValues(); say('Form reset.'); };
+  var formSubmitButton=document.getElementById('fx-form-submit');
+  if(formSubmitButton) formSubmitButton.onclick=function(){ submitForm().catch(function(err){ say(err&&err.message||'The form could not be submitted.'); }); };
+  document.addEventListener('click',function(event){
+    var button=event.target&&event.target.closest&&event.target.closest('[data-form-action]'); if(!button) return;
+    var action=button.dataset.formAction;
+    if(action==='reset'){ resetFormValues(); say('Form reset.'); }
+    else if(action==='validate'){ var validation=validateForm(true); say(validation.valid?'Form validation passed.':'The form has '+validation.errors.length+' validation issue'+(validation.errors.length===1?'':'s')+'.'); }
+    else if(action==='submit'){
+      var endpoint=cfg.allowPdfSubmitActions===true?button.dataset.formEndpoint:null;
+      submitForm(endpoint).catch(function(err){ say(err&&err.message||'The form could not be submitted.'); });
+    }
+  });
+
+  var signatureField=null, signatureImage=null, signatureHasInk=false;
+  var signatureCanvas=document.getElementById('fx-signature-canvas'), signatureContext=signatureCanvas&&signatureCanvas.getContext('2d');
+  var signatureName=document.getElementById('fx-signature-name'), signatureFile=document.getElementById('fx-signature-file');
+  var signatureLarge=document.getElementById('fx-signature-preview-large');
+  function clearSignaturePad(){
+    signatureImage=null; signatureHasInk=false;
+    if(signatureContext){ signatureContext.clearRect(0,0,signatureCanvas.width,signatureCanvas.height); signatureContext.lineWidth=4; signatureContext.lineCap='round'; signatureContext.strokeStyle='#111'; }
+    if(signatureFile) signatureFile.value=''; if(signatureName) signatureName.value='';
+    if(signatureLarge){ signatureLarge.textContent='No signature selected'; }
+  }
+  function signatureLargePreview(value){
+    if(!signatureLarge) return; signatureLarge.textContent='';
+    if(value&&value.data){ var img=document.createElement('img'); img.src=value.data; img.alt='Signature preview'; signatureLarge.appendChild(img); }
+    else if(value&&value.name){ var span=document.createElement('span'); span.className='fx-signature-typed'; span.textContent=value.name; signatureLarge.appendChild(span); }
+    else signatureLarge.textContent='No signature selected';
+  }
+  function openSignature(name){
+    signatureField=name; clearSignaturePad();
+    var current=getFormValue(name); if(current&&typeof current==='object'){
+      signatureImage=current.data||null; if(signatureName) signatureName.value=current.name||''; signatureLargePreview(current);
+    }
+    showDialog('fx-signature');
+  }
+  document.addEventListener('click',function(event){
+    var button=event.target&&event.target.closest&&event.target.closest('[data-signature-name]');
+    if(button){ event.preventDefault(); openSignature(button.dataset.signatureName); }
+  });
+  if(signatureCanvas&&signatureContext){
+    clearSignaturePad(); var drawing=false;
+    function point(event){ var rect=signatureCanvas.getBoundingClientRect(); return {x:(event.clientX-rect.left)*signatureCanvas.width/rect.width,y:(event.clientY-rect.top)*signatureCanvas.height/rect.height}; }
+    signatureCanvas.addEventListener('pointerdown',function(event){ drawing=true; signatureHasInk=true; signatureCanvas.setPointerCapture(event.pointerId); var p=point(event); signatureContext.beginPath(); signatureContext.moveTo(p.x,p.y); });
+    signatureCanvas.addEventListener('pointermove',function(event){ if(!drawing) return; var p=point(event); signatureContext.lineTo(p.x,p.y); signatureContext.stroke();
+      signatureLargePreview({data:signatureCanvas.toDataURL('image/png')}); });
+    signatureCanvas.addEventListener('pointerup',function(){ drawing=false; });
+    signatureCanvas.addEventListener('pointercancel',function(){ drawing=false; });
+  }
+  if(signatureName) signatureName.addEventListener('input',function(){ if(!signatureImage&&!signatureHasInk) signatureLargePreview({name:signatureName.value}); });
+  if(signatureFile) signatureFile.addEventListener('change',function(){ var file=signatureFile.files&&signatureFile.files[0]; if(!file) return;
+    var reader=new FileReader(); reader.onload=function(){ signatureImage=String(reader.result||''); signatureLargePreview({data:signatureImage,name:signatureName&&signatureName.value||''}); }; reader.readAsDataURL(file); });
+  var signatureClear=document.getElementById('fx-signature-clear');
+  if(signatureClear) signatureClear.onclick=function(){ clearSignaturePad(); if(signatureField){ var next={}; next[signatureField]=null; setFormValues(next); } };
+  var signatureApply=document.getElementById('fx-signature-apply');
+  if(signatureApply) signatureApply.onclick=function(){
+    if(!signatureField) return;
+    var name=signatureName&&signatureName.value.trim()||'', value=null;
+    if(signatureImage) value={mode:'image',name:name,data:signatureImage,timestamp:new Date().toISOString()};
+    else if(signatureHasInk) value={mode:'draw',name:name,data:signatureCanvas.toDataURL('image/png'),timestamp:new Date().toISOString()};
+    else if(name) value={mode:'type',name:name,data:null,timestamp:new Date().toISOString()};
+    if(!value){ say('Add a signature before applying it.'); return; }
+    var next={}; next[signatureField]=value; setFormValues(next); closeDialog(); say('Electronic signature applied.');
+  };
 
 
   // ---- document outline ----------------------------------------------
@@ -1843,6 +2230,8 @@ ${backendDataScripts}
   var df=document.getElementById('fx-dl-forms');
   if(df) df.onclick=function(){ download(base+'-form-data.json',
     JSON.stringify({document:cfg.title||null,values:getFormValues()},null,2),'application/json'); };
+  var dp=document.getElementById('fx-dl-pdf');
+  if(dp) dp.onclick=function(){ dp.disabled=true; saveCompletedPdf().catch(function(){}).finally(function(){ dp.disabled=false; }); };
 
   // ---- accessibility feedback loop -------------------------------------
   var fbForm=document.getElementById('fx-fb-form'), fbOut=document.getElementById('fx-fb-result');
@@ -1882,3 +2271,4 @@ export {
   buildFidelityHtml,
   newDocCtx
 };
+import { parseAcrobatFormRules } from './formrules.js';

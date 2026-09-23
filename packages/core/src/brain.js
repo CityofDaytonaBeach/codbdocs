@@ -26,7 +26,7 @@ export function analyzeSpatialLayout(items, pageSize) {
   }
 
   // Build bounding boxes
-  const boxes = items.map(item => {
+  const boxes = items.filter(item => Array.isArray(item?.transform) && item.transform.length >= 6 && typeof item.str === 'string').map(item => {
     const tx = item.transform;
     return {
       text: item.str,

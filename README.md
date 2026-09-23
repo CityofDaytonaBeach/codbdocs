@@ -22,24 +22,41 @@ Load PDF.js first, then import the CodbDocs ES module from jsDelivr. OCR is opti
 
 ### Interactive PDF forms
 
-`buildAccessibleHtml()` preserves AcroForm text fields, passwords, multiline fields, checkboxes, radio groups, dropdowns, list boxes, buttons, and signature status in the generated HTML. Field values stay synchronized between PDF view and reflow view.
+`buildAccessibleHtml()` preserves AcroForm text fields, passwords, multiline fields, checkboxes, radio groups, dropdowns, list boxes, buttons, and signature fields in the generated HTML. Field values stay synchronized between PDF view and reflow view. Pure XFA documents are rendered through PDF.js's native XFA layer and use the same annotation storage that is used to save a completed PDF.
 
 ```javascript
 const { html, data, ir } = await buildAccessibleHtml(pdfFile, {
   includeForms: true,
+  formSubmitEndpoint: 'https://example.gov/forms/submit', // optional
 });
 
 // In the generated HTML page:
 const values = window.CodbDocsForms.getValues();
 window.CodbDocsForms.setValues({ full_name: 'Ada Resident' });
 window.CodbDocsForms.reset();
+window.CodbDocsForms.recalculate();
+window.CodbDocsForms.validate(true);
+await window.CodbDocsForms.submit();
+await window.CodbDocsForms.savePdf();
+await window.CodbDocsForms.xfaReady;
 
 document.addEventListener('codbdocs:formchange', event => {
   console.log(event.detail.name, event.detail.value, event.detail.values);
 });
 ```
 
-The Download menu includes a completed-form JSON file. Downloading the accessible HTML also preserves the current control values. Embedded PDF JavaScript is not executed, and the SDK does not write edited values back into the original PDF file.
+The Download menu includes completed-form JSON, accessible HTML with the current values, and a completed PDF. The SDK also exposes a direct save API:
+
+```javascript
+const completedPdf = await saveFilledPdf(pdfFile, {
+  full_name: 'Ada Resident',
+  contact_method: 'email',
+}, { fields: data.forms });
+```
+
+Common declarative Acrobat calculations, number/percent formats, and range/number/date validation actions are translated into browser rules without evaluating arbitrary PDF JavaScript. PDF submit URLs are disabled by default; configure `formSubmitEndpoint`, listen for `codbdocs:formsubmit`, or explicitly set `allowPdfSubmitActions: true` when the PDF itself is trusted.
+
+Electronic signatures can be typed, drawn, or uploaded and are retained in HTML and JSON form data. They are not certificate-backed PDF digital signatures, and the signature image is not written into a PDF signature field. XFA rendering and saving use the capabilities of the bundled PDF.js version; proprietary XFA scripts and Acrobat-only services can still require Adobe Acrobat/Reader.
 
 ```
 CodbDocs
