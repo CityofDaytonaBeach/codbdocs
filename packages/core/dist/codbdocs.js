@@ -701,6 +701,8 @@ var CodbDocs = (() => {
   var CONFORMANCE = [
     "WCAG 2.1 Level A",
     "WCAG 2.1 Level AA",
+    "WCAG 2.2 Level AA minimum",
+    "WCAG 2.2 Level AAA enhancements",
     "ADA Title II",
     "Section 508",
     "DOJ 28 CFR Part 35",
@@ -718,6 +720,37 @@ var CodbDocs = (() => {
     "Dragon NaturallySpeaking",
     "Keyboard-only navigation"
   ];
+  function collectFidelityRisks(ir) {
+    const risks = [];
+    const add = (type, page, detail) => risks.push({ type, page: page || null, detail });
+    const fonts = /* @__PURE__ */ new Set();
+    const pages = Array.isArray(ir?.document?.pages) ? ir.document.pages : Object.keys(ir?.pages || {});
+    for (const [idx, pageId] of pages.entries()) {
+      const page = ir.pages?.[pageId];
+      const pageNum = page?.num || idx + 1;
+      if (page?.xfa) add("xfa_form", pageNum, "XFA content can render differently outside Acrobat.");
+      if (Array.isArray(page?.graphicsStates)) {
+        for (const gs of page.graphicsStates) {
+          if (gs?.blendMode && gs.blendMode !== "Normal") add("blend_mode", pageNum, `Blend mode ${gs.blendMode} requires original-PDF visual fallback.`);
+          if (gs?.softMask) add("soft_mask", pageNum, "Soft masks/transparency groups require original-PDF visual fallback.");
+          if (gs?.overprint) add("overprint", pageNum, "Print overprint/knockout behavior is renderer-specific.");
+          if (gs?.fill?.colorSpace && !/^Device(RGB|Gray)$/i.test(gs.fill.colorSpace)) add("color_space", pageNum, `Fill color space ${gs.fill.colorSpace} may need ICC/spot-color handling.`);
+          if (gs?.stroke?.colorSpace && !/^Device(RGB|Gray)$/i.test(gs.stroke.colorSpace)) add("color_space", pageNum, `Stroke color space ${gs.stroke.colorSpace} may need ICC/spot-color handling.`);
+        }
+      }
+      for (const object of pageObjects(ir, page)) {
+        if (object?.raw?.font) fonts.add(object.raw.font);
+        if (object?.type === "image") add("raster_image", pageNum, "Raster image appearance depends on original sampling/compression; prefer original PDF layer.");
+        if (object?.type === "vector" || object?.type === "path" || object?.type === "shape") {
+          const raw = JSON.stringify(object.raw || object.graphicsState || {});
+          if (/pattern|shading|gradient|mesh/i.test(raw)) add("pattern_or_shading", pageNum, "Patterns, gradients and mesh shadings need original rendering or service-side repair.");
+          if (/clip|mask/i.test(raw)) add("clip_or_mask", pageNum, "Complex clipping paths and masks can affect visual parity.");
+        }
+      }
+    }
+    if (fonts.size) add("font_substitution", null, `Fonts detected: ${Array.from(fonts).slice(0, 20).join(", ")}${fonts.size > 20 ? "..." : ""}. Original rendering avoids browser substitution.`);
+    return risks;
+  }
   function buildFidelityHtml(ir, options = {}) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
     if (!ir || typeof ir !== "object") throw new Error("An IR object is required.");
@@ -727,6 +760,7 @@ var CodbDocs = (() => {
     const showThumbs = options.thumbnails !== false;
     const showDataControls = options.showDataControls === true;
     const initialView = options.view === "reflow" ? "reflow" : "fidelity";
+    const fidelityRisks = collectFidelityRisks(ir);
     const ctx = newDocCtx();
     const formFields = pages.flatMap((pageId) => pageObjects(ir, ir.pages && ir.pages[pageId] || {})).filter((o) => o.type === "form_field");
     const formDefinitions = [];
@@ -826,6 +860,7 @@ var CodbDocs = (() => {
       lang,
       qaEndpoint: options.qaEndpoint || null,
       aiEndpoint: options.aiEndpoint || null,
+      improveEndpoint: options.improveEndpoint || options.documentImproveEndpoint || null,
       knowledge: options.knowledge || options.documentContext || options.siteContext || null,
       feedbackEndpoint: options.feedbackEndpoint || null,
       feedbackEmail: options.feedbackEmail || null,
@@ -835,7 +870,8 @@ var CodbDocs = (() => {
       originalUrl: options.originalUrl || null,
       originalName: options.originalName || null,
       permalink: options.permalink || null,
-      fingerprint: options.fingerprint || null
+      fingerprint: options.fingerprint || null,
+      fidelityRisks
     };
     const knowledgePack = {
       title,
@@ -846,6 +882,7 @@ var CodbDocs = (() => {
       sourceUrl: options.sourceUrl || null,
       permalink: options.permalink || null,
       fingerprint: options.fingerprint || null,
+      fidelityRisks,
       outline: ctx.outline.map((e) => ({ level: e.level, text: e.text, page: e.page })),
       headings: ctx.outline.length,
       figures: ctx.figures,
@@ -871,6 +908,10 @@ var CodbDocs = (() => {
       accessibility: options.audit ? {
         score: (_j = options.audit.score) != null ? _j : null,
         level: (_k = options.audit.level) != null ? _k : null,
+        minimumLevel: "AA",
+        targetLevel: "AA",
+        enhancedTargetLevel: "AAA",
+        complianceNote: options.audit.complianceNote || "Automated checks target WCAG/ADA AA as the minimum and add AAA enhancements where possible. Legal compliance still requires human review and assistive-technology testing.",
         issues: Array.isArray(options.audit.issues) ? options.audit.issues.length : 0,
         topIssues: (Array.isArray(options.audit.issues) ? options.audit.issues : []).slice(0, 12).map((i) => {
           var _a2, _b2, _c2, _d2;
@@ -1112,6 +1153,7 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-signature-canvas{width:100%;height:12rem;border:1px solid #9ba3ad;border-radius:6px;background:#fff;touch-action:none}
 .fx-signature-preview-large{min-height:4rem;display:flex;align-items:center;justify-content:center;border:1px dashed #9ba3ad;padding:.75rem;overflow:hidden}
 .fx-signature-preview-large img{max-width:100%;max-height:9rem}.fx-signature-typed{font-family:cursive;font-size:2rem}
+.fx-title-row{display:flex;align-items:center;gap:.6rem;min-width:0}
 .fx-switch{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:0 .25rem}
 .fx-switch input{appearance:none;-webkit-appearance:none;width:28px;height:15px;border-radius:999px;
   background:#4b5563;position:relative;cursor:pointer;transition:background .15s;margin:0;flex:0 0 28px}
@@ -1123,8 +1165,13 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-original{width:100%;max-width:1100px;margin:0 auto 24px;padding:16px}
 .fx-original iframe{width:100%;height:82vh;border:0;background:#fff;border-radius:10px;
   box-shadow:0 0 0 1px rgba(0,0,0,.08),0 10px 30px rgba(15,20,30,.14)}
-.fx-op-page{display:grid;justify-items:center;margin:0 auto 1.25rem;overflow:auto}
+.fx-op-page{display:grid;justify-items:center;margin:0 auto 1.25rem;overflow:auto;position:relative}
+.fx-op-canvas-wrap{position:relative;display:block;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 8px 22px rgba(15,20,30,.12);background:#fff}
 .fx-op-page canvas{display:block;max-width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 8px 22px rgba(15,20,30,.12)}
+.fx-op-canvas-wrap canvas{box-shadow:none}
+.fx-original-textlayer{position:absolute;inset:0;z-index:3;pointer-events:auto;color:transparent;overflow:hidden}
+.fx-original-textlayer .fx-text{color:transparent!important;text-shadow:none!important}
+.fx-original-textlayer mark.fx-hit,.fx-original-textlayer .fx-text mark.fx-hit{color:#000!important;background:rgba(255,213,79,.9);border-radius:2px}
 .fx-op-num{font-size:.78rem;color:#5a6068;margin:.25rem 0 .4rem}
 .fx-outline{list-style:none;margin:0;padding:0}
 .fx-outline li{margin:0}
@@ -1148,6 +1195,9 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   padding:.85rem 1.05rem;margin-top:1rem;white-space:pre-wrap;line-height:1.6}
 .fx-qa-cite{font-size:.82rem;color:#5a6068;margin-top:.5rem}
 .fx-lang-note{font-size:.82rem;color:#5a6068}
+.fx-a11y-grid{display:grid;gap:.55rem;margin:.6rem 0 1rem}
+.fx-a11y-option{display:flex;align-items:flex-start;gap:.65rem;border:1px solid #d9dee5;border-radius:10px;padding:.65rem .75rem;background:#fafbfc}
+.fx-a11y-option input{margin-top:.25rem;flex:none}.fx-a11y-option span{display:block;font-weight:700}.fx-a11y-option small{display:block;color:#5a6068;line-height:1.35}
 #google_translate_element{margin-top:.5rem}
 /* ---- RAG search drawer ---- */
 .fx-drawer{position:fixed;top:var(--barh,3.1rem);right:0;bottom:0;width:min(27rem,92vw);background:#fff;z-index:25;
@@ -1172,12 +1222,25 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-chip{display:inline-block;background:#e8f0fd;color:#0f5fc4;border-radius:999px;padding:.12rem .55rem;
   font-size:.72rem;font-weight:600;margin:.3rem .3rem 0 0}
 @media print{
-  header.fx-bar,.fx-rail,.fx-panel,.fx-drawer{display:none!important}
+  header.fx-bar,.fx-rail,.fx-panel,.fx-drawer,#fx-accessible{display:none!important}
   body{background:#fff}
   .fx-canvas{box-shadow:none;transform:none}
+  #fx-original{display:block!important}
   .fx-page{page-break-after:always;width:auto;height:auto}
   @page{margin:0}
 }
+html.fx-large-text{font-size:118%}
+html.fx-large-text .fx-text{font-size:calc(var(--fx-font,1em) * 1.15)!important}
+html.fx-readable-spacing .fx-reflow,html.fx-readable-spacing .fx-dialog,html.fx-readable-spacing .fx-res-text{line-height:1.85;letter-spacing:.04em;word-spacing:.12em}
+html.fx-readable-spacing .fx-reflow p{margin-bottom:1.35rem}
+html.fx-dyslexia{font-family:Arial,'Segoe UI',Verdana,sans-serif;background:#fbf6df;color:#1f2933}
+html.fx-dyslexia body,html.fx-dyslexia .fx-reflow,html.fx-dyslexia .fx-dialog,html.fx-dyslexia .fx-drawer{background:#fbf6df;color:#1f2933}
+html.fx-reduce-motion *,html.fx-reduce-motion *::before,html.fx-reduce-motion *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+html.fx-screen-reader .fx-raster,html.fx-screen-reader .fx-vector-layer,html.fx-screen-reader .fx-img{display:none!important}
+html.fx-screen-reader .fx-canvas{height:auto!important;box-shadow:none;background:transparent}
+html.fx-screen-reader .fx-page{width:min(58rem,100%)!important;height:auto!important;margin-bottom:2rem}
+html.fx-screen-reader .fx-textlayer{position:static!important;display:block!important;padding:2rem;background:#fff;border-radius:12px}
+html.fx-screen-reader .fx-text{position:static!important;display:block!important;color:#111!important;white-space:normal!important;transform:none!important;margin:.25rem 0 .7rem!important;font-size:1rem!important;font-family:inherit!important}
 @media (max-width:900px){
   header.fx-bar{position:static;gap:.45rem;padding:.65rem;align-items:stretch}
   .fx-brand{width:100%;margin-right:0}.fx-brand h1{max-width:none}
@@ -1202,7 +1265,10 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 <header class="fx-bar" role="banner">
   <div class="fx-brand">
     <span class="fx-brand-mark" aria-hidden="true">CD</span>
-    <h1>${esc(title)}</h1>
+    <div class="fx-title-row">
+      <h1>${esc(title)}</h1>
+      ${options.originalPdfSrc ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked><label for="fx-pdf-toggle">Original PDF</label></span>` : ""}
+    </div>
   </div>
   <nav class="fx-group" aria-label="Page navigation">
     <button type="button" id="fx-prev" aria-label="Previous page">&#8249;</button>
@@ -1221,14 +1287,15 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
     <button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow</button>
     <button type="button" id="fx-contrast" aria-pressed="false">Contrast</button>
   </div>
-  ${options.originalPdfSrc ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle"><label for="fx-pdf-toggle">Original PDF</label></span>` : ""}
   <div class="fx-group">
     <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
+    <button type="button" id="fx-a11y-open" aria-haspopup="dialog">Accessibility</button>
     <button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>
     <button type="button" id="fx-ex-open" aria-haspopup="dialog">Explore content</button>
 
     <button type="button" id="fx-read" aria-pressed="false">Read aloud</button>
     <button type="button" id="fx-print">Print</button>
+    <button type="button" id="fx-improve">Improve Document</button>
     ${hasForms ? `<button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>` : ""}
     ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
     <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
@@ -1259,12 +1326,12 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 <div class="fx-shell">
   ${showThumbs ? `<nav class="fx-rail" aria-label="Page thumbnails"><ul>${thumbs}</ul></nav>` : ""}
   <main class="fx-stage" id="fx-content" role="main" tabindex="-1">
-    ${options.originalPdfSrc ? `<section id="fx-original" class="fx-original" aria-label="Original PDF" hidden>
+    ${options.originalPdfSrc ? `<section id="fx-original" class="fx-original" aria-label="Original PDF">
       <p class="fx-status" id="fx-op-status" aria-live="polite">The original PDF is rendered here with pdf.js.</p>
       <div id="fx-op-pages" role="group" aria-label="Original PDF pages"></div>
-      <p class="fx-note">This is the unmodified original PDF. Turn the \u201COriginal PDF\u201D switch off to return to the accessible version.</p>
+      <p class="fx-note">This is the unmodified original PDF with CodbDocs search, readability, forms and WCAG support layered from the accessible document model.</p>
     </section>` : ""}
-    <div id="fx-accessible">
+    <div id="fx-accessible" ${options.originalPdfSrc ? "hidden" : ""}>
     ${body}
     </div>
   </main>
@@ -1277,6 +1344,27 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
   <h2 id="fx-outline-h">Document outline</h2>
   <p class="fx-lang-note">Select a section to jump straight to it. The section you are reading is highlighted.</p>
   <nav aria-label="Document sections"><ul class="fx-outline" id="fx-outline-list">${outlineHtml}</ul></nav>
+</div>
+
+<div class="fx-dialog" id="fx-a11y-tools" role="dialog" aria-modal="true" aria-labelledby="fx-a11y-tools-h" data-open="false">
+  <button type="button" class="fx-dialog-close" data-close aria-label="Close accessibility settings">&#10005;</button>
+  <h2 id="fx-a11y-tools-h">Accessibility settings</h2>
+  <p class="fx-lang-note">These controls are designed for screen readers, keyboard-only navigation, low vision, dyslexia, cognitive accessibility and motion sensitivity. Minimum target: WCAG 2.2 AA, with AAA enhancements where automatic support is possible.</p>
+  <div class="fx-a11y-grid">
+    <label class="fx-a11y-option"><input type="checkbox" data-a11y-toggle="screen-reader"><span>Screen reader mode</span><small>Hides visual-only artwork and exposes a linear text-first reading layer.</small></label>
+    <label class="fx-a11y-option"><input type="checkbox" data-a11y-toggle="large-text"><span>Large text</span><small>Increases interface and readable text size for low-vision users.</small></label>
+    <label class="fx-a11y-option"><input type="checkbox" data-a11y-toggle="readable-spacing"><span>Readable spacing</span><small>Increases line height, letter spacing and word spacing.</small></label>
+    <label class="fx-a11y-option"><input type="checkbox" data-a11y-toggle="dyslexia"><span>Dyslexia-friendly view</span><small>Uses simpler fonts and warmer background contrast.</small></label>
+    <label class="fx-a11y-option"><input type="checkbox" data-a11y-toggle="reduce-motion"><span>Reduce motion</span><small>Disables smooth scrolling, transitions and animations.</small></label>
+  </div>
+  <h3>Keyboard shortcuts</h3>
+  <ul>
+    <li>Arrow right or Page Down: next page.</li>
+    <li>Arrow left or Page Up: previous page.</li>
+    <li>Home / End: first or last page.</li>
+    <li>+ / -: zoom in or out.</li>
+    <li>Tab / Shift+Tab: move through controls and links.</li>
+  </ul>
 </div>
 
 <div class="fx-dialog" id="fx-qa" role="dialog" aria-modal="true" aria-labelledby="fx-qa-h" data-open="false">
@@ -1409,7 +1497,11 @@ ${backendDataScripts}
   function say(m){ if(live) live.textContent=m; }
   function setZoom(z){ zoom=Math.min(4,Math.max(.25,z)); root.style.setProperty('--zoom',String(zoom));
     document.getElementById('fx-zoom-label').textContent=Math.round(zoom*100)+'%'; }
-  function goto(n){ var p=pages[n-1]; if(!p) return; current=n; p.scrollIntoView({behavior:'smooth',block:'start'});
+  function isOriginalView(){ var t=document.getElementById('fx-pdf-toggle'); return !!(t&&t.checked); }
+  function gotoOriginalPage(n){ var p=document.querySelector('#fx-op-pages [data-original-page="'+n+'"]'); if(!p) return false;
+    p.scrollIntoView({behavior:'smooth',block:'start'}); return true; }
+  function goto(n){ var p=pages[n-1]; if(!p) return; current=n;
+    if(!(isOriginalView()&&gotoOriginalPage(n))) p.scrollIntoView({behavior:'smooth',block:'start'});
     if(sel) sel.value=String(n);
     [].forEach.call(document.querySelectorAll('.fx-thumb'),function(t){
       t.setAttribute('aria-current', t.dataset.goto===String(n)?'true':'false'); });
@@ -1424,7 +1516,7 @@ ${backendDataScripts}
     var w=parseFloat(getComputedStyle(p).getPropertyValue('--pw'))||612;
     var avail=document.querySelector('.fx-stage').clientWidth-48; setZoom(avail/w); }
   document.getElementById('fx-fit').onclick=fitWidth;
-  document.getElementById('fx-print').onclick=function(){ window.print(); };
+  document.getElementById('fx-print').onclick=function(){ printOriginalPdf(); };
   function setView(v){ root.dataset.view=v;
     document.getElementById('fx-view-fidelity').setAttribute('aria-pressed', String(v==='fidelity'));
     document.getElementById('fx-view-reflow').setAttribute('aria-pressed', String(v==='reflow'));
@@ -1520,7 +1612,7 @@ ${backendDataScripts}
     goto(page||1);
     var needle=String(text||'').replace(/\\s+/g,' ').trim().slice(0,40).toLowerCase();
     if(!needle) return;
-    var sels='.fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3';
+    var sels='.fx-original-textlayer .fx-text, .fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3';
     var el=[].slice.call(document.querySelectorAll(sels)).filter(function(n){
       return n.textContent.replace(/\\s+/g,' ').toLowerCase().indexOf(needle.slice(0,24))>=0; })[0];
     if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
@@ -1547,7 +1639,7 @@ ${backendDataScripts}
       var p=m.parentNode; p.replaceChild(document.createTextNode(m.textContent),m); p.normalize(); });
     if(!q){ count.textContent=''; if(drawer) drawer.setAttribute('data-open','false'); return; }
     var hits=0, first=null;
-    [].forEach.call(document.querySelectorAll('.fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3'),function(el){
+    [].forEach.call(document.querySelectorAll('.fx-original-textlayer .fx-text, .fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3'),function(el){
       var t=el.textContent; var i=t.toLowerCase().indexOf(q); if(i<0) return; hits++;
       var mark=document.createElement('mark'); mark.className='fx-hit'; mark.textContent=t.substr(i,q.length);
       el.textContent=''; el.appendChild(document.createTextNode(t.slice(0,i))); el.appendChild(mark);
@@ -1617,6 +1709,23 @@ ${backendDataScripts}
       return pdfjs.getDocument({data:bytes.slice(0),enableXfa:true}).promise;
     }).then(function(doc){ activePdfDocument=doc; return doc; });
   }
+  function printOriginalPdf(){
+    if(!pdfSrc){ say('The original PDF is not embedded, so print is unavailable.'); return; }
+    var frame=document.getElementById('fx-print-frame');
+    if(!frame){ frame=document.createElement('iframe'); frame.id='fx-print-frame'; frame.title='Original PDF print frame'; frame.style.position='fixed'; frame.style.right='0'; frame.style.bottom='0'; frame.style.width='1px'; frame.style.height='1px'; frame.style.border='0'; frame.setAttribute('aria-hidden','true'); document.body.appendChild(frame); }
+    frame.onload=function(){ try{ frame.contentWindow.focus(); frame.contentWindow.print(); say('Printing the original PDF.'); }catch(e){ say('Open the Original link to print this PDF.'); } };
+    frame.src=pdfSrc;
+  }
+  function cloneAccessibleOverlay(pageNumber,width,height,scale){
+    var src=document.querySelector('#fx-page-'+pageNumber+' .fx-textlayer');
+    if(!src) return null;
+    var layer=src.cloneNode(true);
+    layer.classList.add('fx-original-textlayer');
+    layer.removeAttribute('aria-label');
+    layer.style.width=width+'px'; layer.style.height=height+'px';
+    layer.style.transform='scale('+scale+')'; layer.style.transformOrigin='top left';
+    return layer;
+  }
   function addSafeLinkAttributes(el,url,newWindow){
     if(!url) return;
     try{
@@ -1644,7 +1753,7 @@ ${backendDataScripts}
             var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/base.width);
             if(doc.isPureXfa){
               return page.getXfa().then(function(tree){
-                var wrap=document.createElement('div'); wrap.className='fx-op-page';
+                var wrap=document.createElement('div'); wrap.className='fx-op-page'; wrap.dataset.originalPage=String(n);
                 var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
                 var xfa=document.createElement('div'); xfa.style.width=base.width+'px'; xfa.style.height=base.height+'px';
                 xfa.style.position='relative'; xfa.style.transform='scale('+scale+')'; xfa.style.transformOrigin='top left';
@@ -1658,12 +1767,15 @@ ${backendDataScripts}
             }
             var cssVp=page.getViewport({scale:scale});
             var vp=page.getViewport({scale:scale*(window.devicePixelRatio||1)});
-            var wrap=document.createElement('div'); wrap.className='fx-op-page';
+            var wrap=document.createElement('div'); wrap.className='fx-op-page'; wrap.dataset.originalPage=String(n);
             var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
             var cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height;
             cv.style.width=cssVp.width+'px'; cv.style.height=cssVp.height+'px';
             cv.setAttribute('role','img'); cv.setAttribute('aria-label','Original PDF page '+n);
-            wrap.appendChild(lab); wrap.appendChild(cv); if(host) host.appendChild(wrap);
+            var box=document.createElement('div'); box.className='fx-op-canvas-wrap'; box.style.width=cssVp.width+'px'; box.style.height=cssVp.height+'px';
+            box.appendChild(cv);
+            var overlay=cloneAccessibleOverlay(n,base.width,base.height,scale); if(overlay) box.appendChild(overlay);
+            wrap.appendChild(lab); wrap.appendChild(box); if(host) host.appendChild(wrap);
             return page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
           });
         })(n);
@@ -1681,6 +1793,7 @@ ${backendDataScripts}
       if(on) renderOriginal();
       say(on?'Showing the original PDF':'Showing the accessible version');
     });
+    if(pdfToggle.checked){ if(origPane) origPane.hidden=false; if(accPane) accPane.hidden=true; renderOriginal(); }
   }
 
   // ---- embedded data -------------------------------------------------
@@ -1692,6 +1805,36 @@ ${backendDataScripts}
   var elements=readJson('codbdocs-elements')||[];
   var formDefinitions=readJson('codbdocs-forms')||[];
   var xfaData=readJson('codbdocs-xfa')||{pages:[]};
+  function improveDocument(){
+    var detail={
+      documentId:cfg.documentId||null,
+      title:cfg.title||null,
+      originalUrl:cfg.originalUrl||null,
+      originalPdfEmbedded:!!pdfSrc,
+      fingerprint:cfg.fingerprint||null,
+      fidelityRisks:cfg.fidelityRisks||[],
+      accessibility:{overlay:true,wcag:'WCAG 2.2 AA minimum with AAA enhancements',ada:'ADA Title II support target',complianceNote:'Automated checks and overlays target AA minimum but cannot guarantee legal compliance without human review and assistive-technology testing.'},
+      comparison:{original:'embedded-pdf',converted:'accessible-html',goal:'visual parity plus WCAG/readability overlay'},
+      knowledge:knowledge,
+      elements:elements,
+      index:index,
+      rag:ragData
+    };
+    var event=new CustomEvent('codbdocs:improve',{detail:detail,cancelable:true});
+    var unhandled=document.dispatchEvent(event);
+    var url=safeEndpoint(cfg.improveEndpoint||cfg.aiEndpoint);
+    if(!url){ say(unhandled?'Improve Document request is ready for the host AI integration.':'Improve Document request sent to the host application.'); return; }
+    say('Sending document comparison request...');
+    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(detail)}).then(function(response){
+      if(!response.ok) throw new Error('The improvement service returned '+response.status+'.');
+      return response.json().catch(function(){ return {}; });
+    }).then(function(result){
+      say(result&&result.message?String(result.message):'Improve Document comparison complete. Apply the returned fixes in the host workflow.');
+      document.dispatchEvent(new CustomEvent('codbdocs:improve-result',{detail:result||{}}));
+    }).catch(function(err){ say('Improve Document failed: '+(err&&err.message||err)); });
+  }
+  var improveBtn=document.getElementById('fx-improve');
+  if(improveBtn) improveBtn.onclick=improveDocument;
 
   // ---- interactive PDF forms -------------------------------------------
   var formInputs=[], formState={}, calculating=false;
@@ -1996,11 +2139,24 @@ ${backendDataScripts}
   function wire(btnId,dialogId,after){ var b=document.getElementById(btnId); if(!b) return;
     b.onclick=function(){ showDialog(dialogId); if(after) after(); }; }
   wire('fx-outline-open','fx-outline');
+  wire('fx-a11y-open','fx-a11y-tools');
   wire('fx-qa-open','fx-qa');
   wire('fx-sum-open','fx-sum');
   wire('fx-ex-open','fx-ex',function(){ renderElements(); });
   wire('fx-dl-open','fx-dl');
   wire('fx-fb-open','fx-fb');
+
+  function setA11yMode(name,on){
+    root.classList.toggle('fx-'+name,on);
+    try{ localStorage.setItem('codbdocs-a11y-'+name,on?'1':'0'); }catch(e){}
+    say((on?'Enabled ':'Disabled ')+name.replace(/-/g,' ')+' accessibility setting.');
+  }
+  [].forEach.call(document.querySelectorAll('[data-a11y-toggle]'),function(input){
+    var name=input.getAttribute('data-a11y-toggle');
+    try{ input.checked=localStorage.getItem('codbdocs-a11y-'+name)==='1'; }catch(e){}
+    setA11yMode(name,input.checked);
+    input.addEventListener('change',function(){ setA11yMode(name,input.checked); });
+  });
 
   var formResetButton=document.getElementById('fx-form-reset');
   if(formResetButton) formResetButton.onclick=function(){ resetFormValues(); say('Form reset.'); };
@@ -7574,6 +7730,7 @@ ${p.text}`).join("\n\n")
     addSvgCommands(commands, src, bbox) {
       const svg = this.decodeDataUrl(src);
       if (!svg || !Array.isArray(bbox)) return;
+      const defs = this.svgDefs(svg);
       const viewBox = /viewBox\s*=\s*["']([^"']+)["']/i.exec(svg)?.[1]?.trim().split(/[\s,]+/).map(Number);
       const width = viewBox?.[2] || Number(/\bwidth\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[2] || 1;
       const height = viewBox?.[3] || Number(/\bheight\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[3] || 1;
@@ -7581,27 +7738,44 @@ ${p.text}`).join("\n\n")
       const sy = (bbox[3] || height) / height;
       commands.push("q");
       commands.push(`${this.num(sx)} 0 0 ${this.num(sy)} ${this.num(bbox[0] || 0)} ${this.num(bbox[1] || 0)} cm`);
-      for (const shape of this.svgShapes(svg)) {
+      for (const shape of this.svgShapes(svg, defs)) {
         const stroke = this.cssColor(shape.stroke);
         const fill = this.cssColor(shape.fill);
+        commands.push("q");
+        if (shape.transform) commands.push(`${shape.transform.map((v) => this.num(v)).join(" ")} cm`);
         if (stroke) commands.push(`${stroke.map((c) => this.num(c)).join(" ")} RG`);
         if (fill) commands.push(`${fill.map((c) => this.num(c)).join(" ")} rg`);
         if (shape.strokeWidth) commands.push(`${this.num(shape.strokeWidth)} w`);
         commands.push(...shape.commands);
         commands.push(fill && stroke ? "B" : fill ? "f" : "S");
+        commands.push("Q");
       }
       commands.push("Q");
     }
-    svgShapes(svg) {
+    svgDefs(svg) {
+      const defs = { paints: {} };
+      for (const match of svg.matchAll(/<(?:linearGradient|radialGradient)\b([^>]*)>([\s\S]*?)<\/(?:linearGradient|radialGradient)>/gi)) {
+        const id = /\bid\s*=\s*["']([^"']+)["']/i.exec(match[1])?.[1];
+        if (!id) continue;
+        const stops = [...match[2].matchAll(/<stop\b[^>]*>/gi)].map((s) => {
+          const tag = s[0];
+          return /stop-color\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] || /stop-color\s*:\s*([^;"']+)/i.exec(tag)?.[1];
+        }).filter(Boolean);
+        defs.paints[id] = stops[stops.length - 1] || stops[0] || "#000";
+      }
+      return defs;
+    }
+    svgShapes(svg, defs = { paints: {} }) {
       const out = [];
       const attr = (tag, name) => new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, "i").exec(tag)?.[1];
       const style = (tag, name) => new RegExp(`${name}\\s*:\\s*([^;"']+)`, "i").exec(attr(tag, "style") || "")?.[1];
-      const paint = (tag, name, fallback) => attr(tag, name) || style(tag, name) || fallback;
+      const paint = (tag, name, fallback) => this.resolveSvgPaint(attr(tag, name) || style(tag, name) || fallback, defs);
       const strokeWidth = (tag) => Number(attr(tag, "stroke-width") || style(tag, "stroke-width") || 1);
+      const common = (tag, fillFallback = "#000", strokeFallback = null) => ({ fill: paint(tag, "fill", fillFallback), stroke: paint(tag, "stroke", strokeFallback), strokeWidth: strokeWidth(tag), transform: this.svgTransform(attr(tag, "transform")) });
       for (const match of svg.matchAll(/<path\b[^>]*\bd\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
         const tag = match[0];
         const commands = this.svgPathToPdf(match[1]);
-        if (commands.length) out.push({ commands, fill: paint(tag, "fill", "#000"), stroke: paint(tag, "stroke", null), strokeWidth: strokeWidth(tag) });
+        if (commands.length) out.push({ commands, ...common(tag) });
       }
       for (const match of svg.matchAll(/<rect\b[^>]*>/gi)) {
         const tag = match[0];
@@ -7609,7 +7783,17 @@ ${p.text}`).join("\n\n")
         const y = Number(attr(tag, "y") || 0);
         const w = Number(attr(tag, "width") || 0);
         const h = Number(attr(tag, "height") || 0);
-        if (w && h) out.push({ commands: [`${this.num(x)} ${this.num(y)} ${this.num(w)} ${this.num(h)} re`], fill: paint(tag, "fill", "#000"), stroke: paint(tag, "stroke", null), strokeWidth: strokeWidth(tag) });
+        if (w && h) out.push({ commands: [`${this.num(x)} ${this.num(y)} ${this.num(w)} ${this.num(h)} re`], ...common(tag) });
+      }
+      for (const match of svg.matchAll(/<circle\b[^>]*>/gi)) {
+        const tag = match[0];
+        const cx = Number(attr(tag, "cx") || 0), cy = Number(attr(tag, "cy") || 0), r = Number(attr(tag, "r") || 0);
+        if (r) out.push({ commands: this.ellipsePath(cx, cy, r, r), ...common(tag) });
+      }
+      for (const match of svg.matchAll(/<ellipse\b[^>]*>/gi)) {
+        const tag = match[0];
+        const cx = Number(attr(tag, "cx") || 0), cy = Number(attr(tag, "cy") || 0), rx = Number(attr(tag, "rx") || 0), ry = Number(attr(tag, "ry") || 0);
+        if (rx && ry) out.push({ commands: this.ellipsePath(cx, cy, rx, ry), ...common(tag) });
       }
       for (const match of svg.matchAll(/<line\b[^>]*>/gi)) {
         const tag = match[0];
@@ -7617,14 +7801,23 @@ ${p.text}`).join("\n\n")
         const y1 = Number(attr(tag, "y1") || 0);
         const x2 = Number(attr(tag, "x2") || 0);
         const y2 = Number(attr(tag, "y2") || 0);
-        out.push({ commands: [`${this.num(x1)} ${this.num(y1)} m`, `${this.num(x2)} ${this.num(y2)} l`], fill: null, stroke: paint(tag, "stroke", "#000"), strokeWidth: strokeWidth(tag) });
+        out.push({ commands: [`${this.num(x1)} ${this.num(y1)} m`, `${this.num(x2)} ${this.num(y2)} l`], ...common(tag, null, "#000") });
+      }
+      for (const match of svg.matchAll(/<polyline\b[^>]*>|<polygon\b[^>]*>/gi)) {
+        const tag = match[0];
+        const points = String(attr(tag, "points") || "").trim().split(/[\s,]+/).map(Number).filter(Number.isFinite);
+        if (points.length < 4) continue;
+        const commands = [`${this.num(points[0])} ${this.num(points[1])} m`];
+        for (let i = 2; i < points.length; i += 2) commands.push(`${this.num(points[i])} ${this.num(points[i + 1])} l`);
+        if (/^<polygon/i.test(tag)) commands.push("h");
+        out.push({ commands, ...common(tag, /^<polygon/i.test(tag) ? "#000" : null, /^<polyline/i.test(tag) ? "#000" : null) });
       }
       return out;
     }
     svgPathToPdf(d) {
       const tokens = String(d || "").match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/g) || [];
       const commands = [];
-      let i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0;
+      let i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0, lastCx = null, lastCy = null, lastQx = null, lastQy = null;
       const n = () => Number(tokens[i++]);
       const isCmd = () => /^[a-zA-Z]$/.test(tokens[i] || "");
       while (i < tokens.length) {
@@ -7637,32 +7830,85 @@ ${p.text}`).join("\n\n")
           sx = x;
           sy = y;
           commands.push(`${this.num(x)} ${this.num(y)} m`);
+          lastCx = lastCy = lastQx = lastQy = null;
           cmd = rel ? "l" : "L";
         } else if (c === "L") {
           x = (rel ? x : 0) + n();
           y = (rel ? y : 0) + n();
           commands.push(`${this.num(x)} ${this.num(y)} l`);
+          lastCx = lastCy = lastQx = lastQy = null;
         } else if (c === "H") {
           x = (rel ? x : 0) + n();
           commands.push(`${this.num(x)} ${this.num(y)} l`);
+          lastCx = lastCy = lastQx = lastQy = null;
         } else if (c === "V") {
           y = (rel ? y : 0) + n();
           commands.push(`${this.num(x)} ${this.num(y)} l`);
+          lastCx = lastCy = lastQx = lastQy = null;
         } else if (c === "C") {
           const x1 = (rel ? x : 0) + n(), y1 = (rel ? y : 0) + n();
           const x2 = (rel ? x : 0) + n(), y2 = (rel ? y : 0) + n();
           x = (rel ? x : 0) + n();
           y = (rel ? y : 0) + n();
           commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
+          lastCx = x2; lastCy = y2; lastQx = lastQy = null;
+        } else if (c === "S") {
+          const x1 = lastCx == null ? x : 2 * x - lastCx, y1 = lastCy == null ? y : 2 * y - lastCy;
+          const x2 = (rel ? x : 0) + n(), y2 = (rel ? y : 0) + n();
+          x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n();
+          commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
+          lastCx = x2; lastCy = y2; lastQx = lastQy = null;
+        } else if (c === "Q" || c === "T") {
+          const qx = c === "T" ? (lastQx == null ? x : 2 * x - lastQx) : (rel ? x : 0) + n();
+          const qy = c === "T" ? (lastQy == null ? y : 2 * y - lastQy) : (rel ? y : 0) + n();
+          const ex = (rel ? x : 0) + n(), ey = (rel ? y : 0) + n();
+          const c1x = x + (2 / 3) * (qx - x), c1y = y + (2 / 3) * (qy - y);
+          const c2x = ex + (2 / 3) * (qx - ex), c2y = ey + (2 / 3) * (qy - ey);
+          commands.push(`${this.num(c1x)} ${this.num(c1y)} ${this.num(c2x)} ${this.num(c2y)} ${this.num(ex)} ${this.num(ey)} c`);
+          x = ex; y = ey; lastQx = qx; lastQy = qy; lastCx = lastCy = null;
+        } else if (c === "A") {
+          const rx = n(), ry = n(), rot = n(), large = n(), sweep = n();
+          const ex = (rel ? x : 0) + n(), ey = (rel ? y : 0) + n();
+          commands.push(...this.arcToBezier(x, y, rx, ry, rot, large, sweep, ex, ey));
+          x = ex; y = ey; lastCx = lastCy = lastQx = lastQy = null;
         } else if (c === "Z") {
           commands.push("h");
           x = sx;
           y = sy;
+          lastCx = lastCy = lastQx = lastQy = null;
         } else {
           break;
         }
       }
       return commands;
+    }
+    resolveSvgPaint(value, defs) {
+      const ref = /^url\(#([^\)]+)\)/i.exec(String(value || "").trim());
+      return ref ? defs.paints[ref[1]] || "#000" : value;
+    }
+    svgTransform(value) {
+      if (!value) return null;
+      let m = [1, 0, 0, 1, 0, 0];
+      const multiply = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+      for (const match of String(value).matchAll(/(matrix|translate|scale|rotate)\(([^\)]*)\)/gi)) {
+        const args = match[2].split(/[\s,]+/).map(Number).filter(Number.isFinite);
+        let next = null;
+        if (match[1] === "matrix" && args.length >= 6) next = args.slice(0, 6);
+        if (match[1] === "translate") next = [1, 0, 0, 1, args[0] || 0, args[1] || 0];
+        if (match[1] === "scale") next = [args[0] ?? 1, 0, 0, args[1] ?? args[0] ?? 1, 0, 0];
+        if (match[1] === "rotate") { const a = (args[0] || 0) * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a); next = [cos, sin, -sin, cos, 0, 0]; }
+        if (next) m = multiply(m, next);
+      }
+      return m;
+    }
+    ellipsePath(cx, cy, rx, ry) {
+      const k = 0.5522847498307936;
+      return [`${this.num(cx + rx)} ${this.num(cy)} m`, `${this.num(cx + rx)} ${this.num(cy + k * ry)} ${this.num(cx + k * rx)} ${this.num(cy + ry)} ${this.num(cx)} ${this.num(cy + ry)} c`, `${this.num(cx - k * rx)} ${this.num(cy + ry)} ${this.num(cx - rx)} ${this.num(cy + k * ry)} ${this.num(cx - rx)} ${this.num(cy)} c`, `${this.num(cx - rx)} ${this.num(cy - k * ry)} ${this.num(cx - k * rx)} ${this.num(cy - ry)} ${this.num(cx)} ${this.num(cy - ry)} c`, `${this.num(cx + k * rx)} ${this.num(cy - ry)} ${this.num(cx + rx)} ${this.num(cy - k * ry)} ${this.num(cx + rx)} ${this.num(cy)} c`, "h"];
+    }
+    arcToBezier(x1, y1, rx, ry, rotation, largeArcFlag, sweepFlag, x2, y2) {
+      if (!rx || !ry) return [`${this.num(x2)} ${this.num(y2)} l`];
+      if (Math.abs(x1 - x2) < 1e-3 && Math.abs(y1 - y2) < 1e-3) return [];
+      return [`${this.num(x2)} ${this.num(y2)} l`];
     }
     decodeDataUrl(src) {
       const m = /^data:[^,]+,(.*)$/i.exec(src);
@@ -11948,6 +12194,36 @@ ${p.text}`).join("\n\n")
         }
       }
     }
+    criteria["1.4.6"] = criteria["1.4.6"] || { name: "Contrast (Enhanced)", status: "pass", issues: [] };
+    criteria["1.4.8"] = criteria["1.4.8"] || { name: "Visual Presentation", status: "pass", issues: [] };
+    criteria["2.4.10"] = criteria["2.4.10"] || { name: "Section Headings", status: "pass", issues: [] };
+    criteria["3.1.4"] = criteria["3.1.4"] || { name: "Abbreviations", status: "pass", issues: [] };
+    criteria["3.1.5"] = criteria["3.1.5"] || { name: "Reading Level", status: "pass", issues: [] };
+    const allText = (ir.document.pages || []).flatMap((pageId) => {
+      const page = ir.pages[pageId];
+      return (page?.content || []).map((id) => ir.objects[id]).filter(Boolean).map((obj) => obj.semantic?.text || obj.raw?.text || "");
+    }).join(" ");
+    const headingCount = (ir.document.pages || []).flatMap((pageId) => (ir.pages[pageId]?.content || []).map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading")).length;
+    if ((ir.document.pages || []).length > 1 && headingCount === 0) {
+      criteria["2.4.10"].status = "fail";
+      issues.push({ type: "aaa_missing_section_headings", wcag: "2.4.10", severity: "warning", message: "Multi-page document has no detected section headings", suggestion: "Add or infer descriptive section headings for AAA navigation." });
+      score -= 2;
+    }
+    const reading = estimateReadingLevel(allText);
+    if (reading.words >= 100 && reading.grade > 9) {
+      criteria["3.1.5"].status = "fail";
+      issues.push({ type: "aaa_reading_level", wcag: "3.1.5", severity: "warning", message: `Estimated reading grade ${reading.grade.toFixed(1)} is above the AAA lower-secondary target`, suggestion: "Provide a plain-language summary or simplified companion text.", detail: reading });
+      score -= 2;
+    }
+    const abbreviations = findLikelyAbbreviations(allText);
+    if (abbreviations.length) {
+      criteria["3.1.4"].status = "warning";
+      issues.push({ type: "aaa_abbreviations_need_expansion", wcag: "3.1.4", severity: "info", message: `Likely abbreviations need expansion for AAA: ${abbreviations.slice(0, 12).join(", ")}`, suggestion: "Provide an abbreviation glossary or first-use expansion.", abbreviations });
+    }
+    if (allText.length > 600) {
+      criteria["1.4.8"].status = "warning";
+      issues.push({ type: "aaa_visual_presentation_overlay_required", wcag: "1.4.8", severity: "info", message: "Long-form text requires user-adjustable presentation controls for AAA.", suggestion: "Provide reflow, high contrast, zoom, line-height, spacing, and readable-width controls as an overlay." });
+    }
     const hasErrors = issues.some((i) => i.severity === "error");
     const hasWarnings = issues.some((i) => i.severity === "warning");
     let level = "AAA";
@@ -11957,6 +12233,10 @@ ${p.text}`).join("\n\n")
     return {
       score: Math.max(0, score),
       level,
+      minimumLevel: "AA",
+      targetLevel: "AA",
+      enhancedTargetLevel: "AAA",
+      complianceNote: "Automated checks target WCAG/ADA AA as the minimum and add AAA enhancements where possible. Legal compliance still requires human review and assistive-technology testing.",
       issues,
       wcagCriteria: criteria,
       summary: {
@@ -12006,6 +12286,28 @@ ${p.text}`).join("\n\n")
     const lighter = Math.max(l1, l2);
     const darker = Math.min(l1, l2);
     return (lighter + 0.05) / (darker + 0.05);
+  }
+  function estimateReadingLevel(text) {
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    const sentences = clean.split(/[.!?]+/).filter((s) => s.trim().length > 0).length || 1;
+    const words = clean.split(/\s+/).filter(Boolean);
+    const syllables = words.reduce((sum, word) => sum + countSyllables(word), 0) || 1;
+    const grade = 0.39 * (words.length / sentences) + 11.8 * (syllables / Math.max(1, words.length)) - 15.59;
+    return { grade: Math.max(0, grade), words: words.length, sentences, syllables };
+  }
+  function countSyllables(word) {
+    word = String(word || "").toLowerCase().replace(/[^a-z]/g, "");
+    if (!word) return 0;
+    const groups = word.replace(/(?:e|ed|es)$/i, "").match(/[aeiouy]+/g);
+    return Math.max(1, groups ? groups.length : 1);
+  }
+  function findLikelyAbbreviations(text) {
+    const found = /* @__PURE__ */ new Set();
+    String(text || "").replace(/\b[A-Z]{2,}\b/g, (match) => {
+      if (!/^(PDF|HTML|USA|US|AM|PM|ADA|WCAG)$/.test(match)) found.add(match);
+      return match;
+    });
+    return Array.from(found).slice(0, 50);
   }
   function exportAccessibleHTML(ir, options = {}) {
     const {

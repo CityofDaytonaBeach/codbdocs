@@ -1,12 +1,13 @@
 /**
  * @codbdocs/core — Document Access System
  *
- * WCAG 2.1 AA-oriented accessible HTML generation and automated auditing.
+ * WCAG 2.2 AA-minimum accessible HTML generation and automated auditing,
+ * with AAA enhancements where they can be applied automatically.
  * Provides complete screen reader support, keyboard navigation,
  * proper semantic HTML, and automated accessibility auditing.
  *
  * Features:
- *   - WCAG 2.1 AA scoring with detailed issue reporting
+ *   - WCAG 2.2 AA-minimum scoring with detailed issue reporting and AAA advisories
  *   - Proper table rendering (th, thead, tbody, scope, caption, summary)
  *   - Proper list rendering (ul/ol with li, role="list")
  *   - Skip navigation links
@@ -41,10 +42,10 @@ function embeddedImageSrc(src) {
   return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : '';
 }
 
-// ─── WCAG 2.1 AA Audit ───────────────────────────────────────────────────────
+// ─── WCAG 2.2 AA-Minimum + AAA Advisory Audit ────────────────────────────────
 
 /**
- * Comprehensive WCAG 2.1 AA accessibility audit.
+ * Comprehensive WCAG 2.2 AA-minimum accessibility audit with AAA advisories.
  * Returns a score (0-100) with categorized issues and remediation suggestions.
  *
  * @param {Object} ir - PDF-IR document
@@ -54,6 +55,14 @@ export function wcagAudit(ir) {
   const issues = [];
   let score = 100;
   const criteria = {};
+
+  const addIssue = (criterion, issue) => {
+    if (!criteria[criterion]) criteria[criterion] = { name: issue.name || criterion, status: 'pass', issues: [] };
+    criteria[criterion].status = issue.severity === 'info' ? (criteria[criterion].status === 'fail' ? 'fail' : 'warning') : 'fail';
+    if (issue.element) criteria[criterion].issues.push(issue.element);
+    issues.push(issue);
+    score -= issue.penalty ?? (issue.severity === 'error' ? 5 : issue.severity === 'warning' ? 2 : 0);
+  };
 
   // ─── Perceivable ────────────────────────────────────────────────────────
 
@@ -161,6 +170,7 @@ export function wcagAudit(ir) {
 
   // 1.4.3 Contrast (Minimum) — check text on colored backgrounds
   criteria['1.4.3'] = { name: 'Contrast (Minimum)', status: 'pass', issues: [] };
+  criteria['1.4.6'] = { name: 'Contrast (Enhanced)', status: 'pass', issues: [] };
   // We check this via graphics state analysis
   for (const pageId of ir.document.pages) {
     const page = ir.pages[pageId];
@@ -183,9 +193,43 @@ export function wcagAudit(ir) {
             suggestion: 'Increase contrast between text and background colors',
           });
           score -= 3;
+        } else if (ratio < 7) {
+          addIssue('1.4.6', {
+            type: 'aaa_contrast_enhanced',
+            wcag: '1.4.6',
+            page: parseInt(pageId.split('_')[1]),
+            element: objId,
+            severity: 'warning',
+            message: `Text contrast ratio ${ratio.toFixed(2)}:1 is below WCAG AAA 7:1 target`,
+            suggestion: 'Use the high-contrast overlay or increase foreground/background contrast to at least 7:1 for normal text',
+            penalty: 1,
+          });
         }
       }
     }
+  }
+
+  // 1.4.8 Visual Presentation (AAA)
+  criteria['1.4.8'] = { name: 'Visual Presentation', status: 'pass', issues: [] };
+  const longTextObjects = [];
+  for (const pageId of ir.document.pages) {
+    const page = ir.pages[pageId];
+    if (!page) continue;
+    for (const objId of page.content || []) {
+      const obj = ir.objects[objId];
+      const text = obj?.semantic?.text || obj?.raw?.text || '';
+      if (obj?.type === 'text' && text.length > 120) longTextObjects.push({ id: objId, page: parseInt(pageId.split('_')[1]), text });
+    }
+  }
+  if (longTextObjects.length) {
+    addIssue('1.4.8', {
+      type: 'aaa_visual_presentation_overlay_required',
+      wcag: '1.4.8',
+      severity: 'info',
+      message: 'Long-form text requires user-adjustable presentation controls for AAA.',
+      suggestion: 'Provide reflow, high contrast, zoom, line-height, spacing, and readable-width controls as an overlay.',
+      penalty: 0,
+    });
   }
 
   // 1.4.11 Non-text Contrast — check vector graphics borders
@@ -233,6 +277,8 @@ export function wcagAudit(ir) {
 
   // 2.4.6 Headings and Labels
   criteria['2.4.6'] = { name: 'Headings and Labels', status: 'pass', issues: [] };
+  criteria['2.4.10'] = { name: 'Section Headings', status: 'pass', issues: [] };
+  let headingCount = 0;
   for (const pageId of ir.document.pages) {
     const page = ir.pages[pageId];
     if (!page) continue;
@@ -252,7 +298,18 @@ export function wcagAudit(ir) {
         });
         score -= 2;
       }
+      if (obj?.semantic?.role === 'heading') headingCount += 1;
     }
+  }
+  if ((ir.document.pages || []).length > 1 && headingCount === 0) {
+    addIssue('2.4.10', {
+      type: 'aaa_missing_section_headings',
+      wcag: '2.4.10',
+      severity: 'warning',
+      message: 'Multi-page document has no detected section headings',
+      suggestion: 'Add or infer descriptive section headings for AAA navigation.',
+      penalty: 2,
+    });
   }
 
   // ─── Understandable ─────────────────────────────────────────────────────
@@ -273,6 +330,39 @@ export function wcagAudit(ir) {
 
   // 3.1.2 Language of Parts
   criteria['3.1.2'] = { name: 'Language of Parts', status: 'pass', issues: [] };
+
+  // 3.1.5 Reading Level (AAA) and 3.1.3 Unusual Words / 3.1.4 Abbreviations
+  criteria['3.1.3'] = { name: 'Unusual Words', status: 'pass', issues: [] };
+  criteria['3.1.4'] = { name: 'Abbreviations', status: 'pass', issues: [] };
+  criteria['3.1.5'] = { name: 'Reading Level', status: 'pass', issues: [] };
+  const allText = (ir.document.pages || []).flatMap(pageId => {
+    const page = ir.pages[pageId];
+    return (page?.content || []).map(id => ir.objects[id]).filter(Boolean).map(obj => obj.semantic?.text || obj.raw?.text || '');
+  }).join(' ');
+  const reading = estimateReadingLevel(allText);
+  if (reading.words >= 100 && reading.grade > 9) {
+    addIssue('3.1.5', {
+      type: 'aaa_reading_level',
+      wcag: '3.1.5',
+      severity: 'warning',
+      message: `Estimated reading grade ${reading.grade.toFixed(1)} is above the AAA lower-secondary target`,
+      suggestion: 'Provide a plain-language summary or simplified companion text.',
+      penalty: 2,
+      detail: reading,
+    });
+  }
+  const abbreviations = findLikelyAbbreviations(allText);
+  if (abbreviations.length) {
+    addIssue('3.1.4', {
+      type: 'aaa_abbreviations_need_expansion',
+      wcag: '3.1.4',
+      severity: 'info',
+      message: `Likely abbreviations need expansion for AAA: ${abbreviations.slice(0, 12).join(', ')}`,
+      suggestion: 'Provide an abbreviation glossary or first-use expansion.',
+      penalty: 0,
+      abbreviations,
+    });
+  }
 
   // ─── Robust ─────────────────────────────────────────────────────────────
 
@@ -298,14 +388,20 @@ export function wcagAudit(ir) {
   // Determine WCAG level
   const hasErrors = issues.some(i => i.severity === 'error');
   const hasWarnings = issues.some(i => i.severity === 'warning');
+  const hasAaaWarnings = issues.some(i => String(i.wcag || '').match(/^(1\.4\.6|1\.4\.8|2\.4\.10|3\.1\.[345])$/) && i.severity !== 'info');
   let level = 'AAA';
   if (score < 60) level = 'fail';
   else if (score < 80 || hasErrors) level = 'A';
   else if (score < 95 || hasWarnings) level = 'AA';
+  if (level === 'AAA' && hasAaaWarnings) level = 'AA';
 
   return {
     score: Math.max(0, score),
     level,
+    minimumLevel: 'AA',
+    targetLevel: 'AA',
+    enhancedTargetLevel: 'AAA',
+    complianceNote: 'Automated checks target WCAG/ADA AA as the minimum and add AAA enhancements where possible. Legal compliance still requires human review and assistive-technology testing.',
     issues,
     wcagCriteria: criteria,
     summary: {
@@ -363,6 +459,31 @@ function computeContrastRatio(fg, bg) {
   const lighter = Math.max(l1, l2);
   const darker = Math.min(l1, l2);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+function estimateReadingLevel(text) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  const sentences = clean.split(/[.!?]+/).filter(s => s.trim().length > 0).length || 1;
+  const words = clean.split(/\s+/).filter(Boolean);
+  const syllables = words.reduce((sum, word) => sum + countSyllables(word), 0) || 1;
+  const grade = 0.39 * (words.length / sentences) + 11.8 * (syllables / Math.max(1, words.length)) - 15.59;
+  return { grade: Math.max(0, grade), words: words.length, sentences, syllables };
+}
+
+function countSyllables(word) {
+  word = String(word || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!word) return 0;
+  const groups = word.replace(/(?:e|ed|es)$/i, '').match(/[aeiouy]+/g);
+  return Math.max(1, groups ? groups.length : 1);
+}
+
+function findLikelyAbbreviations(text) {
+  const found = new Set();
+  String(text || '').replace(/\b[A-Z]{2,}\b/g, match => {
+    if (!/^(PDF|HTML|USA|US|AM|PM|ADA|WCAG)$/.test(match)) found.add(match);
+    return match;
+  });
+  return Array.from(found).slice(0, 50);
 }
 
 // ─── Accessible HTML Export ───────────────────────────────────────────────────

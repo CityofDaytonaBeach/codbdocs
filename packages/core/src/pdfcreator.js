@@ -335,6 +335,7 @@ export class PDFCreator {
   addSvgCommands(commands, src, bbox) {
     const svg = this.decodeDataUrl(src);
     if (!svg || !Array.isArray(bbox)) return;
+    const defs = this.svgDefs(svg);
     const viewBox = /viewBox\s*=\s*["']([^"']+)["']/i.exec(svg)?.[1]?.trim().split(/[\s,]+/).map(Number);
     const width = viewBox?.[2] || Number(/\bwidth\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[2] || 1;
     const height = viewBox?.[3] || Number(/\bheight\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[3] || 1;
@@ -342,34 +343,54 @@ export class PDFCreator {
     const sy = (bbox[3] || height) / height;
     commands.push('q');
     commands.push(`${this.num(sx)} 0 0 ${this.num(sy)} ${this.num(bbox[0] || 0)} ${this.num(bbox[1] || 0)} cm`);
-    for (const shape of this.svgShapes(svg)) {
+    for (const shape of this.svgShapes(svg, defs)) {
       const stroke = this.cssColor(shape.stroke);
       const fill = this.cssColor(shape.fill);
+      commands.push('q');
+      if (shape.transform) commands.push(`${shape.transform.map(v => this.num(v)).join(' ')} cm`);
       if (stroke) commands.push(`${stroke.map(c => this.num(c)).join(' ')} RG`);
       if (fill) commands.push(`${fill.map(c => this.num(c)).join(' ')} rg`);
       if (shape.strokeWidth) commands.push(`${this.num(shape.strokeWidth)} w`);
       commands.push(...shape.commands);
       commands.push(fill && stroke ? 'B' : fill ? 'f' : 'S');
+      commands.push('Q');
     }
     commands.push('Q');
   }
 
-  svgShapes(svg) {
+  svgDefs(svg) {
+    const defs = { paints: {} };
+    for (const match of svg.matchAll(/<(?:linearGradient|radialGradient)\b([^>]*)>([\s\S]*?)<\/(?:linearGradient|radialGradient)>/gi)) {
+      const id = /\bid\s*=\s*["']([^"']+)["']/i.exec(match[1])?.[1];
+      if (!id) continue;
+      const stops = [...match[2].matchAll(/<stop\b[^>]*>/gi)].map(s => {
+        const tag = s[0];
+        const color = /stop-color\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]
+          || /stop-color\s*:\s*([^;"']+)/i.exec(tag)?.[1];
+        return color;
+      }).filter(Boolean);
+      defs.paints[id] = stops[stops.length - 1] || stops[0] || '#000';
+    }
+    return defs;
+  }
+
+  svgShapes(svg, defs = { paints: {} }) {
     const out = [];
     const attr = (tag, name) => new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, 'i').exec(tag)?.[1];
     const style = (tag, name) => new RegExp(`${name}\\s*:\\s*([^;"']+)`, 'i').exec(attr(tag, 'style') || '')?.[1];
-    const paint = (tag, name, fallback) => attr(tag, name) || style(tag, name) || fallback;
+    const paint = (tag, name, fallback) => this.resolveSvgPaint(attr(tag, name) || style(tag, name) || fallback, defs);
     const strokeWidth = (tag) => Number(attr(tag, 'stroke-width') || style(tag, 'stroke-width') || 1);
+    const common = (tag, fillFallback = '#000', strokeFallback = null) => ({
+      fill: paint(tag, 'fill', fillFallback),
+      stroke: paint(tag, 'stroke', strokeFallback),
+      strokeWidth: strokeWidth(tag),
+      transform: this.svgTransform(attr(tag, 'transform')),
+    });
 
     for (const match of svg.matchAll(/<path\b[^>]*\bd\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
       const tag = match[0];
       const commands = this.svgPathToPdf(match[1]);
-      if (commands.length) out.push({
-        commands,
-        fill: paint(tag, 'fill', '#000'),
-        stroke: paint(tag, 'stroke', null),
-        strokeWidth: strokeWidth(tag),
-      });
+      if (commands.length) out.push({ commands, ...common(tag) });
     }
     for (const match of svg.matchAll(/<rect\b[^>]*>/gi)) {
       const tag = match[0];
@@ -379,10 +400,18 @@ export class PDFCreator {
       const h = Number(attr(tag, 'height') || 0);
       if (w && h) out.push({
         commands: [`${this.num(x)} ${this.num(y)} ${this.num(w)} ${this.num(h)} re`],
-        fill: paint(tag, 'fill', '#000'),
-        stroke: paint(tag, 'stroke', null),
-        strokeWidth: strokeWidth(tag),
+        ...common(tag),
       });
+    }
+    for (const match of svg.matchAll(/<circle\b[^>]*>/gi)) {
+      const tag = match[0];
+      const cx = Number(attr(tag, 'cx') || 0), cy = Number(attr(tag, 'cy') || 0), r = Number(attr(tag, 'r') || 0);
+      if (r) out.push({ commands: this.ellipsePath(cx, cy, r, r), ...common(tag) });
+    }
+    for (const match of svg.matchAll(/<ellipse\b[^>]*>/gi)) {
+      const tag = match[0];
+      const cx = Number(attr(tag, 'cx') || 0), cy = Number(attr(tag, 'cy') || 0), rx = Number(attr(tag, 'rx') || 0), ry = Number(attr(tag, 'ry') || 0);
+      if (rx && ry) out.push({ commands: this.ellipsePath(cx, cy, rx, ry), ...common(tag) });
     }
     for (const match of svg.matchAll(/<line\b[^>]*>/gi)) {
       const tag = match[0];
@@ -392,10 +421,17 @@ export class PDFCreator {
       const y2 = Number(attr(tag, 'y2') || 0);
       out.push({
         commands: [`${this.num(x1)} ${this.num(y1)} m`, `${this.num(x2)} ${this.num(y2)} l`],
-        fill: null,
-        stroke: paint(tag, 'stroke', '#000'),
-        strokeWidth: strokeWidth(tag),
+        ...common(tag, null, '#000'),
       });
+    }
+    for (const match of svg.matchAll(/<polyline\b[^>]*>|<polygon\b[^>]*>/gi)) {
+      const tag = match[0];
+      const points = String(attr(tag, 'points') || '').trim().split(/[\s,]+/).map(Number).filter(Number.isFinite);
+      if (points.length < 4) continue;
+      const commands = [`${this.num(points[0])} ${this.num(points[1])} m`];
+      for (let i = 2; i < points.length; i += 2) commands.push(`${this.num(points[i])} ${this.num(points[i + 1])} l`);
+      if (/^<polygon/i.test(tag)) commands.push('h');
+      out.push({ commands, ...common(tag, /^<polygon/i.test(tag) ? '#000' : null, /^<polyline/i.test(tag) ? '#000' : null) });
     }
     return out;
   }
@@ -403,7 +439,7 @@ export class PDFCreator {
   svgPathToPdf(d) {
     const tokens = String(d || '').match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/g) || [];
     const commands = [];
-    let i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0;
+    let i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0, lastCx = null, lastCy = null, lastQx = null, lastQy = null;
     const n = () => Number(tokens[i++]);
     const isCmd = () => /^[a-zA-Z]$/.test(tokens[i] || '');
     while (i < tokens.length) {
@@ -413,28 +449,126 @@ export class PDFCreator {
       if (c === 'M') {
         x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n(); sx = x; sy = y;
         commands.push(`${this.num(x)} ${this.num(y)} m`);
+        lastCx = lastCy = lastQx = lastQy = null;
         cmd = rel ? 'l' : 'L';
       } else if (c === 'L') {
         x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n();
         commands.push(`${this.num(x)} ${this.num(y)} l`);
+        lastCx = lastCy = lastQx = lastQy = null;
       } else if (c === 'H') {
         x = (rel ? x : 0) + n();
         commands.push(`${this.num(x)} ${this.num(y)} l`);
+        lastCx = lastCy = lastQx = lastQy = null;
       } else if (c === 'V') {
         y = (rel ? y : 0) + n();
         commands.push(`${this.num(x)} ${this.num(y)} l`);
+        lastCx = lastCy = lastQx = lastQy = null;
       } else if (c === 'C') {
         const x1 = (rel ? x : 0) + n(), y1 = (rel ? y : 0) + n();
         const x2 = (rel ? x : 0) + n(), y2 = (rel ? y : 0) + n();
         x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n();
         commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
+        lastCx = x2; lastCy = y2; lastQx = lastQy = null;
+      } else if (c === 'S') {
+        const x1 = lastCx == null ? x : 2 * x - lastCx, y1 = lastCy == null ? y : 2 * y - lastCy;
+        const x2 = (rel ? x : 0) + n(), y2 = (rel ? y : 0) + n();
+        x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n();
+        commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
+        lastCx = x2; lastCy = y2; lastQx = lastQy = null;
+      } else if (c === 'Q' || c === 'T') {
+        const qx = c === 'T' ? (lastQx == null ? x : 2 * x - lastQx) : (rel ? x : 0) + n();
+        const qy = c === 'T' ? (lastQy == null ? y : 2 * y - lastQy) : (rel ? y : 0) + n();
+        const ex = (rel ? x : 0) + n(), ey = (rel ? y : 0) + n();
+        const c1x = x + (2 / 3) * (qx - x), c1y = y + (2 / 3) * (qy - y);
+        const c2x = ex + (2 / 3) * (qx - ex), c2y = ey + (2 / 3) * (qy - ey);
+        commands.push(`${this.num(c1x)} ${this.num(c1y)} ${this.num(c2x)} ${this.num(c2y)} ${this.num(ex)} ${this.num(ey)} c`);
+        x = ex; y = ey; lastQx = qx; lastQy = qy; lastCx = lastCy = null;
+      } else if (c === 'A') {
+        const rx = n(), ry = n(), rot = n(), large = n(), sweep = n();
+        const ex = (rel ? x : 0) + n(), ey = (rel ? y : 0) + n();
+        commands.push(...this.arcToBezier(x, y, rx, ry, rot, large, sweep, ex, ey));
+        x = ex; y = ey; lastCx = lastCy = lastQx = lastQy = null;
       } else if (c === 'Z') {
-        commands.push('h'); x = sx; y = sy;
+        commands.push('h'); x = sx; y = sy; lastCx = lastCy = lastQx = lastQy = null;
       } else {
         break;
       }
     }
     return commands;
+  }
+
+  resolveSvgPaint(value, defs) {
+    const ref = /^url\(#([^\)]+)\)/i.exec(String(value || '').trim());
+    return ref ? defs.paints[ref[1]] || '#000' : value;
+  }
+
+  svgTransform(value) {
+    if (!value) return null;
+    let m = [1, 0, 0, 1, 0, 0];
+    const multiply = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+    for (const match of String(value).matchAll(/(matrix|translate|scale|rotate)\(([^\)]*)\)/gi)) {
+      const args = match[2].split(/[\s,]+/).map(Number).filter(Number.isFinite);
+      let next = null;
+      if (match[1] === 'matrix' && args.length >= 6) next = args.slice(0, 6);
+      if (match[1] === 'translate') next = [1, 0, 0, 1, args[0] || 0, args[1] || 0];
+      if (match[1] === 'scale') next = [args[0] ?? 1, 0, 0, args[1] ?? args[0] ?? 1, 0, 0];
+      if (match[1] === 'rotate') {
+        const a = (args[0] || 0) * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+        next = [cos, sin, -sin, cos, 0, 0];
+      }
+      if (next) m = multiply(m, next);
+    }
+    return m;
+  }
+
+  ellipsePath(cx, cy, rx, ry) {
+    const k = 0.5522847498307936;
+    return [
+      `${this.num(cx + rx)} ${this.num(cy)} m`,
+      `${this.num(cx + rx)} ${this.num(cy + k * ry)} ${this.num(cx + k * rx)} ${this.num(cy + ry)} ${this.num(cx)} ${this.num(cy + ry)} c`,
+      `${this.num(cx - k * rx)} ${this.num(cy + ry)} ${this.num(cx - rx)} ${this.num(cy + k * ry)} ${this.num(cx - rx)} ${this.num(cy)} c`,
+      `${this.num(cx - rx)} ${this.num(cy - k * ry)} ${this.num(cx - k * rx)} ${this.num(cy - ry)} ${this.num(cx)} ${this.num(cy - ry)} c`,
+      `${this.num(cx + k * rx)} ${this.num(cy - ry)} ${this.num(cx + rx)} ${this.num(cy - k * ry)} ${this.num(cx + rx)} ${this.num(cy)} c`,
+      'h',
+    ];
+  }
+
+  arcToBezier(x1, y1, rx, ry, rotation, largeArcFlag, sweepFlag, x2, y2) {
+    if (!rx || !ry) return [`${this.num(x2)} ${this.num(y2)} l`];
+    // Conservative fallback: preserve endpoint when arc math would be risky.
+    if (Math.abs(x1 - x2) < 0.001 && Math.abs(y1 - y2) < 0.001) return [];
+    const phi = rotation * Math.PI / 180, cos = Math.cos(phi), sin = Math.sin(phi);
+    const dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
+    let x1p = cos * dx + sin * dy, y1p = -sin * dx + cos * dy;
+    rx = Math.abs(rx); ry = Math.abs(ry);
+    const lam = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+    if (lam > 1) { const s = Math.sqrt(lam); rx *= s; ry *= s; }
+    const sign = largeArcFlag === sweepFlag ? -1 : 1;
+    const sq = Math.max(0, ((rx * rx * ry * ry) - (rx * rx * y1p * y1p) - (ry * ry * x1p * x1p)) / ((rx * rx * y1p * y1p) + (ry * ry * x1p * x1p)));
+    const coef = sign * Math.sqrt(sq);
+    const cxp = coef * (rx * y1p / ry), cyp = coef * (-ry * x1p / rx);
+    const cx = cos * cxp - sin * cyp + (x1 + x2) / 2, cy = sin * cxp + cos * cyp + (y1 + y2) / 2;
+    const angle = (ux, uy, vx, vy) => {
+      const dot = ux * vx + uy * vy, len = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+      const a = Math.acos(Math.max(-1, Math.min(1, dot / len)));
+      return (ux * vy - uy * vx < 0 ? -a : a);
+    };
+    let theta1 = angle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    let delta = angle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+    if (!sweepFlag && delta > 0) delta -= 2 * Math.PI;
+    if (sweepFlag && delta < 0) delta += 2 * Math.PI;
+    const segs = Math.ceil(Math.abs(delta) / (Math.PI / 2));
+    const out = [];
+    for (let i = 0; i < segs; i++) {
+      const a1 = theta1 + i * delta / segs, a2 = theta1 + (i + 1) * delta / segs;
+      const t = 4 / 3 * Math.tan((a2 - a1) / 4);
+      const p = (a) => [cx + rx * Math.cos(a) * cos - ry * Math.sin(a) * sin, cy + rx * Math.cos(a) * sin + ry * Math.sin(a) * cos];
+      const p1 = p(a1), p2 = p(a2);
+      const c1 = [p1[0] + t * (-rx * Math.sin(a1) * cos - ry * Math.cos(a1) * sin), p1[1] + t * (-rx * Math.sin(a1) * sin + ry * Math.cos(a1) * cos)];
+      const c2 = [p2[0] - t * (-rx * Math.sin(a2) * cos - ry * Math.cos(a2) * sin), p2[1] - t * (-rx * Math.sin(a2) * sin + ry * Math.cos(a2) * cos)];
+      out.push(`${this.num(c1[0])} ${this.num(c1[1])} ${this.num(c2[0])} ${this.num(c2[1])} ${this.num(p2[0])} ${this.num(p2[1])} c`);
+    }
+    return out;
   }
 
   decodeDataUrl(src) {
