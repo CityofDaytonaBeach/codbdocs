@@ -438,6 +438,8 @@ export function registerFormField(ir, pageId, field, pageNumber = null) {
 export async function extractVectors(page) {
   const opList = await page.getOperatorList();
   const vectors = [];
+  const transformStack = [];
+  const styleStack = [];
   let currentTransform = [1, 0, 0, 1, 0, 0];
   let currentStroke = null;
   let currentFill = null;
@@ -451,142 +453,216 @@ export async function extractVectors(page) {
 
   const FN = pdfjsLib?.OPS || {};
 
+  const isOp = (fn, name, fallback) => fn === (FN[name] ?? fallback);
+  const multiply = (m1, m2) => {
+    const [a1, b1, c1, d1, e1, f1] = m1;
+    const [a2, b2, c2, d2, e2, f2] = m2;
+    return [
+      a1 * a2 + c1 * b2,
+      b1 * a2 + d1 * b2,
+      a1 * c2 + c1 * d2,
+      b1 * c2 + d1 * d2,
+      a1 * e2 + c1 * f2 + e1,
+      b1 * e2 + d1 * f2 + f1,
+    ];
+  };
+  const color = (args) => {
+    if (!Array.isArray(args)) return null;
+    const vals = args.slice(0, 3).map(v => Math.max(0, Math.min(1, Number(v) > 1 ? Number(v) / 255 : Number(v))));
+    return { colorSpace: 'DeviceRGB', color: vals };
+  };
+  const cmyk = (args) => Array.isArray(args) ? { colorSpace: 'DeviceCMYK', color: args.slice(0, 4).map(Number) } : null;
+  const pushVector = (paint) => {
+    if (pathPoints.length === 0) return;
+    vectors.push(createVector('path', page, {
+      points: [...pathPoints],
+      stroke: paint.stroke ? currentStroke : null,
+      fill: paint.fill ? currentFill : null,
+      lineWidth: currentLineWidth,
+      lineCap: currentLineCap,
+      lineJoin: currentLineJoin,
+      dash: currentDash,
+      clip: currentClip,
+      transform: currentTransform,
+    }));
+    pathPoints = [];
+    pathStart = null;
+  };
+  const readConstructedPath = (args) => {
+    const ops = args?.[0] || [];
+    const coords = args?.[1] || [];
+    let c = 0;
+    for (const op of ops) {
+      if (op === FN.moveTo) {
+        const pt = { op: 'moveTo', x: coords[c], y: coords[c + 1] };
+        pathStart = { x: pt.x, y: pt.y };
+        pathPoints.push(pt);
+        c += 2;
+      } else if (op === FN.lineTo) {
+        pathPoints.push({ op: 'lineTo', x: coords[c], y: coords[c + 1] });
+        c += 2;
+      } else if (op === FN.curveTo) {
+        pathPoints.push({ op: 'curveTo', x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 4], y: coords[c + 5] });
+        c += 6;
+      } else if (op === FN.curveTo2) {
+        const last = pathPoints[pathPoints.length - 1] || { x: 0, y: 0 };
+        pathPoints.push({ op: 'curveTo', x1: last.x, y1: last.y, x2: coords[c], y2: coords[c + 1], x: coords[c + 2], y: coords[c + 3] });
+        c += 4;
+      } else if (op === FN.curveTo3) {
+        pathPoints.push({ op: 'curveTo', x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 2], y: coords[c + 3] });
+        c += 4;
+      } else if (op === FN.rectangle) {
+        const [x, y, w, h] = coords.slice(c, c + 4);
+        pathStart = { x, y };
+        pathPoints.push({ op: 'moveTo', x, y });
+        pathPoints.push({ op: 'lineTo', x: x + w, y });
+        pathPoints.push({ op: 'lineTo', x: x + w, y: y + h });
+        pathPoints.push({ op: 'lineTo', x, y: y + h });
+        pathPoints.push({ op: 'closePath' });
+        c += 4;
+      } else if (op === FN.closePath) {
+        pathPoints.push({ op: 'closePath' });
+      }
+    }
+  };
+
   for (let i = 0; i < opList.fnArray.length; i++) {
     const fn = opList.fnArray[i];
     const args = opList.argsArray[i];
 
-    switch (fn) {
-      // Transform
-      case FN.transform || 8:
+    if (isOp(fn, 'transform', 8)) {
         if (args && args.length >= 6) {
-          currentTransform = args.slice(0, 6);
+          currentTransform = multiply(currentTransform, args.slice(0, 6));
         }
-        break;
+        continue;
+    }
+
+    if (isOp(fn, 'constructPath')) {
+      readConstructedPath(args);
+      continue;
+    }
+
+    switch (fn) {
 
       // Path operations
-      case FN.moveTo || 13:
+      case FN.moveTo:
         if (args) {
           pathStart = { x: args[0], y: args[1] };
           pathPoints.push({ op: 'moveTo', x: args[0], y: args[1] });
         }
         break;
 
-      case FN.lineTo || 14:
+      case FN.lineTo:
         if (args) {
           pathPoints.push({ op: 'lineTo', x: args[0], y: args[1] });
         }
         break;
 
-      case FN.curveTo || 15:
+      case FN.curveTo:
         if (args) {
-          pathPoints.push({ op: 'curveTo', x1: args[0], y1: args[1], x2: args[2], y2: args[3], x3: args[4], y3: args[5] });
+          pathPoints.push({ op: 'curveTo', x1: args[0], y1: args[1], x2: args[2], y2: args[3], x: args[4], y: args[5] });
         }
         break;
 
-      case FN.rectangle || 19:
+      case FN.rectangle:
         if (args && args.length >= 4) {
           vectors.push(createVector('rect', page, {
-            bbox: [args[0], args[1], args[2] - args[0], args[3] - args[1]],
+            bbox: [args[0], args[1], args[2], args[3]],
             stroke: currentStroke,
             fill: currentFill,
             lineWidth: currentLineWidth,
+            lineCap: currentLineCap,
+            lineJoin: currentLineJoin,
+            dash: currentDash,
+            clip: currentClip,
             transform: currentTransform,
           }));
         }
         break;
 
       // Stroke
-      case FN.stroke || 20:
-        if (pathPoints.length > 0) {
-          vectors.push(createVector('path', page, {
-            points: [...pathPoints],
-            stroke: currentStroke,
-            fill: null,
-            lineWidth: currentLineWidth,
-            lineCap: currentLineCap,
-            lineJoin: currentLineJoin,
-            dash: currentDash,
-            transform: currentTransform,
-          }));
-        }
-        pathPoints = [];
+      case FN.stroke:
+      case FN.closeStroke:
+        if (fn === FN.closeStroke) pathPoints.push({ op: 'closePath' });
+        pushVector({ stroke: true, fill: false });
         break;
 
       // Fill
-      case FN.fill || 21:
-      case FN.eoFill || 22:
-        if (pathPoints.length > 0) {
-          vectors.push(createVector('path', page, {
-            points: [...pathPoints],
-            stroke: null,
-            fill: currentFill,
-            lineWidth: currentLineWidth,
-            transform: currentTransform,
-          }));
-        }
-        pathPoints = [];
+      case FN.fill:
+      case FN.eoFill:
+      case FN.closeFill:
+        if (fn === FN.closeFill) pathPoints.push({ op: 'closePath' });
+        pushVector({ stroke: false, fill: true });
         break;
 
       // Fill and stroke
-      case FN.fillStroke || 23:
-      case FN.eoFillStroke || 24:
-        if (pathPoints.length > 0) {
-          vectors.push(createVector('path', page, {
-            points: [...pathPoints],
-            stroke: currentStroke,
-            fill: currentFill,
-            lineWidth: currentLineWidth,
-            transform: currentTransform,
-          }));
-        }
-        pathPoints = [];
+      case FN.fillStroke:
+      case FN.eoFillStroke:
+      case FN.closeFillStroke:
+      case FN.closeEOFillStroke:
+        if (fn === FN.closeFillStroke || fn === FN.closeEOFillStroke) pathPoints.push({ op: 'closePath' });
+        pushVector({ stroke: true, fill: true });
         break;
 
       // Close path
-      case FN.closePath || 16:
+      case FN.closePath:
         pathPoints.push({ op: 'closePath' });
         break;
 
       // Graphics state
-      case FN.save || 25:
+      case FN.save:
+        transformStack.push(currentTransform.slice());
+        styleStack.push({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip });
         break;
 
-      case FN.restore || 26:
+      case FN.restore: {
+        currentTransform = transformStack.pop() || [1, 0, 0, 1, 0, 0];
+        const style = styleStack.pop();
+        if (style) ({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip } = style);
+        break;
+      }
+
+      case FN.setStrokeRGBColor:
+        currentStroke = color(args);
         break;
 
-      case FN.setStrokeRGBColor || 43:
-        if (args) currentStroke = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
+      case FN.setFillRGBColor:
+        currentFill = color(args);
         break;
 
-      case FN.setFillRGBColor || 44:
-        if (args) currentFill = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
+      case FN.setStrokeCMYKColor:
+        currentStroke = cmyk(args);
         break;
 
-      case FN.setLineWidth || 40:
+      case FN.setFillCMYKColor:
+        currentFill = cmyk(args);
+        break;
+
+      case FN.setLineWidth:
         if (args) currentLineWidth = args[0];
         break;
 
-      case FN.setLineCap || 41:
+      case FN.setLineCap:
         if (args) {
           const caps = ['butt', 'round', 'square'];
           currentLineCap = caps[args[0]] || 'butt';
         }
         break;
 
-      case FN.setLineJoin || 42:
+      case FN.setLineJoin:
         if (args) {
           const joins = ['miter', 'round', 'bevel'];
           currentLineJoin = joins[args[0]] || 'miter';
         }
         break;
 
-      case FN.setDash || 45:
+      case FN.setDash:
         if (args) currentDash = args[0];
         break;
 
       // Clipping
-      case FN.clip || 28:
-      case FN.eoClip || 29:
+      case FN.clip:
+      case FN.eoClip:
         currentClip = [...pathPoints];
         break;
     }

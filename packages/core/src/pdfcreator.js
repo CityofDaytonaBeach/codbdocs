@@ -220,6 +220,8 @@ export class PDFCreator {
         commands.push(`(${this.escapePDFString(text)}) Tj`);
 
         commands.push(`Q`); // Restore graphics state
+      } else if (obj.type === 'image' && obj.raw?.src && level >= 3) {
+        this.addImageCommands(commands, obj);
       }
     }
 
@@ -260,20 +262,25 @@ export class PDFCreator {
    * Add vector drawing commands.
    */
   addVectorCommands(commands, vec) {
-    if (!vec.points || vec.points.length === 0) return;
+    if ((!vec.points || vec.points.length === 0) && vec.type !== 'rect') return;
 
     commands.push('q'); // Save state
 
+    if (vec.graphicsState?.transform) {
+      const t = vec.graphicsState.transform;
+      commands.push(`${this.num(t[0])} ${this.num(t[1])} ${this.num(t[2])} ${this.num(t[3])} ${this.num(t[4])} ${this.num(t[5])} cm`);
+    }
+
     // Set stroke color
-    if (vec.graphicsState?.stroke?.color) {
-      const c = vec.graphicsState.stroke.color;
-      commands.push(`${c[0]} ${c[1]} ${c[2]} RG`);
+    const stroke = this.normalizeColor(vec.graphicsState?.stroke);
+    if (stroke) {
+      commands.push(`${stroke.map(c => this.num(c)).join(' ')} RG`);
     }
 
     // Set fill color
-    if (vec.graphicsState?.fill?.color) {
-      const c = vec.graphicsState.fill.color;
-      commands.push(`${c[0]} ${c[1]} ${c[2]} rg`);
+    const fill = this.normalizeColor(vec.graphicsState?.fill);
+    if (fill) {
+      commands.push(`${fill.map(c => this.num(c)).join(' ')} rg`);
     }
 
     // Set line width
@@ -281,29 +288,193 @@ export class PDFCreator {
       commands.push(`${vec.graphicsState.lineWidth} w`);
     }
 
+    if (Array.isArray(vec.graphicsState?.dash)) {
+      const dash = vec.graphicsState.dash;
+      const pattern = Array.isArray(dash[0]) ? dash[0] : dash;
+      const phase = Array.isArray(dash[0]) ? dash[1] || 0 : 0;
+      commands.push(`[${pattern.join(' ')}] ${phase} d`);
+    }
+
+    if (vec.type === 'rect' && Array.isArray(vec.bbox)) {
+      commands.push(`${this.num(vec.bbox[0])} ${this.num(vec.bbox[1])} ${this.num(vec.bbox[2])} ${this.num(vec.bbox[3])} re`);
+      commands.push(fill && stroke ? 'B' : fill ? 'f' : 'S');
+      commands.push('Q');
+      return;
+    }
+
     // Draw path
     const firstPoint = vec.points[0];
-    commands.push(`${firstPoint.x} ${firstPoint.y} m`);
+    if (firstPoint.op === 'moveTo') commands.push(`${this.num(firstPoint.x)} ${this.num(firstPoint.y)} m`);
 
     for (let i = 1; i < vec.points.length; i++) {
       const pt = vec.points[i];
       if (pt.op === 'moveTo') {
-        commands.push(`${pt.x} ${pt.y} m`);
+        commands.push(`${this.num(pt.x)} ${this.num(pt.y)} m`);
       } else if (pt.op === 'lineTo') {
-        commands.push(`${pt.x} ${pt.y} l`);
+        commands.push(`${this.num(pt.x)} ${this.num(pt.y)} l`);
       } else if (pt.op === 'curveTo') {
-        commands.push(`${pt.x1} ${pt.y1} ${pt.x2} ${pt.y2} ${pt.x} ${pt.y} c`);
+        commands.push(`${this.num(pt.x1)} ${this.num(pt.y1)} ${this.num(pt.x2)} ${this.num(pt.y2)} ${this.num(pt.x ?? pt.x3)} ${this.num(pt.y ?? pt.y3)} c`);
+      } else if (pt.op === 'closePath') {
+        commands.push('h');
       }
     }
 
     // Stroke or fill
-    if (vec.type === 'path') {
-      commands.push('S'); // Stroke
-    } else if (vec.type === 'rect') {
-      commands.push('B'); // Fill and stroke
-    }
+    commands.push(fill && stroke ? 'B' : fill ? 'f' : 'S');
 
     commands.push('Q'); // Restore state
+  }
+
+  addImageCommands(commands, obj) {
+    const src = String(obj.raw.src || '');
+    if (/^data:image\/svg\+xml/i.test(src)) {
+      this.addSvgCommands(commands, src, obj.bbox);
+    }
+  }
+
+  addSvgCommands(commands, src, bbox) {
+    const svg = this.decodeDataUrl(src);
+    if (!svg || !Array.isArray(bbox)) return;
+    const viewBox = /viewBox\s*=\s*["']([^"']+)["']/i.exec(svg)?.[1]?.trim().split(/[\s,]+/).map(Number);
+    const width = viewBox?.[2] || Number(/\bwidth\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[2] || 1;
+    const height = viewBox?.[3] || Number(/\bheight\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[3] || 1;
+    const sx = (bbox[2] || width) / width;
+    const sy = (bbox[3] || height) / height;
+    commands.push('q');
+    commands.push(`${this.num(sx)} 0 0 ${this.num(sy)} ${this.num(bbox[0] || 0)} ${this.num(bbox[1] || 0)} cm`);
+    for (const shape of this.svgShapes(svg)) {
+      const stroke = this.cssColor(shape.stroke);
+      const fill = this.cssColor(shape.fill);
+      if (stroke) commands.push(`${stroke.map(c => this.num(c)).join(' ')} RG`);
+      if (fill) commands.push(`${fill.map(c => this.num(c)).join(' ')} rg`);
+      if (shape.strokeWidth) commands.push(`${this.num(shape.strokeWidth)} w`);
+      commands.push(...shape.commands);
+      commands.push(fill && stroke ? 'B' : fill ? 'f' : 'S');
+    }
+    commands.push('Q');
+  }
+
+  svgShapes(svg) {
+    const out = [];
+    const attr = (tag, name) => new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, 'i').exec(tag)?.[1];
+    const style = (tag, name) => new RegExp(`${name}\\s*:\\s*([^;"']+)`, 'i').exec(attr(tag, 'style') || '')?.[1];
+    const paint = (tag, name, fallback) => attr(tag, name) || style(tag, name) || fallback;
+    const strokeWidth = (tag) => Number(attr(tag, 'stroke-width') || style(tag, 'stroke-width') || 1);
+
+    for (const match of svg.matchAll(/<path\b[^>]*\bd\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
+      const tag = match[0];
+      const commands = this.svgPathToPdf(match[1]);
+      if (commands.length) out.push({
+        commands,
+        fill: paint(tag, 'fill', '#000'),
+        stroke: paint(tag, 'stroke', null),
+        strokeWidth: strokeWidth(tag),
+      });
+    }
+    for (const match of svg.matchAll(/<rect\b[^>]*>/gi)) {
+      const tag = match[0];
+      const x = Number(attr(tag, 'x') || 0);
+      const y = Number(attr(tag, 'y') || 0);
+      const w = Number(attr(tag, 'width') || 0);
+      const h = Number(attr(tag, 'height') || 0);
+      if (w && h) out.push({
+        commands: [`${this.num(x)} ${this.num(y)} ${this.num(w)} ${this.num(h)} re`],
+        fill: paint(tag, 'fill', '#000'),
+        stroke: paint(tag, 'stroke', null),
+        strokeWidth: strokeWidth(tag),
+      });
+    }
+    for (const match of svg.matchAll(/<line\b[^>]*>/gi)) {
+      const tag = match[0];
+      const x1 = Number(attr(tag, 'x1') || 0);
+      const y1 = Number(attr(tag, 'y1') || 0);
+      const x2 = Number(attr(tag, 'x2') || 0);
+      const y2 = Number(attr(tag, 'y2') || 0);
+      out.push({
+        commands: [`${this.num(x1)} ${this.num(y1)} m`, `${this.num(x2)} ${this.num(y2)} l`],
+        fill: null,
+        stroke: paint(tag, 'stroke', '#000'),
+        strokeWidth: strokeWidth(tag),
+      });
+    }
+    return out;
+  }
+
+  svgPathToPdf(d) {
+    const tokens = String(d || '').match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/g) || [];
+    const commands = [];
+    let i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0;
+    const n = () => Number(tokens[i++]);
+    const isCmd = () => /^[a-zA-Z]$/.test(tokens[i] || '');
+    while (i < tokens.length) {
+      if (isCmd()) cmd = tokens[i++];
+      const rel = cmd === cmd?.toLowerCase();
+      const c = cmd?.toUpperCase();
+      if (c === 'M') {
+        x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n(); sx = x; sy = y;
+        commands.push(`${this.num(x)} ${this.num(y)} m`);
+        cmd = rel ? 'l' : 'L';
+      } else if (c === 'L') {
+        x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n();
+        commands.push(`${this.num(x)} ${this.num(y)} l`);
+      } else if (c === 'H') {
+        x = (rel ? x : 0) + n();
+        commands.push(`${this.num(x)} ${this.num(y)} l`);
+      } else if (c === 'V') {
+        y = (rel ? y : 0) + n();
+        commands.push(`${this.num(x)} ${this.num(y)} l`);
+      } else if (c === 'C') {
+        const x1 = (rel ? x : 0) + n(), y1 = (rel ? y : 0) + n();
+        const x2 = (rel ? x : 0) + n(), y2 = (rel ? y : 0) + n();
+        x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n();
+        commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
+      } else if (c === 'Z') {
+        commands.push('h'); x = sx; y = sy;
+      } else {
+        break;
+      }
+    }
+    return commands;
+  }
+
+  decodeDataUrl(src) {
+    const m = /^data:[^,]+,(.*)$/i.exec(src);
+    if (!m) return '';
+    if (/;base64,/i.test(src)) {
+      if (typeof Buffer !== 'undefined') return Buffer.from(m[1], 'base64').toString('utf8');
+      if (typeof atob === 'function') return decodeURIComponent(escape(atob(m[1])));
+    }
+    return decodeURIComponent(m[1]);
+  }
+
+  normalizeColor(value) {
+    if (!value || value === 'none') return null;
+    if (Array.isArray(value)) return value.slice(0, 3).map(v => Number(v) > 1 ? Number(v) / 255 : Number(v));
+    if (Array.isArray(value.color)) {
+      if (value.colorSpace === 'DeviceCMYK') {
+        const [c = 0, m = 0, y = 0, k = 0] = value.color.map(v => Number(v) > 1 ? Number(v) / 100 : Number(v));
+        return [(1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k)];
+      }
+      return value.color.slice(0, 3).map(v => Number(v) > 1 ? Number(v) / 255 : Number(v));
+    }
+    return this.cssColor(value);
+  }
+
+  cssColor(value) {
+    if (!value || value === 'none' || value === 'transparent') return null;
+    const named = { black: '#000000', white: '#ffffff', red: '#ff0000', green: '#008000', blue: '#0000ff' };
+    value = String(named[value] || value).trim();
+    const rgb = /^rgb\(([^)]+)\)$/i.exec(value);
+    if (rgb) return rgb[1].split(',').slice(0, 3).map(v => Number(v.trim()) / 255);
+    const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
+    if (!hex) return null;
+    const h = hex[1].length === 3 ? hex[1].split('').map(ch => ch + ch).join('') : hex[1];
+    return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
+  }
+
+  num(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? String(Math.round(n * 1000) / 1000) : '0';
   }
 
   /**

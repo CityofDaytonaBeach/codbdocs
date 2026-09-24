@@ -5721,6 +5721,8 @@ ${p.text}`).join("\n\n")
   async function extractVectors(page) {
     const opList = await page.getOperatorList();
     const vectors = [];
+    const transformStack = [];
+    const styleStack = [];
     let currentTransform = [1, 0, 0, 1, 0, 0];
     let currentStroke = null;
     let currentFill = null;
@@ -5732,124 +5734,193 @@ ${p.text}`).join("\n\n")
     let pathPoints = [];
     let pathStart = null;
     const FN = pdfjsLib?.OPS || {};
+    const isOp = (fn, name, fallback) => fn === (FN[name] ?? fallback);
+    const multiply = (m1, m2) => {
+      const [a1, b1, c1, d1, e1, f1] = m1;
+      const [a2, b2, c2, d2, e2, f2] = m2;
+      return [
+        a1 * a2 + c1 * b2,
+        b1 * a2 + d1 * b2,
+        a1 * c2 + c1 * d2,
+        b1 * c2 + d1 * d2,
+        a1 * e2 + c1 * f2 + e1,
+        b1 * e2 + d1 * f2 + f1
+      ];
+    };
+    const color = (args) => {
+      if (!Array.isArray(args)) return null;
+      const vals = args.slice(0, 3).map((v) => Math.max(0, Math.min(1, Number(v) > 1 ? Number(v) / 255 : Number(v))));
+      return { colorSpace: "DeviceRGB", color: vals };
+    };
+    const cmyk = (args) => Array.isArray(args) ? { colorSpace: "DeviceCMYK", color: args.slice(0, 4).map(Number) } : null;
+    const pushVector = (paint) => {
+      if (pathPoints.length === 0) return;
+      vectors.push(createVector("path", page, {
+        points: [...pathPoints],
+        stroke: paint.stroke ? currentStroke : null,
+        fill: paint.fill ? currentFill : null,
+        lineWidth: currentLineWidth,
+        lineCap: currentLineCap,
+        lineJoin: currentLineJoin,
+        dash: currentDash,
+        clip: currentClip,
+        transform: currentTransform
+      }));
+      pathPoints = [];
+      pathStart = null;
+    };
+    const readConstructedPath = (args) => {
+      const ops = args?.[0] || [];
+      const coords = args?.[1] || [];
+      let c = 0;
+      for (const op of ops) {
+        if (op === FN.moveTo) {
+          const pt = { op: "moveTo", x: coords[c], y: coords[c + 1] };
+          pathStart = { x: pt.x, y: pt.y };
+          pathPoints.push(pt);
+          c += 2;
+        } else if (op === FN.lineTo) {
+          pathPoints.push({ op: "lineTo", x: coords[c], y: coords[c + 1] });
+          c += 2;
+        } else if (op === FN.curveTo) {
+          pathPoints.push({ op: "curveTo", x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 4], y: coords[c + 5] });
+          c += 6;
+        } else if (op === FN.curveTo2) {
+          const last = pathPoints[pathPoints.length - 1] || { x: 0, y: 0 };
+          pathPoints.push({ op: "curveTo", x1: last.x, y1: last.y, x2: coords[c], y2: coords[c + 1], x: coords[c + 2], y: coords[c + 3] });
+          c += 4;
+        } else if (op === FN.curveTo3) {
+          pathPoints.push({ op: "curveTo", x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 2], y: coords[c + 3] });
+          c += 4;
+        } else if (op === FN.rectangle) {
+          const [x, y, w, h] = coords.slice(c, c + 4);
+          pathStart = { x, y };
+          pathPoints.push({ op: "moveTo", x, y });
+          pathPoints.push({ op: "lineTo", x: x + w, y });
+          pathPoints.push({ op: "lineTo", x: x + w, y: y + h });
+          pathPoints.push({ op: "lineTo", x, y: y + h });
+          pathPoints.push({ op: "closePath" });
+          c += 4;
+        } else if (op === FN.closePath) {
+          pathPoints.push({ op: "closePath" });
+        }
+      }
+    };
     for (let i = 0; i < opList.fnArray.length; i++) {
       const fn = opList.fnArray[i];
       const args = opList.argsArray[i];
+      if (isOp(fn, "transform", 8)) {
+        if (args && args.length >= 6) {
+          currentTransform = multiply(currentTransform, args.slice(0, 6));
+        }
+        continue;
+      }
+      if (isOp(fn, "constructPath")) {
+        readConstructedPath(args);
+        continue;
+      }
       switch (fn) {
-        // Transform
-        case (FN.transform || 8):
-          if (args && args.length >= 6) {
-            currentTransform = args.slice(0, 6);
-          }
-          break;
         // Path operations
-        case (FN.moveTo || 13):
+        case FN.moveTo:
           if (args) {
             pathStart = { x: args[0], y: args[1] };
             pathPoints.push({ op: "moveTo", x: args[0], y: args[1] });
           }
           break;
-        case (FN.lineTo || 14):
+        case FN.lineTo:
           if (args) {
             pathPoints.push({ op: "lineTo", x: args[0], y: args[1] });
           }
           break;
-        case (FN.curveTo || 15):
+        case FN.curveTo:
           if (args) {
-            pathPoints.push({ op: "curveTo", x1: args[0], y1: args[1], x2: args[2], y2: args[3], x3: args[4], y3: args[5] });
+            pathPoints.push({ op: "curveTo", x1: args[0], y1: args[1], x2: args[2], y2: args[3], x: args[4], y: args[5] });
           }
           break;
-        case (FN.rectangle || 19):
+        case FN.rectangle:
           if (args && args.length >= 4) {
             vectors.push(createVector("rect", page, {
-              bbox: [args[0], args[1], args[2] - args[0], args[3] - args[1]],
+              bbox: [args[0], args[1], args[2], args[3]],
               stroke: currentStroke,
               fill: currentFill,
               lineWidth: currentLineWidth,
+              lineCap: currentLineCap,
+              lineJoin: currentLineJoin,
+              dash: currentDash,
+              clip: currentClip,
               transform: currentTransform
             }));
           }
           break;
         // Stroke
-        case (FN.stroke || 20):
-          if (pathPoints.length > 0) {
-            vectors.push(createVector("path", page, {
-              points: [...pathPoints],
-              stroke: currentStroke,
-              fill: null,
-              lineWidth: currentLineWidth,
-              lineCap: currentLineCap,
-              lineJoin: currentLineJoin,
-              dash: currentDash,
-              transform: currentTransform
-            }));
-          }
-          pathPoints = [];
+        case FN.stroke:
+        case FN.closeStroke:
+          if (fn === FN.closeStroke) pathPoints.push({ op: "closePath" });
+          pushVector({ stroke: true, fill: false });
           break;
         // Fill
-        case (FN.fill || 21):
-        case (FN.eoFill || 22):
-          if (pathPoints.length > 0) {
-            vectors.push(createVector("path", page, {
-              points: [...pathPoints],
-              stroke: null,
-              fill: currentFill,
-              lineWidth: currentLineWidth,
-              transform: currentTransform
-            }));
-          }
-          pathPoints = [];
+        case FN.fill:
+        case FN.eoFill:
+        case FN.closeFill:
+          if (fn === FN.closeFill) pathPoints.push({ op: "closePath" });
+          pushVector({ stroke: false, fill: true });
           break;
         // Fill and stroke
-        case (FN.fillStroke || 23):
-        case (FN.eoFillStroke || 24):
-          if (pathPoints.length > 0) {
-            vectors.push(createVector("path", page, {
-              points: [...pathPoints],
-              stroke: currentStroke,
-              fill: currentFill,
-              lineWidth: currentLineWidth,
-              transform: currentTransform
-            }));
-          }
-          pathPoints = [];
+        case FN.fillStroke:
+        case FN.eoFillStroke:
+        case FN.closeFillStroke:
+        case FN.closeEOFillStroke:
+          if (fn === FN.closeFillStroke || fn === FN.closeEOFillStroke) pathPoints.push({ op: "closePath" });
+          pushVector({ stroke: true, fill: true });
           break;
         // Close path
-        case (FN.closePath || 16):
+        case FN.closePath:
           pathPoints.push({ op: "closePath" });
           break;
         // Graphics state
-        case (FN.save || 25):
+        case FN.save:
+          transformStack.push(currentTransform.slice());
+          styleStack.push({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip });
           break;
-        case (FN.restore || 26):
+        case FN.restore: {
+          currentTransform = transformStack.pop() || [1, 0, 0, 1, 0, 0];
+          const style2 = styleStack.pop();
+          if (style2) ({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip } = style2);
           break;
-        case (FN.setStrokeRGBColor || 43):
-          if (args) currentStroke = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
+        }
+        case FN.setStrokeRGBColor:
+          currentStroke = color(args);
           break;
-        case (FN.setFillRGBColor || 44):
-          if (args) currentFill = `rgb(${args[0]}, ${args[1]}, ${args[2]})`;
+        case FN.setFillRGBColor:
+          currentFill = color(args);
           break;
-        case (FN.setLineWidth || 40):
+        case FN.setStrokeCMYKColor:
+          currentStroke = cmyk(args);
+          break;
+        case FN.setFillCMYKColor:
+          currentFill = cmyk(args);
+          break;
+        case FN.setLineWidth:
           if (args) currentLineWidth = args[0];
           break;
-        case (FN.setLineCap || 41):
+        case FN.setLineCap:
           if (args) {
             const caps = ["butt", "round", "square"];
             currentLineCap = caps[args[0]] || "butt";
           }
           break;
-        case (FN.setLineJoin || 42):
+        case FN.setLineJoin:
           if (args) {
             const joins = ["miter", "round", "bevel"];
             currentLineJoin = joins[args[0]] || "miter";
           }
           break;
-        case (FN.setDash || 45):
+        case FN.setDash:
           if (args) currentDash = args[0];
           break;
         // Clipping
-        case (FN.clip || 28):
-        case (FN.eoClip || 29):
+        case FN.clip:
+        case FN.eoClip:
           currentClip = [...pathPoints];
           break;
       }
@@ -7413,6 +7484,8 @@ ${p.text}`).join("\n\n")
           commands.push(`${x} ${y} Td`);
           commands.push(`(${this.escapePDFString(text)}) Tj`);
           commands.push(`Q`);
+        } else if (obj.type === "image" && obj.raw?.src && level >= 3) {
+          this.addImageCommands(commands, obj);
         }
       }
       if (level >= 3) {
@@ -7446,37 +7519,186 @@ ${p.text}`).join("\n\n")
      * Add vector drawing commands.
      */
     addVectorCommands(commands, vec) {
-      if (!vec.points || vec.points.length === 0) return;
+      if ((!vec.points || vec.points.length === 0) && vec.type !== "rect") return;
       commands.push("q");
-      if (vec.graphicsState?.stroke?.color) {
-        const c = vec.graphicsState.stroke.color;
-        commands.push(`${c[0]} ${c[1]} ${c[2]} RG`);
+      if (vec.graphicsState?.transform) {
+        const t = vec.graphicsState.transform;
+        commands.push(`${this.num(t[0])} ${this.num(t[1])} ${this.num(t[2])} ${this.num(t[3])} ${this.num(t[4])} ${this.num(t[5])} cm`);
       }
-      if (vec.graphicsState?.fill?.color) {
-        const c = vec.graphicsState.fill.color;
-        commands.push(`${c[0]} ${c[1]} ${c[2]} rg`);
+      const stroke = this.normalizeColor(vec.graphicsState?.stroke);
+      if (stroke) {
+        commands.push(`${stroke.map((c) => this.num(c)).join(" ")} RG`);
+      }
+      const fill = this.normalizeColor(vec.graphicsState?.fill);
+      if (fill) {
+        commands.push(`${fill.map((c) => this.num(c)).join(" ")} rg`);
       }
       if (vec.graphicsState?.lineWidth) {
         commands.push(`${vec.graphicsState.lineWidth} w`);
       }
+      if (Array.isArray(vec.graphicsState?.dash)) {
+        const dash = vec.graphicsState.dash;
+        const pattern = Array.isArray(dash[0]) ? dash[0] : dash;
+        const phase = Array.isArray(dash[0]) ? dash[1] || 0 : 0;
+        commands.push(`[${pattern.join(" ")}] ${phase} d`);
+      }
+      if (vec.type === "rect" && Array.isArray(vec.bbox)) {
+        commands.push(`${this.num(vec.bbox[0])} ${this.num(vec.bbox[1])} ${this.num(vec.bbox[2])} ${this.num(vec.bbox[3])} re`);
+        commands.push(fill && stroke ? "B" : fill ? "f" : "S");
+        commands.push("Q");
+        return;
+      }
       const firstPoint = vec.points[0];
-      commands.push(`${firstPoint.x} ${firstPoint.y} m`);
+      if (firstPoint.op === "moveTo") commands.push(`${this.num(firstPoint.x)} ${this.num(firstPoint.y)} m`);
       for (let i = 1; i < vec.points.length; i++) {
         const pt = vec.points[i];
         if (pt.op === "moveTo") {
-          commands.push(`${pt.x} ${pt.y} m`);
+          commands.push(`${this.num(pt.x)} ${this.num(pt.y)} m`);
         } else if (pt.op === "lineTo") {
-          commands.push(`${pt.x} ${pt.y} l`);
+          commands.push(`${this.num(pt.x)} ${this.num(pt.y)} l`);
         } else if (pt.op === "curveTo") {
-          commands.push(`${pt.x1} ${pt.y1} ${pt.x2} ${pt.y2} ${pt.x} ${pt.y} c`);
+          commands.push(`${this.num(pt.x1)} ${this.num(pt.y1)} ${this.num(pt.x2)} ${this.num(pt.y2)} ${this.num(pt.x ?? pt.x3)} ${this.num(pt.y ?? pt.y3)} c`);
+        } else if (pt.op === "closePath") {
+          commands.push("h");
         }
       }
-      if (vec.type === "path") {
-        commands.push("S");
-      } else if (vec.type === "rect") {
-        commands.push("B");
+      commands.push(fill && stroke ? "B" : fill ? "f" : "S");
+      commands.push("Q");
+    }
+    addImageCommands(commands, obj) {
+      const src = String(obj.raw.src || "");
+      if (/^data:image\/svg\+xml/i.test(src)) {
+        this.addSvgCommands(commands, src, obj.bbox);
+      }
+    }
+    addSvgCommands(commands, src, bbox) {
+      const svg = this.decodeDataUrl(src);
+      if (!svg || !Array.isArray(bbox)) return;
+      const viewBox = /viewBox\s*=\s*["']([^"']+)["']/i.exec(svg)?.[1]?.trim().split(/[\s,]+/).map(Number);
+      const width = viewBox?.[2] || Number(/\bwidth\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[2] || 1;
+      const height = viewBox?.[3] || Number(/\bheight\s*=\s*["']([0-9.]+)/i.exec(svg)?.[1]) || bbox[3] || 1;
+      const sx = (bbox[2] || width) / width;
+      const sy = (bbox[3] || height) / height;
+      commands.push("q");
+      commands.push(`${this.num(sx)} 0 0 ${this.num(sy)} ${this.num(bbox[0] || 0)} ${this.num(bbox[1] || 0)} cm`);
+      for (const shape of this.svgShapes(svg)) {
+        const stroke = this.cssColor(shape.stroke);
+        const fill = this.cssColor(shape.fill);
+        if (stroke) commands.push(`${stroke.map((c) => this.num(c)).join(" ")} RG`);
+        if (fill) commands.push(`${fill.map((c) => this.num(c)).join(" ")} rg`);
+        if (shape.strokeWidth) commands.push(`${this.num(shape.strokeWidth)} w`);
+        commands.push(...shape.commands);
+        commands.push(fill && stroke ? "B" : fill ? "f" : "S");
       }
       commands.push("Q");
+    }
+    svgShapes(svg) {
+      const out = [];
+      const attr = (tag, name) => new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, "i").exec(tag)?.[1];
+      const style = (tag, name) => new RegExp(`${name}\\s*:\\s*([^;"']+)`, "i").exec(attr(tag, "style") || "")?.[1];
+      const paint = (tag, name, fallback) => attr(tag, name) || style(tag, name) || fallback;
+      const strokeWidth = (tag) => Number(attr(tag, "stroke-width") || style(tag, "stroke-width") || 1);
+      for (const match of svg.matchAll(/<path\b[^>]*\bd\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
+        const tag = match[0];
+        const commands = this.svgPathToPdf(match[1]);
+        if (commands.length) out.push({ commands, fill: paint(tag, "fill", "#000"), stroke: paint(tag, "stroke", null), strokeWidth: strokeWidth(tag) });
+      }
+      for (const match of svg.matchAll(/<rect\b[^>]*>/gi)) {
+        const tag = match[0];
+        const x = Number(attr(tag, "x") || 0);
+        const y = Number(attr(tag, "y") || 0);
+        const w = Number(attr(tag, "width") || 0);
+        const h = Number(attr(tag, "height") || 0);
+        if (w && h) out.push({ commands: [`${this.num(x)} ${this.num(y)} ${this.num(w)} ${this.num(h)} re`], fill: paint(tag, "fill", "#000"), stroke: paint(tag, "stroke", null), strokeWidth: strokeWidth(tag) });
+      }
+      for (const match of svg.matchAll(/<line\b[^>]*>/gi)) {
+        const tag = match[0];
+        const x1 = Number(attr(tag, "x1") || 0);
+        const y1 = Number(attr(tag, "y1") || 0);
+        const x2 = Number(attr(tag, "x2") || 0);
+        const y2 = Number(attr(tag, "y2") || 0);
+        out.push({ commands: [`${this.num(x1)} ${this.num(y1)} m`, `${this.num(x2)} ${this.num(y2)} l`], fill: null, stroke: paint(tag, "stroke", "#000"), strokeWidth: strokeWidth(tag) });
+      }
+      return out;
+    }
+    svgPathToPdf(d) {
+      const tokens = String(d || "").match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/g) || [];
+      const commands = [];
+      let i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0;
+      const n = () => Number(tokens[i++]);
+      const isCmd = () => /^[a-zA-Z]$/.test(tokens[i] || "");
+      while (i < tokens.length) {
+        if (isCmd()) cmd = tokens[i++];
+        const rel = cmd === cmd?.toLowerCase();
+        const c = cmd?.toUpperCase();
+        if (c === "M") {
+          x = (rel ? x : 0) + n();
+          y = (rel ? y : 0) + n();
+          sx = x;
+          sy = y;
+          commands.push(`${this.num(x)} ${this.num(y)} m`);
+          cmd = rel ? "l" : "L";
+        } else if (c === "L") {
+          x = (rel ? x : 0) + n();
+          y = (rel ? y : 0) + n();
+          commands.push(`${this.num(x)} ${this.num(y)} l`);
+        } else if (c === "H") {
+          x = (rel ? x : 0) + n();
+          commands.push(`${this.num(x)} ${this.num(y)} l`);
+        } else if (c === "V") {
+          y = (rel ? y : 0) + n();
+          commands.push(`${this.num(x)} ${this.num(y)} l`);
+        } else if (c === "C") {
+          const x1 = (rel ? x : 0) + n(), y1 = (rel ? y : 0) + n();
+          const x2 = (rel ? x : 0) + n(), y2 = (rel ? y : 0) + n();
+          x = (rel ? x : 0) + n();
+          y = (rel ? y : 0) + n();
+          commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
+        } else if (c === "Z") {
+          commands.push("h");
+          x = sx;
+          y = sy;
+        } else {
+          break;
+        }
+      }
+      return commands;
+    }
+    decodeDataUrl(src) {
+      const m = /^data:[^,]+,(.*)$/i.exec(src);
+      if (!m) return "";
+      if (/;base64,/i.test(src)) {
+        if (typeof Buffer !== "undefined") return Buffer.from(m[1], "base64").toString("utf8");
+        if (typeof atob === "function") return decodeURIComponent(escape(atob(m[1])));
+      }
+      return decodeURIComponent(m[1]);
+    }
+    normalizeColor(value) {
+      if (!value || value === "none") return null;
+      if (Array.isArray(value)) return value.slice(0, 3).map((v) => Number(v) > 1 ? Number(v) / 255 : Number(v));
+      if (Array.isArray(value.color)) {
+        if (value.colorSpace === "DeviceCMYK") {
+          const [c = 0, m = 0, y = 0, k = 0] = value.color.map((v) => Number(v) > 1 ? Number(v) / 100 : Number(v));
+          return [(1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k)];
+        }
+        return value.color.slice(0, 3).map((v) => Number(v) > 1 ? Number(v) / 255 : Number(v));
+      }
+      return this.cssColor(value);
+    }
+    cssColor(value) {
+      if (!value || value === "none" || value === "transparent") return null;
+      const named = { black: "#000000", white: "#ffffff", red: "#ff0000", green: "#008000", blue: "#0000ff" };
+      value = String(named[value] || value).trim();
+      const rgb = /^rgb\(([^)]+)\)$/i.exec(value);
+      if (rgb) return rgb[1].split(",").slice(0, 3).map((v) => Number(v.trim()) / 255);
+      const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
+      if (!hex) return null;
+      const h = hex[1].length === 3 ? hex[1].split("").map((ch) => ch + ch).join("") : hex[1];
+      return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
+    }
+    num(value) {
+      const n = Number(value);
+      return Number.isFinite(n) ? String(Math.round(n * 1e3) / 1e3) : "0";
     }
     /**
      * Escape string for PDF content stream.
