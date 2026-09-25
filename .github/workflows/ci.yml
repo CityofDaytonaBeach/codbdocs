@@ -50,7 +50,7 @@ jobs:
       - name: Build
         run: |
           cd packages/core
-          npx esbuild src/index.js --bundle --format=iife --global-name=CodbDocs --outfile=dist/codbdocs.js --platform=browser --target=es2020
+          npx esbuild src/index.js --bundle --format=iife --global-name=CodbDocs --outfile=dist/codbdocs.js --platform=browser --target=es2020 --footer:js="CodbDocs={...CodbDocs};CodbDocs.CodbDocs=CodbDocs;CodbDocs.default=CodbDocs;"
 
       - name: Verify dist matches source
         run: |

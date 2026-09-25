@@ -59,7 +59,7 @@ Providers run in the host page. CodbDocs does not supply, transmit, or retain an
 
 ```html
 <script type="module">
-  import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+  import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js';
 </script>
 ```
 
@@ -89,7 +89,7 @@ npm install @codbdocs/core @codbdocs/react
 
 ```html
 <script type="module">
-  import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+  import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js';
 
   // Load a PDF file
   const fileInput = document.getElementById('fileInput');
@@ -1551,7 +1551,7 @@ CodbDocs.configure({
   <div id="results"></div>
 
   <script type="module">
-    import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+    import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js';
 
     let currentDoc = null;
     

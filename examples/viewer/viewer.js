@@ -1,4 +1,4 @@
-import { buildAccessibleHtml } from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+import { buildAccessibleHtml } from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js';
 
 const params = new URLSearchParams(location.search);
 const elements = {

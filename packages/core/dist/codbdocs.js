@@ -17,9 +17,10 @@ var CodbDocs = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // packages/core/src/index.js
+  // src/index.js
   var index_exports = {};
   __export(index_exports, {
+    BROWSER_ONLY_PROFILES: () => BROWSER_ONLY_PROFILES,
     BlockTypes: () => BlockTypes,
     ChunkStrategies: () => ChunkStrategies,
     CodbDocs: () => CodbDocs,
@@ -44,6 +45,7 @@ var CodbDocs = (() => {
     applyFormValuesToStorage: () => applyFormValuesToStorage,
     associateCaptionsWithImages: () => associateCaptionsWithImages,
     bestFuzzyMatch: () => bestFuzzyMatch,
+    browserOnlyCapabilities: () => browserOnlyCapabilities,
     buildAccessibleHtml: () => buildAccessibleHtml,
     buildActionsSummary: () => buildActionsSummary,
     buildAppearanceStreamsSummary: () => buildAppearanceStreamsSummary,
@@ -64,6 +66,7 @@ var CodbDocs = (() => {
     cmykToRgb: () => cmykToRgb,
     compareVisualInternal: () => compareVisualInternal,
     configure: () => configure,
+    createBrowserOnlySDK: () => createBrowserOnlySDK,
     createChunks: () => createChunks,
     createGradientShading: () => createGradientShading,
     createHighlightAnnotations: () => createHighlightAnnotations,
@@ -156,16 +159,19 @@ var CodbDocs = (() => {
     processLargeDocument: () => processLargeDocument,
     queryTable: () => queryTable,
     rankResults: () => rankResults,
+    recommendBrowserOnlyProfile: () => recommendBrowserOnlyProfile,
     reconstructTable: () => reconstructTable,
     remediateAccessibility: () => remediateAccessibility,
     renderPageImage: () => renderPageImage,
     rerankResults: () => rerankResults,
+    retrieveBrowserOnly: () => retrieveBrowserOnly,
     rgbToCmyk: () => rgbToCmyk,
     saveFilledPdf: () => saveFilledPdf,
     saveToCache: () => saveToCache,
     serverlessCapabilities: () => serverlessCapabilities,
     shouldStream: () => shouldStream,
     stem: () => stem,
+    summarizeBrowserOnly: () => summarizeBrowserOnly,
     terminateOcr: () => terminateOcr,
     toRgb: () => toRgb,
     trackXObjectReuse: () => trackXObjectReuse,
@@ -175,7 +181,7 @@ var CodbDocs = (() => {
     wordNGrams: () => wordNGrams
   });
 
-  // packages/core/src/formrules.js
+  // src/formrules.js
   function flattenScripts(value, out = []) {
     if (typeof value === "string") out.push(value);
     else if (Array.isArray(value)) value.forEach((item) => flattenScripts(item, out));
@@ -230,7 +236,7 @@ var CodbDocs = (() => {
     return rules;
   }
 
-  // packages/core/src/fidelity.js
+  // src/fidelity.js
   var esc = (v) => String(v != null ? v : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   var num = (v, fallback = 0) => {
     const n = Number(v);
@@ -698,7 +704,7 @@ var CodbDocs = (() => {
     if (openList) html += "</ul>";
     return html || '<p class="fx-empty">No extractable text on this page.</p>';
   }
-  var PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.min.js";
+  var PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.min.js";
   var CONFORMANCE = [
     "WCAG 2.1 Level A",
     "WCAG 2.1 Level AA",
@@ -876,7 +882,7 @@ var CodbDocs = (() => {
       { key: "askAi", label: "Ask AI", buttonId: "fx-qa-open", description: "Ask grounded questions over the document retrieval index." }
     ];
     const featureInput = { ...options.features || {}, ...options.menuItems || {} };
-    const disabledFeatureSet = new Set([...(options.disabledFeatures || []), ...(options.disabledMenuItems || [])].map(String));
+    const disabledFeatureSet = new Set([...options.disabledFeatures || [], ...options.disabledMenuItems || []].map(String));
     const enabledFeatureList = Array.isArray(options.enabledFeatures || options.enabledMenuItems) ? (options.enabledFeatures || options.enabledMenuItems).map(String) : null;
     const enabledFeatureSet = enabledFeatureList ? new Set(enabledFeatureList) : null;
     function featureEnabled(key, available = true) {
@@ -893,9 +899,17 @@ var CodbDocs = (() => {
       liveHelp: Boolean(options.airaUrl),
       originalLink: Boolean(options.originalUrl)
     };
-    const manifestFeatures = featureDefinitions.map((feature) => ({ ...feature, available: featureAvailability[feature.key] !== false }));
+    const manifestFeatures = featureDefinitions.map((feature) => ({
+      ...feature,
+      available: featureAvailability[feature.key] !== false
+    }));
     const menuFeatures = Object.fromEntries(manifestFeatures.map((feature) => [feature.key, featureEnabled(feature.key, feature.available)]));
-    const featureManifest = { available: manifestFeatures, enabled: manifestFeatures.filter((feature) => menuFeatures[feature.key]).map((feature) => feature.key), disabled: manifestFeatures.filter((feature) => !menuFeatures[feature.key]).map((feature) => feature.key), menu: menuFeatures };
+    const featureManifest = {
+      available: manifestFeatures,
+      enabled: manifestFeatures.filter((feature) => menuFeatures[feature.key]).map((feature) => feature.key),
+      disabled: manifestFeatures.filter((feature) => !menuFeatures[feature.key]).map((feature) => feature.key),
+      menu: menuFeatures
+    };
     const showOriginalPdf = Boolean(options.originalPdfSrc && menuFeatures.original);
     const outlineHtml = ctx.outline.length ? ctx.outline.map(
       (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
@@ -1021,7 +1035,7 @@ var CodbDocs = (() => {
 :root{--chrome:#1f2124;--chrome-2:#2b2e33;--chrome-3:#383c42;--stage:#f2f3f5;--ink:#eceff3;
   --muted:#a7aeb8;--accent:#d0021b;--accent-2:#1473e6;--line:#3a3e45;--zoom:1;--radius:10px}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
+html,body{margin:0;min-height:100%;overflow-x:hidden}
 body{background:var(--stage);color:#16181a;
   font-family:'Segoe UI Variable Text','Segoe UI',Inter,system-ui,-apple-system,sans-serif;
   -webkit-font-smoothing:antialiased}
@@ -1063,7 +1077,7 @@ header.fx-bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:.
 .fx-thumb-num{display:block;color:#5a6068;font-size:.72rem;padding:.2rem 0;text-align:center}
 .fx-thumb[aria-current=true] img,.fx-thumb[aria-current=true] .fx-thumb-blank{border-color:var(--accent-2);
   box-shadow:0 0 0 2px rgba(20,115,230,.35)}
-main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:3.5rem;background:var(--stage)}
+main.fx-stage{flex:1;min-width:0;padding:2.25rem 2rem;display:grid;justify-items:center;gap:3.5rem;background:var(--stage);overflow-x:auto}
 .fx-page{width:calc(var(--pw) * var(--zoom));scroll-margin-top:calc(var(--barh,3.1rem) + 1rem)}
 .fx-canvas{position:relative;width:var(--pw);height:var(--ph);background:#fff;border-radius:2px;
   box-shadow:0 0 0 1px rgba(0,0,0,.08),0 12px 28px rgba(15,20,30,.16);
@@ -1071,7 +1085,6 @@ main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:
 .fx-page{height:calc(var(--ph) * var(--zoom));margin:0 0 3.5rem}
 .fx-page:last-child{margin-bottom:0}
 .fx-raster{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0}
-.fx-page[data-native-text="1"] .fx-raster{display:none}
 .fx-vector-layer{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 .fx-textlayer{position:absolute;inset:0;z-index:2}
 .fx-text{position:absolute;margin:0;white-space:pre;transform-origin:left top;color:#111;
@@ -1080,7 +1093,7 @@ main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:
 
 /* No rasterised background available (text-only extraction): show the text layer
    itself so the fidelity view is never a blank page. */
-.fx-page[data-native-text="0"][data-raster="1"] .fx-text{color:transparent}
+.fx-page[data-raster="1"] .fx-text{color:transparent}
 .fx-page[data-raster="0"] .fx-text{color:#111}
 .fx-page[data-raster="0"] .fx-link{color:#0b4f9e;border-bottom-color:currentColor}
 .fx-img{position:absolute;object-fit:contain;z-index:1}
@@ -1299,7 +1312,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
   .fx-group{max-width:100%;overflow-x:auto;justify-content:flex-start}.fx-spacer{display:none}
   .fx-bar input:not(#fx-pdf-toggle){min-width:12rem;width:100%}.fx-bar .fx-primary-btn{margin-left:0}
   .fx-shell{display:block;min-height:auto}.fx-rail{display:none}
-  main.fx-stage{padding:1rem;gap:2rem;overflow-x:hidden}
+  main.fx-stage{padding:1rem;gap:2rem;overflow-x:auto}
   .fx-page{max-width:100%;overflow:visible}
   .fx-canvas{max-width:none;height:var(--ph);transform-origin:top left}
   .fx-drawer{top:0;width:100%;max-width:none}.fx-dialog{width:calc(100vw - 1rem);max-height:92vh;padding:1.25rem}
@@ -1334,12 +1347,12 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     <button type="button" id="fx-zoom-in" aria-label="Zoom in">+</button>
     <button type="button" id="fx-fit">Fit width</button>
   </div>` : ""}
-  ${(menuFeatures.pdfView || menuFeatures.reflow || menuFeatures.contrast) ? `<div class="fx-group">
+  ${menuFeatures.pdfView || menuFeatures.reflow || menuFeatures.contrast ? `<div class="fx-group">
     ${menuFeatures.pdfView ? `<button type="button" id="fx-view-fidelity" aria-pressed="${initialView === "fidelity"}">PDF view</button>` : ""}
     ${menuFeatures.reflow ? `<button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow</button>` : ""}
     ${menuFeatures.contrast ? `<button type="button" id="fx-contrast" aria-pressed="false">Contrast</button>` : ""}
   </div>` : ""}
-  ${(menuFeatures.outline || menuFeatures.accessibility || menuFeatures.summary || menuFeatures.explore || menuFeatures.readAloud || menuFeatures.print || menuFeatures.improve || (hasForms && menuFeatures.forms) || (translate && menuFeatures.translate) || menuFeatures.download || menuFeatures.report || (options.airaUrl && menuFeatures.liveHelp) || (options.originalUrl && menuFeatures.originalLink)) ? `<div class="fx-group">
+  ${menuFeatures.outline || menuFeatures.accessibility || menuFeatures.summary || menuFeatures.explore || menuFeatures.readAloud || menuFeatures.print || menuFeatures.improve || hasForms && menuFeatures.forms || translate && menuFeatures.translate || menuFeatures.download || menuFeatures.report || options.airaUrl && menuFeatures.liveHelp || options.originalUrl && menuFeatures.originalLink ? `<div class="fx-group">
     ${menuFeatures.outline ? `<button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>` : ""}
     ${menuFeatures.accessibility ? `<button type="button" id="fx-a11y-open" aria-haspopup="dialog">Accessibility</button>` : ""}
     ${menuFeatures.summary ? `<button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>` : ""}
@@ -1565,10 +1578,26 @@ ${backendDataScripts}
   if(sel) sel.onchange=function(){ goto(Number(sel.value)); };
   onClick('fx-zoom-in',function(){ setZoom(zoom+.15); });
   onClick('fx-zoom-out',function(){ setZoom(zoom-.15); });
+  function stageAvailableSize(){
+    var stage=document.querySelector('.fx-stage');
+    var bar=document.querySelector('header.fx-bar');
+    var stageRect=stage?stage.getBoundingClientRect():{width:window.innerWidth,height:window.innerHeight};
+    var barHeight=bar?bar.getBoundingClientRect().height:0;
+    var style=stage?getComputedStyle(stage):null;
+    var padX=style?(parseFloat(style.paddingLeft)||0)+(parseFloat(style.paddingRight)||0):0;
+    var padY=style?(parseFloat(style.paddingTop)||0)+(parseFloat(style.paddingBottom)||0):0;
+    return {
+      width:Math.max(280,stageRect.width-padX-8),
+      height:Math.max(280,window.innerHeight-barHeight-padY-8)
+    };
+  }
   function fitWidth(){
     var p=pages[current-1]; if(!p) return;
-    var w=parseFloat(getComputedStyle(p).getPropertyValue('--pw'))||612;
-    var avail=document.querySelector('.fx-stage').clientWidth-48; setZoom(avail/w); }
+    var cs=getComputedStyle(p);
+    var w=parseFloat(cs.getPropertyValue('--pw'))||612;
+    var h=parseFloat(cs.getPropertyValue('--ph'))||792;
+    var avail=stageAvailableSize();
+    setZoom(Math.min(avail.width/w,avail.height/h)); }
   onClick('fx-fit',fitWidth);
   onClick('fx-print',function(){ printOriginalPdf(); });
   function setOriginal(on){ var t=document.getElementById('fx-pdf-toggle');
@@ -1844,7 +1873,8 @@ ${backendDataScripts}
         for(var n=1;n<=doc.numPages;n++)(function(n){
           chain=chain.then(function(){ return doc.getPage(n); }).then(function(page){
             var base=page.getViewport({scale:1});
-            var scale=Math.min(2,(Math.min(1100,(host?host.clientWidth:900)||900))/base.width);
+            var avail=stageAvailableSize();
+            var scale=Math.min(2,avail.width/base.width,avail.height/base.height);
             if(doc.isPureXfa){
               return page.getXfa().then(function(tree){
                 var wrap=document.createElement('div'); wrap.className='fx-op-page'; wrap.dataset.originalPage=String(n);
@@ -2779,8 +2809,7 @@ ${backendDataScripts}
     }
   });
 
-  if(window.matchMedia&&window.matchMedia('(max-width:900px)').matches) fitWidth();
-  else setZoom(1);
+  fitWidth();
   goto(1);
 })();
 <\/script>
@@ -2788,7 +2817,3640 @@ ${backendDataScripts}
 </html>`;
   }
 
-  // packages/core/src/brain.js
+  // src/large.js
+  function getPdfjs() {
+    const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
+    if (!lib) {
+      throw new Error(
+        "[codbdocs] pdfjsLib not found. Load PDF.js before calling processLargeDocument()."
+      );
+    }
+    return lib;
+  }
+  async function openStreaming(source, options = {}) {
+    const pdfjsLib2 = getPdfjs();
+    const { rangeChunkSize = 262144, password } = options;
+    let params;
+    let objectUrl = null;
+    if (typeof source === "string") {
+      params = { url: source };
+    } else if (source && typeof Blob !== "undefined" && source instanceof Blob) {
+      objectUrl = URL.createObjectURL(source);
+      params = { url: objectUrl };
+    } else if (source instanceof ArrayBuffer) {
+      params = { data: source };
+    } else if (source instanceof Uint8Array) {
+      params = { data: source };
+    } else if (source && typeof source.arrayBuffer === "function") {
+      params = { data: await source.arrayBuffer() };
+    } else {
+      throw new Error("[codbdocs] Unsupported source for processLargeDocument().");
+    }
+    const task = pdfjsLib2.getDocument({
+      ...params,
+      password,
+      rangeChunkSize,
+      disableAutoFetch: true,
+      disableStream: false,
+      // Keep PDF.js internal caches small on huge files.
+      maxImageSize: options.maxImageSize ?? 16777216
+    });
+    const pdf = await task.promise;
+    const release = async () => {
+      try {
+        await pdf.cleanup();
+        await pdf.destroy();
+      } catch {
+      }
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    return { pdf, release };
+  }
+  async function extractPage(pdf, pageNumber, opts) {
+    const page = await pdf.getPage(pageNumber);
+    try {
+      const viewport = page.getViewport({ scale: 1 });
+      const textContent = await page.getTextContent();
+      const runs = [];
+      let text = "";
+      for (const item of textContent.items) {
+        if (!item.str) continue;
+        const t = item.transform || [1, 0, 0, 1, 0, 0];
+        if (opts.layout) {
+          runs.push({
+            text: item.str,
+            x: Math.round(t[4] * 100) / 100,
+            y: Math.round((viewport.height - t[5]) * 100) / 100,
+            width: Math.round((item.width || 0) * 100) / 100,
+            height: Math.round((item.height || 0) * 100) / 100,
+            fontName: item.fontName,
+            fontSize: Math.round(Math.hypot(t[2], t[3]) * 100) / 100,
+            dir: item.dir
+          });
+        }
+        text += item.str;
+        text += item.hasEOL ? "\n" : " ";
+      }
+      let image = null;
+      if (opts.rasterize) {
+        image = await rasterizePage(page, opts.rasterScale, opts.rasterType, opts.rasterQuality);
+      }
+      let annotations = null;
+      if (opts.annotations) {
+        const list = await page.getAnnotations({ intent: "display" });
+        annotations = list.map((a) => ({
+          subtype: a.subtype,
+          rect: a.rect,
+          url: a.url || a.unsafeUrl || null,
+          contents: a.contents || null,
+          fieldName: a.fieldName || null
+        }));
+      }
+      return {
+        page: pageNumber,
+        width: Math.round(viewport.width * 100) / 100,
+        height: Math.round(viewport.height * 100) / 100,
+        rotation: viewport.rotation,
+        text: text.replace(/[ \t]+\n/g, "\n").trim(),
+        runs: opts.layout ? runs : void 0,
+        annotations: annotations || void 0,
+        image
+      };
+    } finally {
+      try {
+        page.cleanup();
+      } catch {
+      }
+    }
+  }
+  async function rasterizePage(page, scale = 1.5, type = "image/png", quality = 0.85) {
+    const viewport = page.getViewport({ scale });
+    const width = Math.max(1, Math.floor(viewport.width));
+    const height = Math.max(1, Math.floor(viewport.height));
+    const canvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(width, height) : Object.assign(document.createElement("canvas"), { width, height });
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    let bytes;
+    if (typeof canvas.convertToBlob === "function") {
+      const blob = await canvas.convertToBlob({ type, quality });
+      bytes = new Uint8Array(await blob.arrayBuffer());
+    } else {
+      const dataUrl = canvas.toDataURL(type, quality);
+      bytes = base64ToBytes(dataUrl.slice(dataUrl.indexOf(",") + 1));
+    }
+    canvas.width = 0;
+    canvas.height = 0;
+    return { type, width, height, bytes };
+  }
+  function chunkPageText(text, pageNumber, size, overlap) {
+    const chunks = [];
+    if (!text) return chunks;
+    const words = text.split(/\s+/).filter(Boolean);
+    const step = Math.max(1, size - overlap);
+    for (let i = 0; i < words.length; i += step) {
+      const slice = words.slice(i, i + size);
+      if (!slice.length) break;
+      chunks.push({
+        id: `p${pageNumber}-c${chunks.length + 1}`,
+        page: pageNumber,
+        text: slice.join(" "),
+        words: slice.length
+      });
+      if (i + size >= words.length) break;
+    }
+    return chunks;
+  }
+  async function processLargeDocument(source, options = {}) {
+    const {
+      batchSize = 2,
+      layout = true,
+      annotations = false,
+      rasterize = false,
+      rasterScale = 1.5,
+      rasterType = "image/png",
+      rasterQuality = 0.85,
+      chunkSize = 220,
+      chunkOverlap = 40,
+      keepPages = true,
+      keepImages = false,
+      onPage,
+      onProgress,
+      signal
+    } = options;
+    const started = Date.now();
+    const { pdf, release } = await openStreaming(source, options);
+    try {
+      const total = pdf.numPages;
+      const numbers = resolvePageList(options.pages, total);
+      let metadata = {};
+      try {
+        const meta = await pdf.getMetadata();
+        metadata = { ...meta.info || {} };
+      } catch {
+      }
+      let outline = [];
+      try {
+        outline = flattenOutline(await pdf.getOutline());
+      } catch {
+      }
+      const pages = [];
+      const chunks = [];
+      const images = [];
+      let characters = 0;
+      let words = 0;
+      let emptyPages = 0;
+      const opts = {
+        layout,
+        annotations,
+        rasterize,
+        rasterScale,
+        rasterType,
+        rasterQuality
+      };
+      for (let i = 0; i < numbers.length; i += batchSize) {
+        if (signal?.aborted) throw new Error("[codbdocs] aborted");
+        const batch = numbers.slice(i, i + batchSize);
+        const results = await Promise.all(batch.map((n) => extractPage(pdf, n, opts)));
+        for (const result of results) {
+          characters += result.text.length;
+          words += result.text ? result.text.split(/\s+/).filter(Boolean).length : 0;
+          if (!result.text) emptyPages += 1;
+          const pageChunks = chunkPageText(result.text, result.page, chunkSize, chunkOverlap);
+          chunks.push(...pageChunks);
+          if (result.image && keepImages) {
+            images.push({ page: result.page, ...result.image });
+          }
+          if (onPage) await onPage({ ...result, chunks: pageChunks });
+          if (keepPages) {
+            const { image, ...rest } = result;
+            pages.push(rest);
+          }
+          result.image = null;
+        }
+        try {
+          await pdf.cleanup();
+        } catch {
+        }
+        onProgress?.({
+          page: Math.min(i + batchSize, numbers.length),
+          total: numbers.length,
+          percent: Math.round(Math.min(i + batchSize, numbers.length) / numbers.length * 100)
+        });
+      }
+      return {
+        ok: true,
+        mode: "streaming",
+        pageCount: total,
+        processedPages: numbers.length,
+        metadata,
+        outline,
+        pages: keepPages ? pages : [],
+        chunks,
+        images: keepImages ? images : [],
+        metrics: {
+          characters,
+          words,
+          emptyPages,
+          chunkCount: chunks.length,
+          durationMs: Date.now() - started
+        }
+      };
+    } finally {
+      await release();
+    }
+  }
+  function resolvePageList(pages, total) {
+    if (!pages) return Array.from({ length: total }, (_, i) => i + 1);
+    if (Array.isArray(pages) && pages.length === 2 && pages.every((n) => typeof n === "number")) {
+      const [from, to] = pages;
+      const out = [];
+      for (let n = Math.max(1, from); n <= Math.min(total, to); n += 1) out.push(n);
+      return out;
+    }
+    if (Array.isArray(pages)) return pages.filter((n) => n >= 1 && n <= total);
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  function flattenOutline(items, depth = 0, out = []) {
+    for (const item of items || []) {
+      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
+      if (item.items?.length) flattenOutline(item.items, depth + 1, out);
+    }
+    return out;
+  }
+  var CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let i = 0; i < 256; i += 1) {
+      let c = i;
+      for (let k = 0; k < 8; k += 1) c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+      table[i] = c >>> 0;
+    }
+    return table;
+  })();
+  function crc32(bytes) {
+    let c = 4294967295;
+    for (let i = 0; i < bytes.length; i += 1) c = CRC_TABLE[(c ^ bytes[i]) & 255] ^ c >>> 8;
+    return (c ^ 4294967295) >>> 0;
+  }
+  function toBytes(value) {
+    if (value instanceof Uint8Array) return value;
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    return new TextEncoder().encode(String(value));
+  }
+  function createZip(entries) {
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    const encoder = new TextEncoder();
+    for (const entry of entries) {
+      const nameBytes = encoder.encode(entry.name);
+      const data = toBytes(entry.data);
+      const crc = crc32(data);
+      const local = new Uint8Array(30 + nameBytes.length);
+      const lv = new DataView(local.buffer);
+      lv.setUint32(0, 67324752, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 2048, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, data.length, true);
+      lv.setUint32(22, data.length, true);
+      lv.setUint16(26, nameBytes.length, true);
+      local.set(nameBytes, 30);
+      chunks.push(local, data);
+      const dir = new Uint8Array(46 + nameBytes.length);
+      const dv = new DataView(dir.buffer);
+      dv.setUint32(0, 33639248, true);
+      dv.setUint16(4, 20, true);
+      dv.setUint16(6, 20, true);
+      dv.setUint16(8, 2048, true);
+      dv.setUint16(10, 0, true);
+      dv.setUint32(16, crc, true);
+      dv.setUint32(20, data.length, true);
+      dv.setUint32(24, data.length, true);
+      dv.setUint16(28, nameBytes.length, true);
+      dv.setUint32(42, offset, true);
+      dir.set(nameBytes, 46);
+      central.push(dir);
+      offset += local.length + data.length;
+    }
+    const centralSize = central.reduce((sum, c) => sum + c.length, 0);
+    const end = new Uint8Array(22);
+    const ev = new DataView(end.buffer);
+    ev.setUint32(0, 101010256, true);
+    ev.setUint16(8, central.length, true);
+    ev.setUint16(10, central.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, offset, true);
+    return new Blob([...chunks, ...central, end], { type: "application/zip" });
+  }
+  async function packageDocument(source, options = {}) {
+    const {
+      name = "document.pdf",
+      html = null,
+      includeOriginal = true,
+      includePageImages = true,
+      rasterScale = 1.5,
+      rasterType = "image/png",
+      onProgress
+    } = options;
+    const entries = [];
+    const pageFiles = [];
+    const result = await processLargeDocument(source, {
+      ...options,
+      rasterize: includePageImages,
+      rasterScale,
+      rasterType,
+      keepImages: false,
+      keepPages: true,
+      onProgress,
+      onPage: async (page) => {
+        if (page.image) {
+          const ext = page.image.type.split("/")[1].replace("jpeg", "jpg");
+          const file = `pages/page-${String(page.page).padStart(4, "0")}.${ext}`;
+          entries.push({ name: file, data: page.image.bytes });
+          pageFiles.push(file);
+        }
+        await options.onPage?.(page);
+      }
+    });
+    const transcript = result.pages.map((p) => `--- Page ${p.page} ---
+${p.text}`).join("\n\n");
+    const data = {
+      document: { name, pageCount: result.pageCount, metadata: result.metadata },
+      metrics: result.metrics,
+      outline: result.outline,
+      pages: result.pages,
+      chunks: result.chunks
+    };
+    if (html) entries.push({ name: "index.html", data: html });
+    entries.push({ name: "transcript.txt", data: transcript });
+    entries.push({ name: "rag.json", data: JSON.stringify({ chunks: result.chunks }, null, 2) });
+    entries.push({ name: "outline.json", data: JSON.stringify(result.outline, null, 2) });
+    entries.push({ name: "data.json", data: JSON.stringify(data, null, 2) });
+    if (includeOriginal) {
+      const bytes = await sourceBytes(source);
+      if (bytes) entries.push({ name: "original.pdf", data: bytes });
+    }
+    const manifest = {
+      generator: "codbdocs/large",
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      document: name,
+      pageCount: result.pageCount,
+      files: entries.map((e) => e.name),
+      pageImages: pageFiles,
+      metrics: result.metrics
+    };
+    entries.push({ name: "manifest.json", data: JSON.stringify(manifest, null, 2) });
+    return { blob: createZip(entries), manifest, data };
+  }
+  async function sourceBytes(source) {
+    if (source instanceof Uint8Array) return source;
+    if (source instanceof ArrayBuffer) return new Uint8Array(source);
+    if (source && typeof source.arrayBuffer === "function") {
+      return new Uint8Array(await source.arrayBuffer());
+    }
+    if (typeof source === "string") {
+      try {
+        const res = await fetch(source);
+        return new Uint8Array(await res.arrayBuffer());
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function shouldStream(input, { maxBytes = 25 * 1024 * 1024, maxPages = 60 } = {}) {
+    const size = typeof input === "number" ? input : input?.size ?? 0;
+    const pages = typeof input === "object" ? input?.pageCount ?? 0 : 0;
+    return size > maxBytes || pages > maxPages;
+  }
+
+  // src/exporters.js
+  function mdEscape(text) {
+    return String(text || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/^([#>*+\-]|\d+\.)\s*/gm, "\\$&");
+  }
+  function buildRAGContext(ir, contentGraph) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page) return null;
+      const blocks = [];
+      const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean);
+      for (const obj of objects) {
+        if (obj.type === "text" && obj.semantic?.text) {
+          blocks.push({
+            type: obj.semantic.role || "text",
+            text: obj.semantic.text,
+            bbox: obj.bbox || null,
+            fontSize: obj.raw?.fontSize || null,
+            font: obj.raw?.font || null,
+            color: obj.raw?.color || null
+          });
+        } else if (obj.type === "image") {
+          blocks.push({
+            type: "image",
+            alt: obj.accessibility?.alt || obj.semantic?.caption || "",
+            caption: obj.semantic?.caption || "",
+            bbox: obj.bbox || null,
+            width: obj.raw?.width || null,
+            height: obj.raw?.height || null
+          });
+        } else if (obj.type === "link") {
+          blocks.push({
+            type: "link",
+            text: obj.semantic?.text || "",
+            url: obj.raw?.url || null,
+            dest: obj.raw?.dest || null,
+            bbox: obj.bbox || null
+          });
+        }
+      }
+      const text = objects.filter((o) => o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
+      const pageEntities = contentGraph ? (contentGraph.pages || []).find((pg) => pg.page === page.num)?.entities || [] : [];
+      return {
+        page: page.num,
+        size: { width: page.width, height: page.height },
+        text,
+        summary: summarizeText(text),
+        blocks,
+        entities: pageEntities,
+        accessibility: {
+          hasTaggedStructure: Boolean(ir.structure?.[pageId]),
+          readingOrderItems: Array.isArray(page.readingOrder) ? page.readingOrder.length : 0,
+          language: page.language || ir.document.metadata?.language || null,
+          textQuality: page.textQuality || null
+        },
+        fidelity: {
+          hasRaster: Boolean(page.background),
+          width: page.width,
+          height: page.height,
+          rotation: page.rotation || 0
+        }
+      };
+    }).filter(Boolean);
+    const entityTypes = {};
+    const blockTypes = {};
+    const content = contentGraph || {};
+    (content.allBlocks || []).forEach((b) => {
+      blockTypes[b.type] = (blockTypes[b.type] || 0) + 1;
+    });
+    (content.allEntities || []).forEach((e) => {
+      entityTypes[e.type] = (entityTypes[e.type] || 0) + 1;
+    });
+    return {
+      format: "codbdocs-rag-v2",
+      aiContract: {
+        version: "1.0",
+        purpose: "Grounded document search, summaries, metadata extraction, citations, and accessible descriptions.",
+        recommendedFlow: [
+          "Use pages and chunks as retrievable passages.",
+          "Use metadata, entities, tables, relationships, and accessibility fields to enrich prompts.",
+          "Return page citations using page or pageNumber.",
+          "Use fidelity dimensions and bounding boxes when highlighting source evidence."
+        ],
+        extensionPoints: {
+          search: ["fullText", "pages[].text", "pages[].blocks", "chunks"],
+          summaries: ["pages[].summary", "documentSummary", "outline"],
+          metadata: ["metadata", "entityTypes", "pages[].entities"],
+          accessibility: ["accessibility", "pages[].accessibility"]
+        }
+      },
+      source: ir.document.metadata?.title || "PDF document",
+      title: ir.document.metadata?.title || null,
+      author: ir.document.metadata?.author || null,
+      createdAt: ir.document.metadata?.creationDate || ir.document.metadata?.modDate || null,
+      documentType: content.documentType || ir.document.type || null,
+      pageCount: (ir.document.pages || []).length,
+      pages,
+      documentSummary: summarizeText(pages.map((p) => p.text).join(" "), 600),
+      fullText: pages.map((p) => `[Page ${p.page}]
+${p.text}`).join("\n\n"),
+      blockTypes,
+      entityTypes,
+      tables: content.allTables ? content.allTables.map((t) => t.toJSON ? t.toJSON() : t) : [],
+      relationships: content.allRelationships || [],
+      metadata: ir.document.metadata || {},
+      accessibility: {
+        language: ir.document.metadata?.language || null,
+        taggedPages: pages.filter((p) => p.accessibility?.hasTaggedStructure).length,
+        pageCount: pages.length,
+        screenReaderFriendly: pages.some((p) => p.text && p.text.trim())
+      },
+      security: ir.document.security ? summarizeSecurity(ir.document.security) : null,
+      outline: ir.document.navigation?.outline || []
+    };
+  }
+  function summarizeText(text, limit = 320) {
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    if (!clean) return "";
+    if (clean.length <= limit) return clean;
+    const cut = clean.lastIndexOf(".", limit);
+    return clean.slice(0, cut > limit * 0.55 ? cut + 1 : limit).trim() + "...";
+  }
+  function summarizeSecurity(security) {
+    if (!security) return null;
+    const out = {};
+    for (const [k, v] of Object.entries(security)) {
+      if (typeof v === "boolean" || typeof v === "string" || typeof v === "number") {
+        out[k] = v;
+      }
+    }
+    return out;
+  }
+  function flowLines(objects, { lineTolerance = 1 } = {}) {
+    const texts = objects.filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => {
+      const b = o.bbox || [0, 0, 0, 0];
+      return { o, x: b[0], y: b[1], w: b[2], h: b[3] || 0, cy: b[1] + (b[3] || 0) / 2 };
+    });
+    if (!texts.length) return [];
+    const medianH = texts.map((t) => t.h).sort((a, b) => a - b)[Math.floor(texts.length / 2)] || 1;
+    const tol = Math.max(2, medianH * 0.45 * lineTolerance);
+    const lines = [];
+    const sortedByY = [...texts].sort((a, b) => b.cy - a.cy);
+    for (const t of sortedByY) {
+      let placed = null;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        const lineY = line.reduce((s, x) => s + x.cy, 0) / line.length;
+        if (Math.abs(t.cy - lineY) <= tol) {
+          placed = line;
+          break;
+        }
+      }
+      if (placed) placed.push(t);
+      else lines.push([t]);
+    }
+    const lineTexts = lines.map((line) => line.sort((a, b) => a.x - b.x).map((t) => String(t.o.semantic.text).replace(/\s+/g, " ").trim()).filter(Boolean).join(" ").replace(/\s+/g, " ")).filter((t) => t.length);
+    const paragraphs = [];
+    for (const lt of lineTexts) paragraphs.push([lt]);
+    return paragraphs;
+  }
+  function toMarkdown(ir, contentGraph) {
+    const out = [];
+    const title = ir.document.metadata?.title || "Document";
+    const author = ir.document.metadata?.author || "";
+    out.push(`# ${title}`);
+    if (author) out.push(`
+_By ${author}_`);
+    out.push("");
+    for (const pageId of ir.document.pages || []) {
+      const page = ir.pages[pageId];
+      if (!page) continue;
+      const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean).sort(byReadingOrder);
+      let inTable = false;
+      let pending = [];
+      const flush = () => {
+        if (pending.length) {
+          for (const par of flowLines(pending)) {
+            out.push(mdEscape(par.join(" ")));
+            out.push("");
+          }
+          pending = [];
+        }
+      };
+      for (const obj of objects) {
+        const role = obj.semantic?.role || "text";
+        if (obj.type === "text" && obj.semantic?.text) {
+          const text = String(obj.semantic.text).replace(/\s+/g, " ").trim();
+          if (!text) continue;
+          switch (role) {
+            case "heading": {
+              flush();
+              const level = Math.min(6, Math.max(2, obj.semantic.level || 2));
+              out.push(`${"#".repeat(level)} ${mdEscape(text)}`);
+              out.push("");
+              break;
+            }
+            case "list":
+            // fall through: handled as plain text since list grouping is in content graph
+            default:
+              pending.push(obj);
+              break;
+          }
+        } else if (obj.type === "image") {
+          flush();
+          const alt = obj.accessibility?.alt || obj.semantic?.caption || "Image";
+          out.push(`![${mdEscape(alt)}](${obj.raw?.src ? "" : ""})`);
+          if (obj.semantic?.caption) {
+            out.push(`*${mdEscape(obj.semantic.caption)}*`);
+          }
+          out.push("");
+        } else if (obj.type === "link") {
+          flush();
+          const text = obj.semantic?.text || obj.raw?.url || "link";
+          const href = obj.raw?.url || obj.raw?.href || "#";
+          out.push(`[${mdEscape(text)}](${href})`);
+          out.push("");
+        } else if (role === "separator") {
+          flush();
+          out.push("---");
+          out.push("");
+        }
+      }
+      flush();
+    }
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  }
+  function toReflowedText(ir) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page) return null;
+      const objs = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && (o.type === "text" || o.type === "link") && (o.semantic?.text || o.raw?.url));
+      const paragraphs = flowLines(objs).map((par) => par.join(" "));
+      return { page: page.num, text: paragraphs.join("\n\n") };
+    }).filter(Boolean);
+    return {
+      pageCount: pages.length,
+      pages,
+      fullText: pages.map((p) => `--- page ${p.page} ---
+${p.text}`).join("\n\n")
+    };
+  }
+  function toFullJSON(ir, contentGraph) {
+    const pages = (ir.document.pages || []).map((pageId) => {
+      const page = ir.pages[pageId];
+      if (!page) return null;
+      return {
+        id: pageId,
+        page: page.num,
+        size: { width: page.width, height: page.height },
+        rotation: page.rotation || 0,
+        mediaBox: page.mediaBox || null,
+        cropBox: page.cropBox || null,
+        labels: page.labels || null,
+        background: page.background || null,
+        textObjects: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text").map((o) => ({
+          id: o.id,
+          text: o.semantic?.text || "",
+          role: o.semantic?.role || "text",
+          level: o.semantic?.level || null,
+          bbox: o.bbox || null,
+          font: o.raw?.font || null,
+          fontSize: o.raw?.fontSize || null,
+          color: o.raw?.color || null,
+          transform: o.raw?.transform || null
+        })),
+        images: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "image").map((o) => ({
+          id: o.id,
+          bbox: o.bbox || null,
+          width: o.raw?.width || null,
+          height: o.raw?.height || null,
+          alt: o.accessibility?.alt || "",
+          caption: o.semantic?.caption || "",
+          src: o.raw?.src || null
+        })),
+        links: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "link").map((o) => ({
+          id: o.id,
+          bbox: o.bbox || null,
+          text: o.semantic?.text || "",
+          url: o.raw?.url || null,
+          dest: o.raw?.dest || null
+        })),
+        vectors: (page.vectors || []).map((id) => ir.vectors[id]).filter(Boolean),
+        annotations: page.annotations || [],
+        markedContent: page.markedContent || [],
+        artifacts: page.artifacts || []
+      };
+    }).filter(Boolean);
+    const payload = {
+      format: "codbdocs-full-json",
+      version: ir.version || "1.0",
+      document: {
+        id: ir.document.id || null,
+        title: ir.document.metadata?.title || null,
+        author: ir.document.metadata?.author || null,
+        type: contentGraph?.documentType || ir.document.type || null,
+        metadata: ir.document.metadata || {},
+        security: ir.document.security || {},
+        outline: ir.document.navigation?.outline || [],
+        labels: ir.document.navigation?.labels || []
+      },
+      pageCount: pages.length,
+      pages
+    };
+    if (contentGraph) {
+      payload.content = {
+        documentType: contentGraph.documentType || null,
+        blocks: contentGraph.allBlocks ? contentGraph.allBlocks.map((b) => b.toJSON ? b.toJSON() : b) : [],
+        entities: contentGraph.allEntities || [],
+        tables: contentGraph.allTables ? contentGraph.allTables.map((t) => t.toJSON ? t.toJSON() : t) : [],
+        relationships: contentGraph.allRelationships || [],
+        summary: contentGraph.getSummary ? contentGraph.getSummary() : null
+      };
+    }
+    return payload;
+  }
+  function byReadingOrder(a, b) {
+    const ay = a.bbox?.[1] || 0;
+    const by = b.bbox?.[1] || 0;
+    if (Math.abs(ay - by) > 10) return by - ay;
+    return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
+  }
+
+  // src/viewer.js
+  function generateViewerChrome(ragPayload) {
+    const outline = ragPayload && ragPayload.outline || [];
+    return {
+      toolbar: viewerToolbarHTML(),
+      sidebar: viewerSidebarHTML(outline),
+      script: viewerScript(),
+      styles: viewerStyles()
+    };
+  }
+  function viewerToolbarHTML() {
+    return `
+  <div class="codbdocs-toolbar" role="group" aria-label="Document viewer controls">
+    <div class="codbdocs-searchbox">
+      <input type="search" id="codbdocs-search-input" aria-label="Search this document"
+        placeholder="Search document\u2026" autocomplete="off">
+      <span id="codbdocs-search-count" class="codbdocs-search-count" role="status" aria-live="polite"></span>
+    </div>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-view-pdf" data-codbdocs-view="pdf" aria-pressed="true">PDF</button>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-view-text" data-codbdocs-view="text" aria-pressed="false">Text</button>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-view-both" data-codbdocs-view="both" aria-pressed="false">Both</button>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-btn" id="codbdocs-page-prev" aria-label="Previous page">\u2039</button>
+    <span id="codbdocs-page-label" class="codbdocs-page-label" aria-live="polite">Page 1 / 1</span>
+    <button type="button" class="codbdocs-btn" id="codbdocs-page-next" aria-label="Next page">\u203A</button>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-out" aria-label="Zoom out">\u2212</button>
+    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-fit" aria-label="Fit to width">Fit</button>
+    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-in" aria-label="Zoom in">+</button>
+    <div class="codbdocs-sep" aria-hidden="true"></div>
+    <button type="button" class="codbdocs-toggle" id="codbdocs-contrast" aria-pressed="false">High contrast</button>
+    <button type="button" class="codbdocs-btn" id="codbdocs-outline-toggle" aria-expanded="true" aria-controls="codbdocs-outline">Outline</button>
+    <button type="button" class="codbdocs-btn codbdocs-return-btn" id="codbdocs-return-referrer">Return</button>
+  </div>
+  `;
+  }
+  function viewerSidebarHTML(outline) {
+    const lis = renderOutlineList(outline);
+    return `
+  <aside id="codbdocs-outline" class="codbdocs-outline" aria-label="Document outline">
+    <section class="codbdocs-search-results-wrap" aria-label="Search results">
+      <h2 class="codbdocs-panel-title">Search Results</h2>
+      <div id="codbdocs-search-results" class="codbdocs-search-results" role="list"></div>
+    </section>
+    <section class="codbdocs-outline-wrap" aria-label="Outline">
+      <h2 class="codbdocs-panel-title">Outline</h2>
+    <div class="codbdocs-outline-inner">
+      ${lis || '<p class="codbdocs-outline-empty">No outline in this document.</p>'}
+    </div>
+    </section>
+  </aside>
+  `;
+  }
+  function renderOutlineList(nodes, depth) {
+    if (!Array.isArray(nodes) || nodes.length === 0) return "";
+    const d = depth || 0;
+    let html = '<ul class="codbdocs-outline-list">';
+    for (const node of nodes) {
+      const label = escapeHTML(node.title || "Untitled");
+      const page = node.page || node.pageNum || 0;
+      const dest = encodeURIComponent(node.title || "");
+      html += `<li class="codbdocs-outline-item" style="padding-left:${d * 14}px"><a href="#codbdocs-search" class="codbdocs-outline-link" data-outline-dest="${dest}"
+         data-outline-page="${page}">${label}</a></li>`;
+      if (node.items && node.items.length) html += renderOutlineList(node.items, d + 1);
+    }
+    html += "</ul>";
+    return html;
+  }
+  function viewerStyles() {
+    return `
+  <style id="codbdocs-viewer-styles">
+    body { max-width: none; margin: 0; padding: 20px; }
+    #codbdocs-viewer { display: flex; align-items: flex-start; gap: 16px; max-width: 1200px; margin: 0 auto; padding: 0 12px 40px; }
+    #codbdocs-main { flex: 1 1 auto; min-width: 0; overflow: auto; }
+    .pdf-page { width: fit-content; max-width: none; padding: 0; overflow: hidden; }
+    .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
+    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; }
+    .codbdocs-sidebar { width: 240px; flex: 0 0 240px; }
+    .codbdocs-outline { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); max-height: 70vh; overflow: auto; position: sticky; top: 12px; }
+    .codbdocs-outline-list { list-style: none; margin: 0; padding: 0; }
+    .codbdocs-outline-item { border-bottom: 1px solid #f0f0f0; }
+    .codbdocs-outline-link { display: block; padding: 5px 6px; color: #334; text-decoration: none; font-size: 13px; border-radius: 4px; }
+    .codbdocs-outline-link:hover, .codbdocs-outline-link.is-active { background: #eef1ff; color: #1c2b8a; }
+    .codbdocs-outline-empty { color: #888; font-size: 13px; padding: 6px; margin: 0; }
+    .codbdocs-panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #667; margin: 2px 6px 8px; }
+    .codbdocs-search-results-wrap { border-bottom: 1px solid #eee; margin-bottom: 10px; padding-bottom: 10px; }
+    .codbdocs-search-result { display: block; width: 100%; text-align: left; border: 0; border-radius: 6px; background: transparent; padding: 7px 8px; margin: 2px 0; color: #334; cursor: pointer; font-size: 12px; }
+    .codbdocs-search-result:hover, .codbdocs-search-result.is-active { background: #fff4cc; color: #222; }
+    .codbdocs-search-result-page { display: block; font-weight: 700; margin-bottom: 2px; }
+    .codbdocs-search-result-snippet { display: block; color: #667; line-height: 1.35; }
+    .codbdocs-toolbar { display: flex; align-items: center; gap: 6px; background: #1f2430; color: #fff; padding: 8px 12px; border-radius: 8px; margin: 12px auto; flex-wrap: wrap; justify-content: center; position: sticky; top: 0; z-index: 40; box-shadow: 0 2px 6px rgba(0,0,0,.25); max-width: 1180px; }
+    .codbdocs-toolbar .codbdocs-toggle, .codbdocs-toolbar .codbdocs-btn { background: #2b3140; color: #cfd6e6; border: 1px solid #40475a; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+    .codbdocs-toolbar .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
+    .codbdocs-toolbar .codbdocs-btn:hover, .codbdocs-toolbar .codbdocs-toggle:hover { background: #394159; }
+    .codbdocs-return-btn { margin-left: auto; }
+    .codbdocs-searchbox { display: flex; align-items: center; gap: 8px; }
+    .codbdocs-searchbox input { padding: 6px 10px; border: 1px solid #40475a; border-radius: 6px; background: #0d1117; color: #eee; font-size: 13px; width: 220px; }
+    .codbdocs-searchbox input:focus { outline: 2px solid #4361ee; }
+    .codbdocs-search-count { font-size: 12px; color: #9aa4bd; min-width: 28px; text-align: center; white-space: nowrap; }
+    .codbdocs-page-label { color: #cfd6e6; font-size: 13px; min-width: 90px; text-align: center; }
+    .codbdocs-sep { width: 1px; height: 22px; background: #3a4155; margin: 0 2px; }
+    .codbdocs-viewer-hint { color: #9aa4bd; font-size: 11px; text-align: center; margin: 8px auto 0; max-width: 1180px; }
+
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
+    body[data-codbdocs-view="text"] .pdf-embedded-image { display: none; }
+    body[data-codbdocs-view="pdf"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
+    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
+    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text.sr-highlight { color: #000 !important; }
+
+    .pdf-text.sr-highlight { background: rgba(255, 213, 79, 0.9); color: #000; border-radius: 2px; }
+    .pdf-text.sr-highlight.is-current { background: #ff8c1a; color: #000; }
+    .codbdocs-zoom-wrap { position: relative; margin: 20px auto; transform-origin: top center; transition: width .15s ease, height .15s ease; }
+
+    body[data-codbdocs-contrast="high"] { background: #000; color: #fff; }
+    body[data-codbdocs-contrast="high"] .pdf-page { box-shadow: 0 0 0 1px #777; }
+    body[data-codbdocs-contrast="high"] .codbdocs-outline { border-color: #555; }
+    :focus-visible { outline: 3px solid #4361ee; outline-offset: 1px; }
+    .skip-link { position: absolute; left: -999px; top: 0; background: #4361ee; color: #fff; padding: 8px 12px; border-radius: 0 0 6px 0; z-index: 100; }
+    .skip-link:focus { left: 0; }
+    @media (max-width: 900px) { #codbdocs-viewer { flex-direction: column; } .codbdocs-sidebar { width: 100%; flex: 1 1 auto; } .codbdocs-outline { position: static; max-height: none; } }
+  </style>
+  `;
+  }
+  function viewerScript() {
+    return `
+  <script>
+  (function () {
+    var $ = function (s, r) { return (r || document).querySelector(s); };
+    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+    var body = document.body;
+    var pages = $$('.pdf-page');
+    var currentPage = 1;
+    var zoom = 1;
+    var fitMode = true;
+    var rag = {};
+    var ragEl = $('#codbdocs-rag');
+    if (ragEl) {
+      try { rag = JSON.parse(ragEl.textContent || '{}') || {}; } catch (e) { rag = {}; }
+    }
+    var pageTextIndex = (rag.pages || []).map(function (p) {
+      return { page: p.page || 1, text: normalize(p.text || ''), raw: p.text || '' };
+    });
+    if (!pageTextIndex.length) {
+      pageTextIndex = pages.map(function (pg, i) {
+        var text = $$('.pdf-text', pg).map(function (el) { return el.textContent || ''; }).join(' ');
+        return { page: i + 1, text: normalize(text), raw: text };
+      });
+    }
+
+    // Wrap each page so zoom scales raster + text together and keeps alignment.
+    pages.forEach(function (pg) {
+      var wrap = document.createElement('div');
+      wrap.className = 'codbdocs-zoom-wrap';
+      pg.parentNode.insertBefore(wrap, pg);
+      wrap.appendChild(pg);
+      pg.style.margin = '0 auto';
+    });
+    var wraps = $$('.codbdocs-zoom-wrap');
+    function applyZoom() {
+      wraps.forEach(function (w) {
+        var pg = $('.pdf-page', w);
+        if (!pg) return;
+        w.style.width = (pg.offsetWidth * zoom) + 'px';
+        w.style.height = (pg.offsetHeight * zoom) + 'px';
+        pg.style.transform = 'scale(' + zoom + ')';
+        pg.style.transformOrigin = 'top center';
+      });
+    }
+    function fitWidth() {
+      var main = $('#codbdocs-main') || document.body;
+      var first = pages[0];
+      if (!main || !first || !first.offsetWidth) return;
+      var available = Math.max(280, main.clientWidth - 24);
+      zoom = Math.max(0.35, Math.min(2, +(available / first.offsetWidth).toFixed(2)));
+      fitMode = true;
+      applyZoom();
+    }
+
+    function updatePageLabel(n) {
+      var total = pages.length;
+      currentPage = Math.max(1, Math.min(total || 1, n || 1));
+      var label = $('#codbdocs-page-label');
+      if (label) label.textContent = 'Page ' + currentPage + ' / ' + (total || 1);
+    }
+
+    function setView(v) {
+      body.dataset.codbdocsView = v;
+      var states = { pdf: false, text: false, both: false };
+      states[v] = true;
+      ['pdf', 'text', 'both'].forEach(function (k) {
+        var b = $('#codbdocs-view-' + k);
+        if (b) { b.classList.toggle('is-active', states[k]); b.setAttribute('aria-pressed', states[k] ? 'true' : 'false'); }
+      });
+    }
+
+    function gotoPage(n, opts) {
+      opts = opts || {};
+      var total = pages.length;
+      if (!total) return;
+      n = Math.max(1, Math.min(total, n));
+      updatePageLabel(n);
+      var el = pages[n - 1];
+      if (el) {
+        var wrap = el.closest('.codbdocs-zoom-wrap');
+        var target = wrap || el;
+        if (opts.smooth) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else target.scrollIntoView({ block: 'start' });
+      }
+    }
+
+    var prevBtn = $('#codbdocs-page-prev'), nextBtn = $('#codbdocs-page-next');
+    if (prevBtn) prevBtn.addEventListener('click', function () { gotoPage(currentPage - 1, { smooth: true }); });
+    if (nextBtn) nextBtn.addEventListener('click', function () { gotoPage(currentPage + 1, { smooth: true }); });
+
+    var returnBtn = $('#codbdocs-return-referrer');
+    if (returnBtn) returnBtn.addEventListener('click', function () {
+      if (document.referrer) window.location.href = document.referrer;
+      else window.history.back();
+    });
+
+    var zi = $('#codbdocs-zoom-in'), zo = $('#codbdocs-zoom-out'), zf = $('#codbdocs-zoom-fit');
+    if (zi) zi.addEventListener('click', function () { fitMode = false; zoom = Math.min(3, +(zoom + 0.25).toFixed(2)); applyZoom(); });
+    if (zo) zo.addEventListener('click', function () { fitMode = false; zoom = Math.max(0.35, +(zoom - 0.25).toFixed(2)); applyZoom(); });
+    if (zf) zf.addEventListener('click', fitWidth);
+    window.addEventListener('resize', function () { if (fitMode) fitWidth(); });
+
+    $$('#codbdocs-viewer [data-codbdocs-view]').forEach(function (b) {
+      b.addEventListener('click', function () { setView(b.getAttribute('data-codbdocs-view')); });
+    });
+
+    // Toggles (binding after view-mode handlers since the layout is re-generated).
+    var views = { pdf: $('#codbdocs-view-pdf'), text: $('#codbdocs-view-text'), both: $('#codbdocs-view-both') };
+    if (views.pdf) views.pdf.addEventListener('click', function () { setView('pdf'); });
+    if (views.text) views.text.addEventListener('click', function () { setView('text'); });
+    if (views.both) views.both.addEventListener('click', function () { setView('both'); });
+
+    // High contrast
+    var contrastBtn = $('#codbdocs-contrast');
+    if (contrastBtn) contrastBtn.addEventListener('click', function () {
+      var on = body.dataset.codbdocsContrast !== 'high';
+      body.dataset.codbdocsContrast = on ? 'high' : 'normal';
+      contrastBtn.classList.toggle('is-active', on);
+      contrastBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+
+    // Outline toggle
+    var outlineToggle = $('#codbdocs-outline-toggle');
+    var outline = $('#codbdocs-outline');
+    if (outlineToggle && outline) {
+      outlineToggle.addEventListener('click', function () {
+        var open = outline.style.display !== 'none';
+        outline.style.display = open ? 'none' : 'block';
+        outlineToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+      });
+      $$('.codbdocs-outline-link', outline).forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          var page = parseInt(a.getAttribute('data-outline-page'), 10) || 1;
+          gotoPage(page, { smooth: true });
+          $$('.codbdocs-outline-link').forEach(function (x) { x.classList.remove('is-active'); });
+          a.classList.add('is-active');
+        });
+      });
+    }
+
+    if ('IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          var page = parseInt(entry.target.getAttribute('data-pdf-page'), 10);
+          if (page) updatePageLabel(page);
+        });
+      }, { threshold: 0.45 });
+      pages.forEach(function (pg) { observer.observe(pg); });
+    }
+
+    // ---- Offline search over positioned text runs ----
+    function normalize(s) { return String(s || '').toLowerCase().replace(/\\s+/g, ' ').trim(); }
+
+    // Index: every positioned text run -> {el, page, text}
+    var index = [];
+    var root = $('#codbdocs-root');
+    $$('.pdf-text', root).forEach(function (el) {
+      var t = (el.textContent || '').trim();
+      if (!t) return;
+      var pg = parseInt(el.getAttribute('data-pdf-page'), 10) || 1;
+      index.push({ el: el, page: pg, text: normalize(t) });
+    });
+
+    var searchInput = $('#codbdocs-search-input');
+    var countEl = $('#codbdocs-search-count');
+    var resultsEl = $('#codbdocs-search-results');
+    var matches = [];
+    var cursor = -1;
+
+    function clearHighlights() {
+      matches.forEach(function (m) {
+        m.el.classList.remove('sr-highlight', 'is-current');
+      });
+      matches = [];
+      cursor = -1;
+    }
+
+    function snippet(text, query) {
+      text = String(text || '').replace(/s+/g, ' ').trim();
+      var lower = text.toLowerCase();
+      var pos = lower.indexOf(query);
+      if (pos < 0) return text.slice(0, 160) + (text.length > 160 ? '...' : '');
+      var start = Math.max(0, pos - 60);
+      var end = Math.min(text.length, pos + query.length + 90);
+      return (start ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
+    }
+
+    function renderResults(query, pageMatches) {
+      if (!resultsEl) return;
+      resultsEl.textContent = '';
+      if (!query) return;
+      if (!pageMatches.length) {
+        var empty = document.createElement('p');
+        empty.className = 'codbdocs-outline-empty';
+        empty.textContent = 'No RAG page matches.';
+        resultsEl.appendChild(empty);
+        return;
+      }
+      pageMatches.slice(0, 40).forEach(function (p, i) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'codbdocs-search-result';
+        btn.setAttribute('role', 'listitem');
+        btn.setAttribute('data-result-page', p.page);
+        var label = document.createElement('span');
+        label.className = 'codbdocs-search-result-page';
+        label.textContent = 'Page ' + p.page;
+        var snip = document.createElement('span');
+        snip.className = 'codbdocs-search-result-snippet';
+        snip.textContent = snippet(p.raw, query);
+        btn.appendChild(label);
+        btn.appendChild(snip);
+        btn.addEventListener('click', function () {
+          $$('.codbdocs-search-result').forEach(function (x) { x.classList.remove('is-active'); });
+          btn.classList.add('is-active');
+          var matchIndex = matches.findIndex(function (m) { return m.page === p.page; });
+          if (matchIndex >= 0) goMatch(matchIndex, false);
+          else gotoPage(p.page, { smooth: true });
+        });
+        if (i === 0) btn.classList.add('is-active');
+        resultsEl.appendChild(btn);
+      });
+    }
+
+    function runSearch(query) {
+      clearHighlights();
+      query = normalize(query);
+      if (!query) {
+        body.dataset.codbdocsSearching = 'false';
+        renderResults('', []);
+        if (countEl) countEl.textContent = '';
+        return;
+      }
+      body.dataset.codbdocsSearching = 'true';
+      matches = index.filter(function (m) { return m.text.indexOf(query) !== -1; });
+      var pageMatches = pageTextIndex.filter(function (p) { return p.text.indexOf(query) !== -1; });
+      renderResults(query, pageMatches);
+      if (countEl) countEl.textContent = matches.length + ' run' + (matches.length === 1 ? '' : 's') + ' / ' + pageMatches.length + ' page' + (pageMatches.length === 1 ? '' : 's');
+      if (!matches.length) {
+        if (pageMatches.length) gotoPage(pageMatches[0].page, { smooth: true });
+        return;
+      }
+      matches.forEach(function (m, i) {
+        m.el.classList.add('sr-highlight');
+        m.el.setAttribute('data-sr-index', i);
+      });
+      goMatch(0, true);
+    }
+
+    function goMatch(i, first) {
+      if (!matches.length) return;
+      if (i < 0) i = matches.length - 1;
+      if (i >= matches.length) i = 0;
+      cursor = i;
+      matches.forEach(function (m, k) { m.el.classList.toggle('is-current', k === i); });
+      gotoPage(matches[i].page, { smooth: !first });
+      matches[i].el.scrollIntoView({ block: 'center', behavior: first ? 'auto' : 'smooth' });
+    }
+
+    if (searchInput) {
+      var timer = null;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { runSearch(searchInput.value); }, 220);
+      });
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (matches.length) goMatch(e.shiftKey ? cursor - 1 : cursor + 1, false);
+        }
+      });
+    }
+
+    // Keyboard shortcuts: f=search, p/n=page, c=contrast, o=outline
+    document.addEventListener('keydown', function (e) {
+      var tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      var k = (e.key || '').toLowerCase();
+      if (k === 'f') { e.preventDefault(); if (searchInput) { searchInput.focus(); searchInput.select(); } }
+      else if (k === 'p') gotoPage(currentPage - 1, { smooth: true });
+      else if (k === 'n') gotoPage(currentPage + 1, { smooth: true });
+      else if (k === 'c' && contrastBtn) contrastBtn.click();
+      else if (k === 'o' && outlineToggle) outlineToggle.click();
+    });
+
+    // init
+    setView('pdf');
+    fitWidth();
+    gotoPage(1);
+  })();
+  <\/script>
+  `;
+  }
+  function escapeHTML(str) {
+    return String(str == null ? "" : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // src/pdfir.js
+  function bytesToBase642(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.slice(i, i + 32768));
+    if (typeof btoa === "function") return btoa(bin);
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let out = "";
+    for (let i = 0; i < bin.length; i += 3) {
+      const a = bin.charCodeAt(i), b = bin.charCodeAt(i + 1), c = bin.charCodeAt(i + 2);
+      out += alphabet[a >> 2] + alphabet[(a & 3) << 4 | b >> 4] + (Number.isNaN(b) ? "=" : alphabet[(b & 15) << 2 | c >> 6]) + (Number.isNaN(c) ? "=" : alphabet[c & 63]);
+    }
+    return out;
+  }
+  function textToBase642(text) {
+    if (typeof TextEncoder !== "undefined") return bytesToBase642(new TextEncoder().encode(String(text)));
+    const encoded = unescape(encodeURIComponent(String(text)));
+    const bytes = new Uint8Array(encoded.length);
+    for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
+    return bytesToBase642(bytes);
+  }
+  function embeddedImageSrc2(src) {
+    src = String(src || "");
+    return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : "";
+  }
+  function createIR() {
+    return {
+      version: "1.0",
+      document: {
+        id: generateId("doc"),
+        hash: null,
+        title: null,
+        type: "unknown",
+        metadata: {},
+        pages: [],
+        structure: null,
+        resources: {},
+        navigation: {},
+        security: {},
+        provenance: { source: "pdf", extraction: "native" }
+      },
+      pages: {},
+      objects: {},
+      entities: {},
+      relationships: {},
+      concepts: {},
+      images: {},
+      tables: {},
+      forms: { fields: [], byName: {} },
+      annotations: {},
+      vectors: {},
+      resources: {},
+      structure: {},
+      assets: {}
+    };
+  }
+  function addPage(ir, pageNum, data) {
+    const pageId = `page_${pageNum}`;
+    ir.pages[pageId] = {
+      id: pageId,
+      num: pageNum,
+      width: data.width || 0,
+      height: data.height || 0,
+      rotation: data.rotation || 0,
+      mediaBox: data.mediaBox || null,
+      cropBox: data.cropBox || null,
+      content: [],
+      vectors: [],
+      images: [],
+      annotations: [],
+      forms: [],
+      labels: data.labels || null
+    };
+    ir.document.pages.push(pageId);
+    return ir.pages[pageId];
+  }
+  function addTextObject(ir, pageId, data) {
+    const id = generateId("text");
+    ir.objects[id] = {
+      id,
+      type: "text",
+      page: pageId,
+      raw: {
+        glyphs: data.glyphs || [],
+        font: data.font || null,
+        fontSize: data.fontSize || 12,
+        color: data.color || null,
+        transform: data.transform || [1, 0, 0, 1, 0, 0],
+        text: data.text || "",
+        encoding: data.encoding || null
+      },
+      semantic: {
+        role: data.role || "paragraph",
+        level: data.level || null,
+        text: data.text || ""
+      },
+      accessibility: {
+        role: data.accessRole || "P"
+      },
+      provenance: {
+        method: "native",
+        confidence: 1
+      },
+      bbox: data.bbox || null
+    };
+    ir.pages[pageId]?.content.push(id);
+    return ir.objects[id];
+  }
+  function materializeOCRObject(ir, pageId, { text, source, confidence, pageSize } = {}) {
+    const body = (text || "").replace(/\s+/g, " ").trim();
+    if (!body) return null;
+    const page = ir.pages[pageId];
+    const hasTextObjects = (page?.content || []).some((id) => ir.objects[id]?.type === "text");
+    if (hasTextObjects) return null;
+    const size = pageSize || { width: page?.width || 0, height: page?.height || 0 };
+    const obj = addTextObject(ir, pageId, {
+      text: body,
+      bbox: [0, 0, size.width, size.height],
+      font: null,
+      fontSize: null,
+      color: null,
+      transform: null
+    });
+    if (obj) {
+      obj.raw.source = source || "ocr";
+      obj.raw.textSource = source || "ocr";
+      obj.raw.confidence = confidence != null ? confidence : null;
+      obj.provenance.method = source || "ocr";
+      obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
+    }
+    return obj;
+  }
+  function addVectorObject(ir, pageId, data) {
+    const id = generateId("vec");
+    ir.vectors[id] = {
+      id,
+      type: data.type || "path",
+      // path, line, rect, circle, curve, arrow
+      page: pageId,
+      points: data.points || [],
+      from: data.from || null,
+      to: data.to || null,
+      bbox: data.bbox || null,
+      graphicsState: {
+        stroke: data.stroke || null,
+        fill: data.fill || null,
+        lineWidth: data.lineWidth || 1,
+        lineCap: data.lineCap || "butt",
+        lineJoin: data.lineJoin || "miter",
+        dash: data.dash || null,
+        opacity: data.opacity || 1,
+        blendMode: data.blendMode || "Normal",
+        transform: data.transform || [1, 0, 0, 1, 0, 0],
+        clip: data.clip || null
+      },
+      semantic: {
+        role: data.semanticRole || null
+        // table_border, checkbox, form_field, separator, decoration
+      },
+      provenance: {
+        method: "native",
+        confidence: 1
+      }
+    };
+    ir.pages[pageId]?.vectors.push(id);
+    return ir.vectors[id];
+  }
+  function addObject(ir, pageId, data) {
+    const id = generateId(data.type || "obj");
+    ir.objects[id] = {
+      id,
+      type: data.type,
+      page: pageId,
+      raw: data.raw || {},
+      semantic: data.semantic || {},
+      accessibility: data.accessibility || {},
+      provenance: data.provenance || { method: "native", confidence: 1 },
+      bbox: data.bbox || null
+    };
+    ir.pages[pageId]?.content.push(id);
+    return ir.objects[id];
+  }
+  function humanizeFieldName(name) {
+    return String(name || "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[._\-]+/g, " ").replace(/\s+/g, " ").trim().replace(/^./, (char) => char.toUpperCase());
+  }
+  function normalizeFieldOptions(options) {
+    return (Array.isArray(options) ? options : []).map((option) => {
+      if (option && typeof option === "object") {
+        const value = option.exportValue ?? option.value ?? option.displayValue ?? option.label ?? "";
+        const label = option.displayValue ?? option.label ?? option.exportValue ?? option.value ?? "";
+        return { value: String(value), label: String(label) };
+      }
+      return { value: String(option ?? ""), label: String(option ?? "") };
+    });
+  }
+  function normalizeFieldValue(value) {
+    if (Array.isArray(value)) return value.map((item) => String(item ?? ""));
+    return value == null ? "" : String(value);
+  }
+  function normalizeFieldRect(rect) {
+    if (!Array.isArray(rect) || rect.length < 4) return null;
+    const x1 = Number(rect[0]) || 0;
+    const y1 = Number(rect[1]) || 0;
+    const x2 = Number(rect[2]) || 0;
+    const y2 = Number(rect[3]) || 0;
+    return [Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)];
+  }
+  function normalizeFormField(field, pageNumber = null) {
+    if (!field || field.subtype && field.subtype !== "Widget" && field.type !== "form_field") return null;
+    const pdfType = String(field.fieldType || field.type || "").toLowerCase();
+    let fieldType = "text";
+    if (pdfType === "tx" || pdfType === "text") {
+      fieldType = field.password ? "password" : field.multiLine ? "textarea" : "text";
+    } else if (pdfType === "ch" || pdfType === "choice" || pdfType === "combobox" || pdfType === "listbox") {
+      fieldType = field.combo || pdfType === "combobox" ? "dropdown" : "listbox";
+    } else if (pdfType === "btn" || pdfType === "button" || pdfType === "checkbox" || pdfType === "radiobutton") {
+      fieldType = field.pushButton ? "button" : field.radioButton || pdfType === "radiobutton" ? "radio" : "checkbox";
+    } else if (pdfType === "sig" || pdfType === "signature") {
+      fieldType = "signature";
+    }
+    const fieldName = String(field.fieldName || field.name || field.id || "field");
+    const optionValue = String(field.buttonValue ?? field.exportValue ?? field.optionValue ?? "On");
+    const value = normalizeFieldValue(field.fieldValue ?? field.value);
+    const defaultValue = normalizeFieldValue(field.defaultFieldValue ?? field.defaultValue);
+    const scalarValue = Array.isArray(value) ? value[0] ?? "" : value;
+    const checked = fieldType === "radio" ? scalarValue === optionValue : fieldType === "checkbox" ? Boolean(scalarValue && scalarValue !== "Off" && (scalarValue === optionValue || /^(true|yes|on|1|x)$/i.test(scalarValue))) : false;
+    const baseLabel = String(field.alternativeText || field.alternateFieldName || field.label || humanizeFieldName(fieldName));
+    const label = fieldType === "radio" && optionValue && !baseLabel.toLowerCase().includes(optionValue.toLowerCase()) ? `${baseLabel}: ${humanizeFieldName(optionValue)}` : baseLabel;
+    return {
+      id: field.id || null,
+      annotationId: field.annotationId || field.id || null,
+      page: pageNumber ?? (Number.isInteger(field.page) ? field.page + 1 : null),
+      name: fieldName,
+      label,
+      description: String(field.contents || field.description || ""),
+      fieldType,
+      pdfFieldType: field.fieldType || field.type || null,
+      value,
+      defaultValue,
+      optionValue,
+      checked,
+      defaultChecked: fieldType === "radio" ? String(Array.isArray(defaultValue) ? defaultValue[0] ?? "" : defaultValue) === optionValue : fieldType === "checkbox" ? Boolean(defaultValue && defaultValue !== "Off") : false,
+      options: normalizeFieldOptions(field.options),
+      multiple: Boolean(field.multiSelect),
+      required: Boolean(field.required),
+      readOnly: Boolean(field.readOnly),
+      hidden: Boolean(field.hidden),
+      maxLength: Number.isFinite(Number(field.maxLen ?? field.maxLength)) ? Number(field.maxLen ?? field.maxLength) : null,
+      rect: Array.isArray(field.rect) ? field.rect.map(Number) : null,
+      bbox: normalizeFieldRect(field.rect),
+      actions: field.actions || null,
+      url: field.url || null,
+      action: field.action || null,
+      resetForm: field.resetForm || null,
+      newWindow: Boolean(field.newWindow),
+      xfa: Boolean(field.xfa),
+      dataId: field.dataId || null,
+      fieldId: field.fieldId || null,
+      xfaOn: field.xfaOn ?? null,
+      xfaOff: field.xfaOff ?? null
+    };
+  }
+  function extractXfaFormFields(tree, pageNumber = null) {
+    const fields = [];
+    const walk = (node) => {
+      if (!node || typeof node !== "object") return;
+      if (["input", "textarea", "select", "button"].includes(node.name)) {
+        const attrs = node.attributes || {};
+        const inputType = String(attrs.type || "").toLowerCase();
+        const fieldType = node.name === "textarea" ? "textarea" : node.name === "select" ? attrs.multiple ? "listbox" : "dropdown" : node.name === "button" ? "button" : inputType === "radio" || inputType === "checkbox" || inputType === "password" ? inputType : "text";
+        const name = String(attrs.dataId || attrs.fieldId || attrs.name || attrs.id || `xfa-field-${fields.length + 1}`);
+        const optionValue = String(attrs.xfaOn ?? attrs.value ?? "On");
+        const checked = Boolean(attrs.checked);
+        fields.push({
+          id: attrs.fieldId || attrs.id || null,
+          annotationId: attrs.dataId || null,
+          dataId: attrs.dataId || null,
+          fieldId: attrs.fieldId || null,
+          page: pageNumber,
+          name,
+          label: String(attrs["aria-label"] || attrs.xfaName || name.replace(/\d+$/, "").replace(/[_-]+/g, " ")),
+          description: "",
+          fieldType,
+          pdfFieldType: "XFA",
+          value: checked ? optionValue : attrs.value ?? attrs.textContent ?? "",
+          defaultValue: checked ? optionValue : attrs.value ?? attrs.textContent ?? "",
+          optionValue,
+          xfaOn: attrs.xfaOn ?? optionValue,
+          xfaOff: attrs.xfaOff ?? "off",
+          checked,
+          defaultChecked: checked,
+          options: node.name === "select" ? (node.children || []).filter((child) => child?.name === "option").map((child) => ({
+            value: String(child.attributes?.value ?? child.value ?? ""),
+            label: String(child.value ?? child.attributes?.value ?? "")
+          })) : [],
+          multiple: Boolean(attrs.multiple),
+          required: Boolean(attrs.required || attrs["aria-required"]),
+          readOnly: Boolean(attrs.readOnly || attrs.readonly || attrs.disabled),
+          hidden: inputType === "hidden",
+          maxLength: Number.isFinite(Number(attrs.maxLength)) ? Number(attrs.maxLength) : null,
+          rect: null,
+          bbox: null,
+          actions: null,
+          url: null,
+          xfa: true
+        });
+      }
+      for (const child of node.children || []) walk(child);
+    };
+    walk(tree);
+    return fields;
+  }
+  function registerFormField(ir, pageId, field, pageNumber = null) {
+    const normalized = normalizeFormField(field, pageNumber);
+    if (!normalized) return null;
+    const obj = addObject(ir, pageId, {
+      type: "form_field",
+      raw: { ...normalized },
+      semantic: {
+        role: "form_field",
+        fieldType: normalized.fieldType,
+        fieldName: normalized.name,
+        value: normalized.value,
+        defaultValue: normalized.defaultValue,
+        optionValue: normalized.optionValue,
+        checked: normalized.checked,
+        defaultChecked: normalized.defaultChecked,
+        options: normalized.options,
+        multiple: normalized.multiple,
+        maxLength: normalized.maxLength
+      },
+      accessibility: {
+        role: "form",
+        label: normalized.label,
+        description: normalized.description,
+        required: normalized.required,
+        readOnly: normalized.readOnly
+      },
+      bbox: normalized.bbox,
+      provenance: { method: "annotation", confidence: 1 }
+    });
+    if (!ir.forms || typeof ir.forms !== "object") ir.forms = { fields: [], byName: {} };
+    if (!Array.isArray(ir.forms.fields)) ir.forms.fields = [];
+    if (!ir.forms.byName || typeof ir.forms.byName !== "object") ir.forms.byName = {};
+    const record = { ...normalized, objectId: obj.id, pageId };
+    ir.forms.fields.push(record);
+    if (!Array.isArray(ir.forms.byName[normalized.name])) ir.forms.byName[normalized.name] = [];
+    ir.forms.byName[normalized.name].push(obj.id);
+    if (ir.pages[pageId] && !ir.pages[pageId].forms.includes(obj.id)) ir.pages[pageId].forms.push(obj.id);
+    return obj;
+  }
+  async function extractVectors(page) {
+    const opList = await page.getOperatorList();
+    const vectors = [];
+    const transformStack = [];
+    const styleStack = [];
+    let currentTransform = [1, 0, 0, 1, 0, 0];
+    let currentStroke = null;
+    let currentFill = null;
+    let currentLineWidth = 1;
+    let currentLineCap = "butt";
+    let currentLineJoin = "miter";
+    let currentDash = null;
+    let currentClip = null;
+    let pathPoints = [];
+    let pathStart = null;
+    const FN = pdfjsLib?.OPS || {};
+    const isOp = (fn, name, fallback) => fn === (FN[name] ?? fallback);
+    const multiply2 = (m1, m2) => {
+      const [a1, b1, c1, d1, e1, f1] = m1;
+      const [a2, b2, c2, d2, e2, f2] = m2;
+      return [
+        a1 * a2 + c1 * b2,
+        b1 * a2 + d1 * b2,
+        a1 * c2 + c1 * d2,
+        b1 * c2 + d1 * d2,
+        a1 * e2 + c1 * f2 + e1,
+        b1 * e2 + d1 * f2 + f1
+      ];
+    };
+    const color = (args) => {
+      if (!Array.isArray(args)) return null;
+      const vals = args.slice(0, 3).map((v) => Math.max(0, Math.min(1, Number(v) > 1 ? Number(v) / 255 : Number(v))));
+      return { colorSpace: "DeviceRGB", color: vals };
+    };
+    const cmyk = (args) => Array.isArray(args) ? { colorSpace: "DeviceCMYK", color: args.slice(0, 4).map(Number) } : null;
+    const pushVector = (paint) => {
+      if (pathPoints.length === 0) return;
+      vectors.push(createVector("path", page, {
+        points: [...pathPoints],
+        stroke: paint.stroke ? currentStroke : null,
+        fill: paint.fill ? currentFill : null,
+        lineWidth: currentLineWidth,
+        lineCap: currentLineCap,
+        lineJoin: currentLineJoin,
+        dash: currentDash,
+        clip: currentClip,
+        transform: currentTransform
+      }));
+      pathPoints = [];
+      pathStart = null;
+    };
+    const readConstructedPath = (args) => {
+      const ops = args?.[0] || [];
+      const coords = args?.[1] || [];
+      let c = 0;
+      for (const op of ops) {
+        if (op === FN.moveTo) {
+          const pt = { op: "moveTo", x: coords[c], y: coords[c + 1] };
+          pathStart = { x: pt.x, y: pt.y };
+          pathPoints.push(pt);
+          c += 2;
+        } else if (op === FN.lineTo) {
+          pathPoints.push({ op: "lineTo", x: coords[c], y: coords[c + 1] });
+          c += 2;
+        } else if (op === FN.curveTo) {
+          pathPoints.push({ op: "curveTo", x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 4], y: coords[c + 5] });
+          c += 6;
+        } else if (op === FN.curveTo2) {
+          const last = pathPoints[pathPoints.length - 1] || { x: 0, y: 0 };
+          pathPoints.push({ op: "curveTo", x1: last.x, y1: last.y, x2: coords[c], y2: coords[c + 1], x: coords[c + 2], y: coords[c + 3] });
+          c += 4;
+        } else if (op === FN.curveTo3) {
+          pathPoints.push({ op: "curveTo", x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 2], y: coords[c + 3] });
+          c += 4;
+        } else if (op === FN.rectangle) {
+          const [x, y, w, h] = coords.slice(c, c + 4);
+          pathStart = { x, y };
+          pathPoints.push({ op: "moveTo", x, y });
+          pathPoints.push({ op: "lineTo", x: x + w, y });
+          pathPoints.push({ op: "lineTo", x: x + w, y: y + h });
+          pathPoints.push({ op: "lineTo", x, y: y + h });
+          pathPoints.push({ op: "closePath" });
+          c += 4;
+        } else if (op === FN.closePath) {
+          pathPoints.push({ op: "closePath" });
+        }
+      }
+    };
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i];
+      const args = opList.argsArray[i];
+      if (isOp(fn, "transform", 8)) {
+        if (args && args.length >= 6) {
+          currentTransform = multiply2(currentTransform, args.slice(0, 6));
+        }
+        continue;
+      }
+      if (isOp(fn, "constructPath")) {
+        readConstructedPath(args);
+        continue;
+      }
+      switch (fn) {
+        // Path operations
+        case FN.moveTo:
+          if (args) {
+            pathStart = { x: args[0], y: args[1] };
+            pathPoints.push({ op: "moveTo", x: args[0], y: args[1] });
+          }
+          break;
+        case FN.lineTo:
+          if (args) {
+            pathPoints.push({ op: "lineTo", x: args[0], y: args[1] });
+          }
+          break;
+        case FN.curveTo:
+          if (args) {
+            pathPoints.push({ op: "curveTo", x1: args[0], y1: args[1], x2: args[2], y2: args[3], x: args[4], y: args[5] });
+          }
+          break;
+        case FN.rectangle:
+          if (args && args.length >= 4) {
+            vectors.push(createVector("rect", page, {
+              bbox: [args[0], args[1], args[2], args[3]],
+              stroke: currentStroke,
+              fill: currentFill,
+              lineWidth: currentLineWidth,
+              lineCap: currentLineCap,
+              lineJoin: currentLineJoin,
+              dash: currentDash,
+              clip: currentClip,
+              transform: currentTransform
+            }));
+          }
+          break;
+        // Stroke
+        case FN.stroke:
+        case FN.closeStroke:
+          if (fn === FN.closeStroke) pathPoints.push({ op: "closePath" });
+          pushVector({ stroke: true, fill: false });
+          break;
+        // Fill
+        case FN.fill:
+        case FN.eoFill:
+        case FN.closeFill:
+          if (fn === FN.closeFill) pathPoints.push({ op: "closePath" });
+          pushVector({ stroke: false, fill: true });
+          break;
+        // Fill and stroke
+        case FN.fillStroke:
+        case FN.eoFillStroke:
+        case FN.closeFillStroke:
+        case FN.closeEOFillStroke:
+          if (fn === FN.closeFillStroke || fn === FN.closeEOFillStroke) pathPoints.push({ op: "closePath" });
+          pushVector({ stroke: true, fill: true });
+          break;
+        // Close path
+        case FN.closePath:
+          pathPoints.push({ op: "closePath" });
+          break;
+        // Graphics state
+        case FN.save:
+          transformStack.push(currentTransform.slice());
+          styleStack.push({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip });
+          break;
+        case FN.restore: {
+          currentTransform = transformStack.pop() || [1, 0, 0, 1, 0, 0];
+          const style = styleStack.pop();
+          if (style) ({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip } = style);
+          break;
+        }
+        case FN.setStrokeRGBColor:
+          currentStroke = color(args);
+          break;
+        case FN.setFillRGBColor:
+          currentFill = color(args);
+          break;
+        case FN.setStrokeCMYKColor:
+          currentStroke = cmyk(args);
+          break;
+        case FN.setFillCMYKColor:
+          currentFill = cmyk(args);
+          break;
+        case FN.setLineWidth:
+          if (args) currentLineWidth = args[0];
+          break;
+        case FN.setLineCap:
+          if (args) {
+            const caps = ["butt", "round", "square"];
+            currentLineCap = caps[args[0]] || "butt";
+          }
+          break;
+        case FN.setLineJoin:
+          if (args) {
+            const joins = ["miter", "round", "bevel"];
+            currentLineJoin = joins[args[0]] || "miter";
+          }
+          break;
+        case FN.setDash:
+          if (args) currentDash = args[0];
+          break;
+        // Clipping
+        case FN.clip:
+        case FN.eoClip:
+          currentClip = [...pathPoints];
+          break;
+      }
+    }
+    return vectors;
+  }
+  function createVector(type, page, data) {
+    return {
+      type,
+      ...data,
+      semanticRole: classifyVector(type, data)
+    };
+  }
+  function classifyVector(type, data) {
+    if (type === "rect") {
+      const [x, y, w, h] = data.bbox || [0, 0, 0, 0];
+      const area = w * h;
+      if (w > 8 && w < 20 && h > 8 && h < 20 && Math.abs(w - h) < 3) {
+        return "checkbox";
+      }
+      if (h < 2 && w > 20) return "separator";
+      if (data.stroke && data.fill === null && area > 100) {
+        return "table_border";
+      }
+      return "border";
+    }
+    if (type === "path") {
+      if (data.points.length === 2 && data.points[0].op === "moveTo" && data.points[1].op === "lineTo") {
+        const dx = data.points[1].x - data.points[0].x;
+        const dy = data.points[1].y - data.points[0].y;
+        if (Math.abs(dx) > 20 && Math.abs(dy) < 2) return "horizontal_line";
+        if (Math.abs(dy) > 20 && Math.abs(dx) < 2) return "vertical_line";
+        return "line";
+      }
+      if (data.points.length > 10) return "complex_path";
+    }
+    return null;
+  }
+  function auditAccessibility(ir) {
+    const issues = [];
+    let score = 100;
+    for (const pageId of ir.document.pages) {
+      const page = ir.pages[pageId];
+      if (!page) continue;
+      const pageNum = parseInt(pageId.split("_")[1]);
+      for (const objId of page.content) {
+        const obj = ir.objects[objId];
+        if (obj?.type === "image" && !obj.accessibility?.alt) {
+          issues.push({
+            type: "missing_alt_text",
+            page: pageNum,
+            element: objId,
+            severity: "error",
+            message: "Image has no alternative text",
+            suggestion: "Add descriptive alt text for screen readers"
+          });
+          score -= 5;
+        }
+      }
+      const headings = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading");
+      let prevLevel = 0;
+      for (const heading of headings) {
+        const level = heading.semantic.level || 1;
+        if (level > prevLevel + 1 && prevLevel > 0) {
+          issues.push({
+            type: "heading_skip",
+            page: pageNum,
+            element: heading.id,
+            severity: "warning",
+            message: `Heading level skipped from H${prevLevel} to H${level}`,
+            suggestion: `Use H${prevLevel + 1} instead`
+          });
+          score -= 2;
+        }
+        prevLevel = level;
+      }
+      for (const vecId of page.vectors || []) {
+        const vec = ir.vectors[vecId];
+        if (vec?.semantic?.role === "table_border") {
+          const nearbyTexts = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.bbox && isNear(vec.bbox, obj.bbox));
+          const hasHeader = nearbyTexts.some(
+            (t) => t.raw?.fontSize > 12 || t.semantic?.role === "heading"
+          );
+          if (!hasHeader) {
+            issues.push({
+              type: "table_no_header",
+              page: pageNum,
+              element: vecId,
+              severity: "warning",
+              message: "Table may be missing header row",
+              suggestion: "Ensure first row contains column headers"
+            });
+            score -= 2;
+          }
+        }
+      }
+      if (page.content.length > 5) {
+        const sorted = [...page.content].map((id) => ir.objects[id]).filter((obj) => obj?.bbox).sort((a, b) => a.bbox[1] - b.bbox[1]);
+        for (let i = 1; i < sorted.length; i++) {
+          const prev = sorted[i - 1];
+          const curr = sorted[i];
+          if (prev.bbox[1] > curr.bbox[1] + 50) {
+            issues.push({
+              type: "reading_order",
+              page: pageNum,
+              element: curr.id,
+              severity: "info",
+              message: "Element may be out of reading order",
+              suggestion: "Verify content reads correctly top-to-bottom"
+            });
+            score -= 1;
+          }
+        }
+      }
+      for (const objId of page.content) {
+        const obj = ir.objects[objId];
+        if (obj?.type === "text" && obj.raw?.color) {
+        }
+      }
+      if (!ir.document.metadata?.language) {
+        issues.push({
+          type: "missing_language",
+          page: 1,
+          severity: "warning",
+          message: "Document language not specified",
+          suggestion: "Set document.language for screen reader pronunciation"
+        });
+        score -= 3;
+      }
+      if (!ir.document.metadata?.title) {
+        issues.push({
+          type: "missing_title",
+          page: 1,
+          severity: "warning",
+          message: "Document has no title",
+          suggestion: "Set document.metadata.title"
+        });
+        score -= 2;
+      }
+    }
+    return {
+      score: Math.max(0, score),
+      issues,
+      summary: {
+        errors: issues.filter((i) => i.severity === "error").length,
+        warnings: issues.filter((i) => i.severity === "warning").length,
+        info: issues.filter((i) => i.severity === "info").length
+      }
+    };
+  }
+  function generateAccessibilityTree(ir) {
+    const tree = { type: "Document", children: [] };
+    for (const pageId of ir.document.pages) {
+      const page = ir.pages[pageId];
+      if (!page) continue;
+      const pageNode = { type: "Page", properties: { pageNumber: page.num }, children: [] };
+      for (const objId of page.content) {
+        const obj = ir.objects[objId];
+        if (!obj) continue;
+        const node = {
+          type: obj.accessibility?.role || mapRole(obj.semantic?.role),
+          properties: {},
+          children: []
+        };
+        if (obj.semantic?.text) {
+          node.children.push({ type: "Text", content: obj.semantic.text });
+        }
+        if (obj.semantic?.role === "heading") {
+          node.properties.level = obj.semantic.level || 1;
+        }
+        pageNode.children.push(node);
+      }
+      tree.children.push(pageNode);
+    }
+    return tree;
+  }
+  function mapRole(role) {
+    const map = {
+      heading: "Heading",
+      paragraph: "Paragraph",
+      table: "Table",
+      list: "List",
+      image: "Figure",
+      form_field: "Form",
+      signature: "Signature"
+    };
+    return map[role] || "Paragraph";
+  }
+  function isNear(bbox1, bbox2, threshold = 100) {
+    if (!bbox1 || !bbox2) return false;
+    const cx1 = bbox1[0] + bbox1[2] / 2;
+    const cy1 = bbox1[1] + bbox1[3] / 2;
+    const cx2 = bbox2[0] + bbox2[2] / 2;
+    const cy2 = bbox2[1] + bbox2[3] / 2;
+    return Math.sqrt(Math.pow(cx1 - cx2, 2) + Math.pow(cy1 - cy2, 2)) < threshold;
+  }
+  function exportHTML(ir, options = {}) {
+    const {
+      mode = "visual",
+      // 'visual' | 'accessible' | 'intelligent' | 'selectable'
+      includeDataAttributes: includeDataAttributes2 = true
+    } = options;
+    const ragPayload = buildRAGPayload(ir);
+    const viewer = generateViewerChrome(ragPayload);
+    let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || "en") + '">\n<head>\n';
+    html += '<meta charset="UTF-8">\n';
+    html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+    html += "<title>" + escapeHTML2(ir.document.metadata?.title || "Document") + "</title>\n";
+    html += generateVisualStyles(ir);
+    html += generateAccessibleStyles();
+    html += viewer.styles;
+    html += '</head>\n<body data-codbdocs-view="pdf">\n';
+    html += '<a class="skip-link" href="#codbdocs-root">Skip to document</a>\n';
+    html += '<main role="document" id="codbdocs-root">\n';
+    html += '<div id="codbdocs-viewer">\n';
+    html += '<aside class="codbdocs-sidebar">\n';
+    html += viewer.sidebar;
+    html += "</aside>\n";
+    html += '<div id="codbdocs-main">\n';
+    html += viewer.toolbar;
+    html += '<div class="codbdocs-viewer-hint">Keyboard: <b>F</b> search &middot; <b>P</b>/<b>N</b> page &middot; <b>C</b> contrast &middot; <b>O</b> outline</div>\n';
+    for (const pageId of ir.document.pages) {
+      const page = ir.pages[pageId];
+      if (!page) continue;
+      const nativeText = pageHasNativeText(page, ir);
+      const attrs = (includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "") + ` data-native-text="${nativeText ? "1" : "0"}"`;
+      const pageLabel = page.labels?.print || `Page ${page.num}`;
+      html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML2(pageLabel)}" role="region">
+`;
+      html += renderPageVectorLayer(page, ir);
+      if (page.background) {
+        html += `<div class="pdf-page-raster" aria-hidden="true">
+`;
+        html += `<img src="${page.background}" alt="" width="${page.width}" height="${page.height}">
+`;
+        html += renderPageImages(page, ir, attrs);
+        html += "</div>\n";
+      } else {
+        html += renderPageVisual(page, ir, attrs);
+      }
+      if (page.background) {
+        html += renderPagePositionedText(page, ir, attrs);
+      } else {
+        html += renderPageAccessible(page, ir, attrs, mode);
+      }
+      html += "</section>\n";
+    }
+    html += "</div>\n";
+    html += "</div>\n";
+    html += "</main>\n";
+    html += viewer.script;
+    html += "</body>\n</html>";
+    return html;
+  }
+  function renderPageImages(page, ir, attrs) {
+    let html = "";
+    for (const objId of page.content) {
+      const obj = ir.objects[objId];
+      if (!obj || obj.type !== "image") continue;
+      const src = embeddedImageSrc2(obj.raw?.src);
+      if (!src) continue;
+      const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+      const top = cssTop2(page, y, h);
+      const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
+      html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
+      html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${top}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
+`;
+    }
+    return html;
+  }
+  function buildRAGPayload(ir) {
+    return buildRAGContext(ir, null);
+  }
+  function formFieldMarkup(obj, page, positioned = true) {
+    const field = { ...obj.raw || {}, ...obj.semantic || {} };
+    const type = field.fieldType || "text";
+    const name = field.fieldName || field.name || obj.id || "field";
+    const label = obj.accessibility?.label || field.label || humanizeFieldName(name);
+    const value = field.value ?? "";
+    const values = Array.isArray(value) ? value.map(String) : [String(value ?? "")];
+    const id = `pdf-form-${obj.id}`;
+    const readOnly = obj.accessibility?.readOnly || field.readOnly;
+    const required = obj.accessibility?.required || field.required;
+    const common = ` id="${escapeHTML2(id)}" name="${escapeHTML2(name)}" aria-label="${escapeHTML2(label)}"` + (required ? ' required aria-required="true"' : "") + (readOnly && !["text", "password", "textarea"].includes(type) ? ' disabled aria-readonly="true"' : "") + (readOnly && ["text", "password", "textarea"].includes(type) ? ' readonly aria-readonly="true"' : "");
+    if (field.hidden) return `<input type="hidden"${common} value="${escapeHTML2(values[0])}">`;
+    let control = "";
+    if (type === "checkbox" || type === "radio") {
+      control = `<input type="${type}"${common} value="${escapeHTML2(field.optionValue || "On")}"${field.checked ? " checked" : ""}>`;
+    } else if (type === "dropdown" || type === "listbox") {
+      const options = (field.options || []).map((option) => {
+        const optionValue = String(option?.value ?? option ?? "");
+        const optionLabel = String(option?.label ?? optionValue);
+        return `<option value="${escapeHTML2(optionValue)}"${values.includes(optionValue) ? " selected" : ""}>${escapeHTML2(optionLabel)}</option>`;
+      }).join("");
+      control = `<select${common}${field.multiple ? " multiple" : ""}${type === "listbox" ? ` size="${Math.min(8, Math.max(2, (field.options || []).length || 2))}"` : ""}>${options}</select>`;
+    } else if (type === "textarea") {
+      control = `<textarea${common}${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ""}>${escapeHTML2(values[0])}</textarea>`;
+    } else if (type === "button") {
+      control = `<button type="button"${common} disabled>${escapeHTML2(label)}</button>`;
+    } else if (type === "signature") {
+      control = `<output${common} class="pdf-signature">${escapeHTML2(values[0] || "Unsigned")}</output>`;
+    } else {
+      control = `<input type="${type === "password" ? "password" : "text"}"${common} value="${escapeHTML2(values[0])}"${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ""}>`;
+    }
+    const data = ` data-pdf-object="${escapeHTML2(obj.id)}" data-form-name="${escapeHTML2(name)}"`;
+    if (!positioned) return `<div class="pdf-form-field"${data}><label for="${escapeHTML2(id)}">${escapeHTML2(label)}</label>${control}</div>
+`;
+    const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
+    return `<div class="pdf-form-field pdf-form-field-positioned"${data} style="left:${Number(x) || 0}px;top:${cssTop2(page, y, h)}px;width:${Number(w) || 0}px;height:${Number(h) || 0}px"><label class="pdf-sr-only" for="${escapeHTML2(id)}">${escapeHTML2(label)}</label>${control}</div>
+`;
+  }
+  function renderPageVisual(page, ir, attrs) {
+    let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + "px;height:" + (page.height || 0) + 'px;">\n';
+    for (const objId of page.content) {
+      const obj = ir.objects[objId];
+      if (!obj) continue;
+      if (obj.type === "text") {
+        const bbox = obj.bbox || [];
+        const style = textRunStyle(obj);
+        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic?.text || "")}</div>
+`;
+      } else if (obj.type === "image") {
+        const bbox = obj.bbox || [];
+        const src = embeddedImageSrc2(obj.raw?.src || "");
+        if (src) {
+          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(obj.accessibility?.alt || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+`;
+        } else {
+          html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
+`;
+        }
+      } else if (obj.type === "link") {
+        const bbox = obj.bbox || [];
+        const href = escapeHTML2(obj.raw?.href || "#");
+        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
+`;
+      }
+    }
+    html += "</div>\n";
+    return html;
+  }
+  function renderPagePositionedText(page, ir, attrs) {
+    let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
+    for (const objId of page.content) {
+      const obj = ir.objects[objId];
+      if (!obj) continue;
+      const dataAttr = includeDataAttributes(objId, attrs);
+      const bbox = obj.bbox || [];
+      if (obj.type === "text" && obj.semantic?.text) {
+        const style = textRunStyle(obj);
+        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
+`;
+      } else if (obj.type === "image") {
+        const src = embeddedImageSrc2(obj.raw?.src || "");
+        const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
+        if (src) {
+          html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
+`;
+        }
+      } else if (obj.type === "link") {
+        const href = escapeHTML2(obj.raw?.href || "#");
+        const text = escapeHTML2(obj.semantic?.text || obj.raw?.url || "link");
+        html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>
+`;
+      } else if (obj.type === "form_field") {
+        html += formFieldMarkup(obj, page, true);
+      }
+    }
+    html += "</div>\n";
+    return html;
+  }
+  function renderPageAccessible(page, ir, attrs, mode) {
+    let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
+    for (const objId of page.content) {
+      const obj = ir.objects[objId];
+      if (!obj) continue;
+      const dataAttr = includeDataAttributes(objId, attrs);
+      const role = obj.semantic?.role || "paragraph";
+      if (obj.type === "image") {
+        const alt = obj.accessibility?.alt || obj.semantic?.caption || (mode === "intelligent" ? "AI-generated description" : "Image");
+        const src = embeddedImageSrc2(obj.raw?.src || "");
+        html += `<figure${dataAttr}>
+`;
+        if (src) html += `<img src="${escapeHTML2(src)}" alt="${escapeHTML2(alt)}" loading="lazy">
+`;
+        if (obj.semantic?.caption) html += `<figcaption>${escapeHTML2(obj.semantic.caption)}</figcaption>
+`;
+        if (mode === "intelligent" && obj.provenance?.method === "vision") {
+          html += `<small class="ai-generated">AI-generated description</small>
+`;
+        }
+        html += "</figure>\n";
+      } else if (role === "heading") {
+        const level = obj.semantic?.level || 2;
+        html += `<h${level}${dataAttr}>${escapeHTML2(obj.semantic?.text || "")}</h${level}>
+`;
+      } else if (role === "table") {
+        html += `<table${dataAttr}>
+`;
+        html += `<caption>${escapeHTML2(obj.semantic?.caption || "Table")}</caption>
+`;
+        html += "</table>\n";
+      } else if (role === "list") {
+        html += `<ul${dataAttr}>
+`;
+        html += "</ul>\n";
+      } else if (obj.type === "link") {
+        const href = escapeHTML2(obj.raw?.href || "#");
+        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
+`;
+      } else if (obj.type === "form_field") {
+        html += formFieldMarkup(obj, page, true);
+      } else if (obj.type === "text" && obj.semantic?.text) {
+        const style = textRunStyle(obj);
+        html += `<p${dataAttr}${style ? ' style="' + style + '"' : ""}>${escapeHTML2(obj.semantic.text)}</p>
+`;
+      }
+    }
+    for (const vecId of page.vectors || []) {
+      const vec = ir.vectors[vecId];
+      if (!vec) continue;
+      if (vec.semantic?.role === "separator") {
+        html += `<hr${attrs} data-pdf-vector="${vecId}">
+`;
+      }
+    }
+    html += "</div>\n";
+    return html;
+  }
+  function textRunStyle(obj) {
+    let style = "";
+    const font = obj.raw?.font;
+    if (font) {
+      style += `font-family:${sanitizeFontName(font)}, system-ui, sans-serif;`;
+    }
+    const color = obj.raw?.color;
+    if (color) {
+      style += `color:${escapeCSSColor(color)};`;
+    }
+    return style;
+  }
+  function cssTop2(page, y, height = 0) {
+    const pageHeight = Number(page?.height) || 0;
+    const yy = Number(y) || 0;
+    const hh = Number(height) || 0;
+    return Math.max(0, pageHeight - yy - hh);
+  }
+  function sanitizeFontName(name) {
+    return String(name).replace(/[^A-Za-z0-9]+/g, " ").replace(/^\d+\s?/, "").trim() || "sans-serif";
+  }
+  function escapeCSSColor(color) {
+    return String(color).replace(/[^0-9A-Za-z#.,()% ]/g, "");
+  }
+  function includeDataAttributes(objId, attrs) {
+    return attrs ? `${attrs} data-pdf-object="${objId}"` : ` data-pdf-object="${objId}"`;
+  }
+  function generateVisualStyles(ir) {
+    return `<style>
+    body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
+    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
+    .pdf-page-raster { position: relative; z-index: 0; }
+    .pdf-page[data-native-text="1"] .pdf-page-raster { display: none; }
+    .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
+    .pdf-embedded-image { position: absolute; z-index: 2; }
+    .pdf-vector-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+    /* The positioned text layer sits directly over the raster at the same
+       coordinates, so it renders on top of the pixels and stays selectable.
+       This makes the page look exactly like the source PDF while keeping
+       every run precise and copyable. */
+    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; user-select: text; }
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
+    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
+    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
+    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
+    .pdf-text { position: absolute; white-space: pre; line-height: 1; transform-origin: 0 0; }
+    body[data-codbdocs-view="pdf"] .pdf-page[data-native-text="0"] .pdf-text { color: transparent !important; }
+    body[data-codbdocs-view="text"] .pdf-page[data-native-text="0"] .pdf-text { color: #111 !important; }
+    .pdf-image { border: 1px dashed #ccc; }
+    .pdf-rect { border: 1px solid #000; }
+    .pdf-form-field-positioned { position: absolute; z-index: 5; }
+    .pdf-form-field-positioned input:not([type="checkbox"]):not([type="radio"]),
+    .pdf-form-field-positioned select,
+    .pdf-form-field-positioned textarea,
+    .pdf-form-field-positioned button,
+    .pdf-form-field-positioned output { box-sizing: border-box; width: 100%; height: 100%; min-width: 0; margin: 0; font: inherit; }
+    .pdf-form-field-positioned input[type="checkbox"],
+    .pdf-form-field-positioned input[type="radio"] { width: 100%; height: 100%; margin: 0; }
+    .pdf-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .pdf-signature { display: flex; align-items: center; padding: 2px 4px; border: 1px solid #777; background: #f7f7f7; }
+    .ai-generated { color: #999; font-style: italic; }
+  </style>
+`;
+  }
+  function renderPageVectorLayer(page, ir) {
+    if (!Array.isArray(page.vectors) || !page.vectors.length) return "";
+    let body = "";
+    for (const vecId of page.vectors) {
+      const vec = ir.vectors[vecId];
+      if (!vec) continue;
+      const stroke = escapeHTML2(vec.graphicsState?.stroke || "#000");
+      const fill = escapeHTML2(vec.graphicsState?.fill || "none");
+      const width = Number(vec.graphicsState?.lineWidth) || 1;
+      if (vec.type === "rect" && Array.isArray(vec.bbox)) {
+        const [x = 0, y = 0, w2 = 0, h2 = 0] = vec.bbox;
+        body += `<rect x="${Number(x) || 0}" y="${Number(y) || 0}" width="${Math.abs(Number(w2) || 0)}" height="${Math.abs(Number(h2) || 0)}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+      } else if (vec.type === "path" && Array.isArray(vec.points)) {
+        let d = "";
+        for (const p of vec.points) {
+          if (p.op === "moveTo") d += `M${Number(p.x) || 0} ${Number(p.y) || 0} `;
+          else if (p.op === "lineTo") d += `L${Number(p.x) || 0} ${Number(p.y) || 0} `;
+          else if (p.op === "curveTo") d += `C${Number(p.x1) || 0} ${Number(p.y1) || 0} ${Number(p.x2) || 0} ${Number(p.y2) || 0} ${Number(p.x3) || 0} ${Number(p.y3) || 0} `;
+          else if (p.op === "closePath") d += "Z ";
+        }
+        if (d.trim()) body += `<path d="${escapeHTML2(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+      }
+    }
+    if (!body) return "";
+    const w = Number(page.width) || 0;
+    const h = Number(page.height) || 0;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
+    return `<img class="pdf-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase642(svg)}">
+`;
+  }
+  function pageHasNativeText(page, ir) {
+    return (page.content || []).some((id) => {
+      const obj = ir.objects[id];
+      if (!obj || obj.type !== "text" || !obj.semantic?.text) return false;
+      const method = String(obj.provenance?.method || obj.raw?.source || obj.raw?.textSource || "native").toLowerCase();
+      return method !== "ocr" && method !== "fusion";
+    });
+  }
+  function generateAccessibleStyles() {
+    return `<style>
+    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 820px; margin: 0 auto; }
+    .pdf-page { margin: 40px 0; padding: 10px 0; position: relative; }
+    .pdf-page-raster { position: relative; }
+    .pdf-page-raster > img { display: block; width: auto; height: auto; max-width: none; }
+    .pdf-text-layer { position: absolute; inset: 10px 0 0; }
+    h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; }
+    p { margin: 0.5em 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f5f5f5; font-weight: 600; }
+    figure { margin: 1em 0; }
+    img { max-width: 100%; height: auto; }
+    figcaption { font-size: 0.9em; color: #666; margin-top: 4px; }
+    .ai-generated { color: #999; font-size: 0.8em; font-style: italic; }
+    hr { border: none; border-top: 1px solid #eee; margin: 1em 0; }
+    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
+    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
+    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
+    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+    @media (prefers-contrast: high) { body { background: #000; color: #fff; } a { color: #ff0; } }
+  </style>
+`;
+  }
+  async function extractStructureTree(page) {
+    try {
+      const structTree = await page.getStructTree();
+      if (!structTree) return null;
+      return convertStructTreeNode(structTree);
+    } catch (e) {
+      return null;
+    }
+  }
+  function convertStructTreeNode(node) {
+    if (!node) return null;
+    const result = {
+      type: node.type || "Unknown",
+      role: node.role || node.type,
+      children: []
+    };
+    if (node.alt) result.alt = node.alt;
+    if (node.lang) result.lang = node.lang;
+    if (node.altText) result.altText = node.altText;
+    if (node.children) {
+      for (const child of node.children) {
+        if (typeof child === "string") {
+          result.children.push({ type: "Text", content: child });
+        } else {
+          const converted = convertStructTreeNode(child);
+          if (converted) result.children.push(converted);
+        }
+      }
+    }
+    return result;
+  }
+  async function extractAnnotations(page) {
+    try {
+      const annotations = await page.getAnnotations({ intent: "display" });
+      if (!annotations || annotations.length === 0) return [];
+      return annotations.map((ann) => ({
+        id: ann.id,
+        type: mapAnnotationType(ann.subtype),
+        subtype: ann.subtype,
+        rect: ann.rect,
+        // [x1, y1, x2, y2]
+        color: ann.color,
+        contents: ann.contents || "",
+        title: ann.title || "",
+        modificationDate: ann.modDate,
+        creationDate: ann.creationDate,
+        flags: ann.flags,
+        // Form-specific
+        fieldName: ann.fieldName,
+        fieldType: ann.fieldType,
+        fieldValue: ann.fieldValue,
+        defaultFieldValue: ann.defaultFieldValue,
+        alternativeText: ann.alternativeText,
+        fieldFlags: ann.fieldFlags,
+        readOnly: ann.readOnly,
+        required: ann.required,
+        hidden: ann.hidden,
+        maxLen: ann.maxLen,
+        multiLine: ann.multiLine,
+        password: ann.password,
+        comb: ann.comb,
+        doNotScroll: ann.doNotScroll,
+        combo: ann.combo,
+        multiSelect: ann.multiSelect,
+        checkBox: ann.checkBox,
+        radioButton: ann.radioButton,
+        pushButton: ann.pushButton,
+        buttonValue: ann.buttonValue,
+        exportValue: ann.exportValue,
+        buttonWidgetType: ann.buttonWidgetType,
+        options: ann.options,
+        actions: ann.actions,
+        action: ann.action,
+        resetForm: ann.resetForm,
+        // Link-specific
+        url: ann.url,
+        unsafeUrl: ann.unsafeUrl,
+        newWindow: ann.newWindow,
+        dest: ann.dest,
+        // Markup-specific
+        strokeWidth: ann.strokeWidth,
+        strokeColor: ann.strokeColor,
+        fillColor: ann.fillColor,
+        opacity: ann.opacity
+      }));
+    } catch (e) {
+      return [];
+    }
+  }
+  function mapAnnotationType(subtype) {
+    const typeMap = {
+      "Text": "note",
+      "Link": "link",
+      "FreeText": "free_text",
+      "Line": "line",
+      "Square": "square",
+      "Circle": "circle",
+      "Polygon": "polygon",
+      "PolyLine": "polyline",
+      "Highlight": "highlight",
+      "Underline": "underline",
+      "Squiggly": "squiggly",
+      "StrikeOut": "strikeout",
+      "Stamp": "stamp",
+      "Caret": "caret",
+      "Ink": "ink",
+      "Popup": "popup",
+      "FileAttachment": "file_attachment",
+      "Sound": "sound",
+      "Movie": "movie",
+      "Widget": "form_field",
+      "Screen": "screen",
+      "PrinterMark": "printer_mark",
+      "TrapNet": "trap_net",
+      "Watermark": "watermark",
+      "3D": "3d",
+      "Redact": "redact"
+    };
+    return typeMap[subtype] || subtype || "unknown";
+  }
+  function detectReadingOrder(ir, pageNum) {
+    const pageId = `page_${pageNum}`;
+    const page = ir.pages[pageId];
+    if (!page) return [];
+    const objects = [];
+    for (const objId of page.content) {
+      const obj = ir.objects[objId];
+      if (obj && obj.bbox) {
+        objects.push({
+          id: objId,
+          type: obj.type,
+          bbox: obj.bbox,
+          text: obj.semantic?.text || "",
+          // Calculate center point for sorting
+          centerX: obj.bbox[0] + obj.bbox[2] / 2,
+          centerY: obj.bbox[1] + obj.bbox[3] / 2
+        });
+      }
+    }
+    for (const vecId of page.vectors || []) {
+      const vec = ir.vectors[vecId];
+      if (vec && vec.bbox && vec.semantic?.role) {
+        objects.push({
+          id: vecId,
+          type: "vector",
+          bbox: vec.bbox,
+          text: vec.semantic.role,
+          centerX: vec.bbox[0] + vec.bbox[2] / 2,
+          centerY: vec.bbox[1] + vec.bbox[3] / 2
+        });
+      }
+    }
+    if (objects.length === 0) return [];
+    const sorted = objects.sort((a, b) => {
+      const yDiff = a.centerY - b.centerY;
+      if (Math.abs(yDiff) > 10) return yDiff;
+      return a.centerX - b.centerX;
+    });
+    return sorted.map((obj, index) => ({
+      ...obj,
+      readingOrder: index
+    }));
+  }
+  function getReadingOrderSequence(ir, pageNum) {
+    const order = detectReadingOrder(ir, pageNum);
+    return order.map((item) => item.id);
+  }
+  var idCounter = 0;
+  function generateId(prefix) {
+    return `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`;
+  }
+  function escapeHTML2(str) {
+    if (str == null) return "";
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // src/serverless.js
+  function getPdfjs2() {
+    const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
+    if (!lib) {
+      throw new Error("[codbdocs] pdfjsLib not found. Load PDF.js before calling this API.");
+    }
+    return lib;
+  }
+  function makeCanvas(width, height) {
+    const w = Math.max(1, Math.floor(width));
+    const h = Math.max(1, Math.floor(height));
+    if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(w, h);
+    const el = document.createElement("canvas");
+    el.width = w;
+    el.height = h;
+    return el;
+  }
+  async function canvasToDataUri(canvas, type = "image/png", quality = 0.85) {
+    if (typeof canvas.convertToBlob === "function") {
+      const blob = await canvas.convertToBlob({ type, quality });
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      return `data:${type};base64,${bytesToBase643(buf)}`;
+    }
+    return canvas.toDataURL(type, quality);
+  }
+  function bytesToBase643(bytes) {
+    let bin = "";
+    const step = 32768;
+    for (let i = 0; i < bytes.length; i += step) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    }
+    return btoa(bin);
+  }
+  async function extractPageVector(page, options = {}) {
+    const pdfjsLib2 = getPdfjs2();
+    const scale = options.scale ?? 1;
+    const viewport = page.getViewport({ scale });
+    const opList = await page.getOperatorList();
+    if (typeof pdfjsLib2.SVGGraphics === "function") {
+      try {
+        const gfx = new pdfjsLib2.SVGGraphics(page.commonObjs, page.objs);
+        gfx.embedFonts = options.embedFonts !== false;
+        const element = await gfx.getSVG(opList, viewport);
+        if (typeof XMLSerializer !== "undefined") {
+          return new XMLSerializer().serializeToString(element);
+        }
+        if (element?.outerHTML) return element.outerHTML;
+      } catch {
+      }
+    }
+    return buildSvgFromOperators(opList, viewport, pdfjsLib2);
+  }
+  function buildSvgFromOperators(opList, viewport, pdfjsLib2) {
+    const OPS = pdfjsLib2.OPS || {};
+    const parts = [];
+    let current = [];
+    let fill = "#000000";
+    let stroke = "#000000";
+    let lineWidth = 1;
+    const ctm = [1, 0, 0, -1, 0, viewport.height];
+    const pt = (x, y) => `${round(ctm[0] * x + ctm[2] * y + ctm[4])} ${round(ctm[1] * x + ctm[3] * y + ctm[5])}`;
+    const round = (n) => Math.round(n * 100) / 100;
+    for (let i = 0; i < opList.fnArray.length; i += 1) {
+      const fn = opList.fnArray[i];
+      const args = opList.argsArray[i] || [];
+      if (fn === OPS.setFillRGBColor) fill = rgb(args);
+      else if (fn === OPS.setStrokeRGBColor) stroke = rgb(args);
+      else if (fn === OPS.setLineWidth) lineWidth = args[0] ?? 1;
+      else if (fn === OPS.constructPath) {
+        const ops = args[0] || [];
+        const coords = args[1] || [];
+        let c = 0;
+        for (const op of ops) {
+          if (op === OPS.moveTo) {
+            current.push(`M ${pt(coords[c], coords[c + 1])}`);
+            c += 2;
+          } else if (op === OPS.lineTo) {
+            current.push(`L ${pt(coords[c], coords[c + 1])}`);
+            c += 2;
+          } else if (op === OPS.curveTo) {
+            current.push(
+              `C ${pt(coords[c], coords[c + 1])} ${pt(coords[c + 2], coords[c + 3])} ${pt(coords[c + 4], coords[c + 5])}`
+            );
+            c += 6;
+          } else if (op === OPS.rectangle) {
+            const [x, y, w, h] = coords.slice(c, c + 4);
+            current.push(
+              `M ${pt(x, y)} L ${pt(x + w, y)} L ${pt(x + w, y + h)} L ${pt(x, y + h)} Z`
+            );
+            c += 4;
+          } else if (op === OPS.closePath) {
+            current.push("Z");
+          }
+        }
+      } else if (fn === OPS.fill || fn === OPS.eoFill) {
+        if (current.length) parts.push(`<path d="${current.join(" ")}" fill="${fill}"/>`);
+        current = [];
+      } else if (fn === OPS.stroke || fn === OPS.closeStroke) {
+        if (current.length) {
+          parts.push(
+            `<path d="${current.join(" ")}" fill="none" stroke="${stroke}" stroke-width="${lineWidth}"/>`
+          );
+        }
+        current = [];
+      } else if (fn === OPS.endPath) {
+        current = [];
+      }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(viewport.width)}" height="${Math.round(
+      viewport.height
+    )}" viewBox="0 0 ${Math.round(viewport.width)} ${Math.round(viewport.height)}">${parts.join("")}</svg>`;
+  }
+  function rgb(args) {
+    const [r = 0, g = 0, b = 0] = args;
+    const to = (v) => Math.max(0, Math.min(255, Math.round(v <= 1 ? v * 255 : v)));
+    return `rgb(${to(r)},${to(g)},${to(b)})`;
+  }
+  async function renderPageImage(page, options = {}) {
+    const dpi = options.dpi ?? 150;
+    const scale = options.scale ?? dpi / 72;
+    const type = options.type ?? "image/png";
+    const viewport = page.getViewport({ scale });
+    const canvas = makeCanvas(viewport.width, viewport.height);
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const dataUri = await canvasToDataUri(canvas, type, options.quality ?? 0.85);
+    const width = canvas.width;
+    const height = canvas.height;
+    canvas.width = 0;
+    canvas.height = 0;
+    return { dataUri, width, height, type, dpi: Math.round(scale * 72) };
+  }
+  async function extractPageImages(page, options = {}) {
+    const pdfjsLib2 = getPdfjs2();
+    const OPS = pdfjsLib2.OPS || {};
+    const viewport = page.getViewport({ scale: 1 });
+    const opList = await page.getOperatorList();
+    const out = [];
+    const transforms = [];
+    let ctm = [1, 0, 0, 1, 0, 0];
+    for (let i = 0; i < opList.fnArray.length; i += 1) {
+      const fn = opList.fnArray[i];
+      const args = opList.argsArray[i] || [];
+      if (fn === OPS.save) transforms.push(ctm.slice());
+      else if (fn === OPS.restore) ctm = transforms.pop() || [1, 0, 0, 1, 0, 0];
+      else if (fn === OPS.transform) ctm = multiply(ctm, args);
+      else if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
+        const name = args[0];
+        const img = await resolveImage(page, name);
+        if (!img) continue;
+        const width = Math.abs(ctm[0]);
+        const height = Math.abs(ctm[3]);
+        const x = ctm[4];
+        const y = viewport.height - ctm[5] - height;
+        let dataUri = "";
+        if (options.embed !== false) dataUri = await imageToDataUri(img);
+        out.push({
+          name: String(name),
+          x: Math.round(x * 100) / 100,
+          y: Math.round(y * 100) / 100,
+          width: Math.round(width * 100) / 100,
+          height: Math.round(height * 100) / 100,
+          pixelWidth: img.width,
+          pixelHeight: img.height,
+          data_uri: dataUri
+        });
+      }
+    }
+    return out;
+  }
+  function multiply(a, b) {
+    return [
+      a[0] * b[0] + a[2] * b[1],
+      a[1] * b[0] + a[3] * b[1],
+      a[0] * b[2] + a[2] * b[3],
+      a[1] * b[2] + a[3] * b[3],
+      a[0] * b[4] + a[2] * b[5] + a[4],
+      a[1] * b[4] + a[3] * b[5] + a[5]
+    ];
+  }
+  function resolveImage(page, name) {
+    return new Promise((resolve) => {
+      try {
+        if (page.objs.has(name)) return resolve(page.objs.get(name));
+        page.objs.get(name, (obj) => resolve(obj));
+        setTimeout(() => resolve(null), 3e3);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+  async function imageToDataUri(img) {
+    try {
+      if (img.bitmap && typeof createImageBitmap !== "undefined") {
+        const canvas2 = makeCanvas(img.width, img.height);
+        canvas2.getContext("2d").drawImage(img.bitmap, 0, 0);
+        return await canvasToDataUri(canvas2);
+      }
+      if (!img.data) return "";
+      const canvas = makeCanvas(img.width, img.height);
+      const ctx = canvas.getContext("2d");
+      const out = ctx.createImageData(img.width, img.height);
+      const src = img.data;
+      const channels = src.length / (img.width * img.height);
+      for (let i = 0, j = 0; i < out.data.length; i += 4) {
+        if (channels >= 4) {
+          out.data[i] = src[j];
+          out.data[i + 1] = src[j + 1];
+          out.data[i + 2] = src[j + 2];
+          out.data[i + 3] = src[j + 3];
+          j += 4;
+        } else if (channels >= 3) {
+          out.data[i] = src[j];
+          out.data[i + 1] = src[j + 1];
+          out.data[i + 2] = src[j + 2];
+          out.data[i + 3] = 255;
+          j += 3;
+        } else {
+          out.data[i] = out.data[i + 1] = out.data[i + 2] = src[j];
+          out.data[i + 3] = 255;
+          j += 1;
+        }
+      }
+      ctx.putImageData(out, 0, 0);
+      return await canvasToDataUri(canvas);
+    } catch {
+      return "";
+    }
+  }
+  var ocrWorkerPromise = null;
+  async function loadTesseract(provided) {
+    if (provided) return provided;
+    if (typeof window !== "undefined" && window.Tesseract) return window.Tesseract;
+    throw new Error("[codbdocs] Tesseract not found. Load or pass Tesseract before using OCR.");
+  }
+  async function getOcrWorker(language, providedTesseract) {
+    if (!ocrWorkerPromise) {
+      ocrWorkerPromise = (async () => {
+        const Tesseract = await loadTesseract(providedTesseract);
+        return Tesseract.createWorker(language || "eng");
+      })();
+    }
+    return ocrWorkerPromise;
+  }
+  async function terminateOcr() {
+    if (!ocrWorkerPromise) return;
+    try {
+      const worker = await ocrWorkerPromise;
+      await worker.terminate();
+    } catch {
+    }
+    ocrWorkerPromise = null;
+  }
+  async function ocrImage(image, options = {}) {
+    const worker = await getOcrWorker(options.language ?? "eng", options.tesseract);
+    const { data } = await worker.recognize(image);
+    return {
+      text: (data?.text || "").trim(),
+      confidence: data?.confidence ?? null,
+      words: data?.words?.length ?? 0
+    };
+  }
+  async function ocrPage(page, options = {}) {
+    const rendered = await renderPageImage(page, { dpi: options.dpi ?? 200 });
+    const result = await ocrImage(rendered.dataUri, options);
+    return { ...result, image: options.keepImage ? rendered : null };
+  }
+  async function documentData(source, options = {}) {
+    const {
+      title = "Document",
+      language = "en",
+      aiContext = "",
+      includeLayout = true,
+      includeImages = true,
+      includeForms = true,
+      includeVectors = true,
+      includePageImages = false,
+      includeOriginal = false,
+      ocr = "auto",
+      ocrMinChars = 24,
+      dpi = 150,
+      chunkSize = 220,
+      chunkOverlap = 40,
+      onProgress,
+      signal
+    } = options;
+    const started = Date.now();
+    const pdfjsLib2 = getPdfjs2();
+    const bytes = await sourceBytes2(source);
+    const loadingTask = pdfjsLib2.getDocument({
+      data: bytes ? bytes.slice(0) : void 0,
+      url: !bytes && typeof source === "string" ? source : void 0,
+      disableAutoFetch: true,
+      enableXfa: options.enableXfa !== false
+    });
+    const pdf = await loadingTask.promise;
+    let metadata = {};
+    try {
+      const meta = await pdf.getMetadata();
+      metadata = { ...meta.info || {} };
+    } catch {
+    }
+    let outlineRaw = [];
+    try {
+      outlineRaw = flattenOutline2(await pdf.getOutline());
+    } catch {
+    }
+    const total = pdf.numPages;
+    const numbers = resolvePages(options.pages, total);
+    const pages = [];
+    const layoutPages = [];
+    const chunks = [];
+    const headings = [];
+    const formFields = [];
+    let ocrPages = 0;
+    for (const num2 of numbers) {
+      if (signal?.aborted) throw new Error("[codbdocs] aborted");
+      const page = await pdf.getPage(num2);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const spans = [];
+      let text = "";
+      for (const item of content.items) {
+        if (!item.str) continue;
+        const t = item.transform || [1, 0, 0, 1, 0, 0];
+        const size = Math.round(Math.hypot(t[2], t[3]) * 100) / 100;
+        spans.push({
+          text: item.str,
+          x: Math.round(t[4] * 100) / 100,
+          y: Math.round((viewport.height - t[5] - (item.height || size)) * 100) / 100,
+          width: Math.round((item.width || 0) * 100) / 100,
+          height: Math.round((item.height || size) * 100) / 100,
+          font_size: size,
+          font_family: item.fontName || "",
+          direction: item.dir || "ltr"
+        });
+        text += item.str + (item.hasEOL ? "\n" : " ");
+      }
+      text = text.replace(/[ \t]+\n/g, "\n").trim();
+      let pageForms = [];
+      let pageXfa = null;
+      if (includeForms) {
+        try {
+          if (pdf.isPureXfa && typeof page.getXfa === "function") {
+            pageXfa = await page.getXfa();
+            pageForms = extractXfaFormFields(pageXfa, num2);
+          } else {
+            const annotations = await page.getAnnotations({ intent: "display" });
+            pageForms = annotations.filter((annotation) => annotation.subtype === "Widget" || annotation.fieldType).map((annotation) => normalizeFormField(annotation, num2)).filter(Boolean);
+          }
+          formFields.push(...pageForms);
+        } catch {
+          pageForms = [];
+        }
+      }
+      let pageOcr = false;
+      const wantOcr = ocr === true || ocr === "auto" && text.replace(/\s+/g, "").length < ocrMinChars;
+      if (wantOcr) {
+        try {
+          const result = await ocrPage(page, { language: options.ocrLanguage, dpi: Math.max(dpi, 200), tesseract: options.tesseract });
+          if (result.text) {
+            text = result.text;
+            pageOcr = true;
+            ocrPages += 1;
+          }
+        } catch {
+        }
+      }
+      for (const span of spans) {
+        if (span.font_size >= 14 && span.text.trim().length > 2) {
+          headings.push({
+            text: span.text.trim(),
+            page: num2,
+            level: span.font_size >= 20 ? 1 : span.font_size >= 16 ? 2 : 3,
+            font_size: span.font_size
+          });
+        }
+      }
+      pages.push({
+        page_number: num2,
+        width: Math.round(viewport.width * 100) / 100,
+        height: Math.round(viewport.height * 100) / 100,
+        text: text || `(No text could be extracted from page ${num2})`,
+        words: text ? text.split(/\s+/).filter(Boolean).length : 0,
+        spans: spans.length,
+        images: 0,
+        form_fields: pageForms.length,
+        ocr: pageOcr
+      });
+      chunks.push(...chunkText(text, num2, chunkSize, chunkOverlap, title));
+      if (includeLayout) {
+        const images = includeImages ? await extractPageImages(page) : [];
+        pages[pages.length - 1].images = images.length;
+        const entry = {
+          page_number: num2,
+          width: Math.round(viewport.width * 100) / 100,
+          height: Math.round(viewport.height * 100) / 100,
+          spans,
+          images,
+          forms: pageForms,
+          xfa: pageXfa,
+          vector_svg: "",
+          page_image: ""
+        };
+        if (includeVectors) {
+          try {
+            entry.vector_svg = await extractPageVector(page);
+          } catch {
+            entry.vector_svg = "";
+          }
+        }
+        if (includePageImages) {
+          try {
+            entry.page_image = (await renderPageImage(page, { dpi })).dataUri;
+          } catch {
+            entry.page_image = "";
+          }
+        }
+        layoutPages.push(entry);
+      }
+      try {
+        page.cleanup();
+      } catch {
+      }
+      onProgress?.({
+        page: pages.length,
+        total: numbers.length,
+        percent: Math.round(pages.length / numbers.length * 100)
+      });
+    }
+    const transcript = pages.map((p) => `--- Page ${p.page_number} ---
+${p.text}`).join("\n\n");
+    const outline = outlineRaw.length ? outlineRaw.map((o, i) => ({ text: o.title, level: o.level + 1, page: o.page ?? null, id: `o${i}` })) : headings;
+    const payload = {
+      document: {
+        title,
+        source: options.name || source && source.name || `${title}.pdf`,
+        language,
+        page_count: total,
+        bytes: bytes ? bytes.length : 0,
+        generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+        metadata,
+        form_type: pdf.isPureXfa ? "xfa" : formFields.length ? "acroform" : "none"
+      },
+      metrics: {
+        pages: pages.length,
+        headings: outline.length,
+        rag_chunks: chunks.length,
+        rag_words: chunks.reduce((sum, c) => sum + c.words, 0),
+        total_spans: pages.reduce((sum, p) => sum + p.spans, 0),
+        form_fields: formFields.length,
+        text_pages: pages.filter((p) => !p.text.startsWith("(")).length,
+        ocr_pages: ocrPages,
+        characters: pages.reduce((sum, p) => sum + p.text.length, 0),
+        duration_ms: Date.now() - started,
+        engine: "codbdocs/browser"
+      },
+      outline,
+      pages,
+      chunks,
+      transcript,
+      ai_context: aiContext
+    };
+    if (includeForms) payload.forms = formFields;
+    if (pdf.isPureXfa) payload.xfa = { pure: true, enabled: options.enableXfa !== false, pages: numbers.length };
+    if (includeLayout) payload.layout = { pages: layoutPages };
+    if (includeOriginal && bytes) payload.original_pdf_base64 = bytesToBase643(bytes);
+    try {
+      await pdf.destroy();
+    } catch {
+    }
+    return payload;
+  }
+  async function packageDocumentFull(source, options = {}) {
+    const data = await documentData(source, {
+      ...options,
+      includeLayout: true,
+      includeVectors: options.includeVectors !== false,
+      includePageImages: options.pageBackgrounds !== false
+    });
+    const entries = [];
+    const pageFiles = [];
+    const vectorFiles = [];
+    const bytes = await sourceBytes2(source);
+    const originalPdfSrc = options.includeOriginal !== false && bytes ? `data:application/pdf;base64,${bytesToBase643(bytes)}` : void 0;
+    const html = options.html || buildFidelityHtml(dataToIR(data, options), {
+      title: data.document.title,
+      lang: data.document.language || "en",
+      rag: { chunks: data.chunks },
+      originalName: data.document.source,
+      originalPdfSrc,
+      formSubmitEndpoint: options.formSubmitEndpoint || null,
+      allowPdfSubmitActions: options.allowPdfSubmitActions === true,
+      formRules: options.formRules || null,
+      ...options.htmlOptions ?? {}
+    });
+    entries.push({ name: "index.html", data: html });
+    entries.push({ name: "transcript.txt", data: data.transcript });
+    entries.push({ name: "rag.json", data: JSON.stringify({ chunks: data.chunks }, null, 2) });
+    entries.push({ name: "outline.json", data: JSON.stringify(data.outline, null, 2) });
+    if (options.includePageImages !== false) {
+      const pdfjsLib2 = getPdfjs2();
+      const pdf = await pdfjsLib2.getDocument({ data: bytes.slice(0) }).promise;
+      for (const page of data.pages) {
+        const p = await pdf.getPage(page.page_number);
+        const rendered = await renderPageImage(p, { dpi: options.dpi ?? 150 });
+        const name = `pages/page-${String(page.page_number).padStart(4, "0")}.png`;
+        entries.push({ name, data: dataUriToBytes(rendered.dataUri) });
+        pageFiles.push(name);
+        try {
+          p.cleanup();
+        } catch {
+        }
+      }
+      await pdf.destroy();
+    }
+    for (const page of data.layout?.pages ?? []) {
+      if (!page.vector_svg) continue;
+      const name = `vectors/page-${String(page.page_number).padStart(4, "0")}.svg`;
+      entries.push({ name, data: page.vector_svg });
+      vectorFiles.push(name);
+    }
+    entries.push({ name: "data.json", data: JSON.stringify(data, null, 2) });
+    if (options.includeOriginal !== false && bytes) {
+      entries.push({ name: "original.pdf", data: bytes });
+    }
+    const manifest = {
+      generator: "codbdocs/serverless",
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      document: data.document,
+      metrics: data.metrics,
+      files: entries.map((e) => e.name).concat("manifest.json"),
+      pageImages: pageFiles,
+      vectors: vectorFiles
+    };
+    entries.push({ name: "manifest.json", data: JSON.stringify(manifest, null, 2) });
+    return { blob: createZip(entries), manifest, data };
+  }
+  function dataUriToBytes(dataUri) {
+    const b64 = dataUri.slice(dataUri.indexOf(",") + 1);
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function chunkText(text, pageNumber, size, overlap, title) {
+    const chunks = [];
+    if (!text) return chunks;
+    const words = text.split(/\s+/).filter(Boolean);
+    const step = Math.max(1, size - overlap);
+    for (let i = 0; i < words.length; i += step) {
+      const slice = words.slice(i, i + size);
+      if (!slice.length) break;
+      chunks.push({
+        id: `p${pageNumber}-c${chunks.length + 1}`,
+        page: pageNumber,
+        title,
+        text: slice.join(" "),
+        words: slice.length
+      });
+      if (i + size >= words.length) break;
+    }
+    return chunks;
+  }
+  function resolvePages(pages, total) {
+    if (!pages) return Array.from({ length: total }, (_, i) => i + 1);
+    if (Array.isArray(pages) && pages.length === 2 && pages.every((n) => typeof n === "number")) {
+      const out = [];
+      for (let n = Math.max(1, pages[0]); n <= Math.min(total, pages[1]); n += 1) out.push(n);
+      return out;
+    }
+    if (Array.isArray(pages)) return pages.filter((n) => n >= 1 && n <= total);
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  function flattenOutline2(items, depth = 0, out = []) {
+    for (const item of items || []) {
+      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
+      if (item.items?.length) flattenOutline2(item.items, depth + 1, out);
+    }
+    return out;
+  }
+  async function sourceBytes2(source) {
+    if (source instanceof Uint8Array) return source;
+    if (source instanceof ArrayBuffer) return new Uint8Array(source);
+    if (source && typeof source.arrayBuffer === "function") {
+      return new Uint8Array(await source.arrayBuffer());
+    }
+    if (typeof source === "string") {
+      try {
+        const res = await fetch(source);
+        return new Uint8Array(await res.arrayBuffer());
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  function dataToIR(data, options = {}) {
+    const objects = {};
+    const pages = {};
+    const pageIds = [];
+    const forms = { fields: [], byName: {} };
+    const layout = data.layout?.pages ?? [];
+    const byNumber = new Map(layout.map((p) => [p.page_number, p]));
+    for (const page of data.pages) {
+      const pid = `page-${page.page_number}`;
+      pageIds.push(pid);
+      const lay = byNumber.get(page.page_number);
+      const content = [];
+      (lay?.spans ?? []).forEach((run, i) => {
+        if (!run.text || !run.text.trim()) return;
+        const id = `${pid}-t${i}`;
+        const size = run.font_size || run.height || 11;
+        const height = run.height || size;
+        const bbox = [run.x, page.height - run.y - height, run.width, height];
+        objects[id] = {
+          id,
+          type: "text",
+          bbox,
+          raw: {
+            text: run.text,
+            font: run.font_family || "",
+            fontSize: size,
+            bbox
+          },
+          semantic: { text: run.text, role: "paragraph" }
+        };
+        content.push(id);
+      });
+      (lay?.images ?? []).forEach((img, i) => {
+        if (!img.data_uri) return;
+        const id = `${pid}-img${i}`;
+        objects[id] = {
+          id,
+          type: "image",
+          bbox: [img.x, page.height - img.y - img.height, img.width, img.height],
+          raw: { src: img.data_uri, bbox: [img.x, page.height - img.y - img.height, img.width, img.height] },
+          semantic: { role: "figure", caption: `Image on page ${page.page_number}` },
+          accessibility: { alt: `Image on page ${page.page_number}` }
+        };
+        content.push(id);
+      });
+      const pageForms = lay?.forms ?? (data.forms || []).filter((field) => field.page === page.page_number);
+      const formObjectIds = [];
+      pageForms.forEach((field, i) => {
+        const id = `${pid}-form${i}`;
+        const bbox = Array.isArray(field.bbox) ? field.bbox : Array.isArray(field.rect) && field.rect.length >= 4 ? [
+          Math.min(field.rect[0], field.rect[2]),
+          Math.min(field.rect[1], field.rect[3]),
+          Math.abs(field.rect[2] - field.rect[0]),
+          Math.abs(field.rect[3] - field.rect[1])
+        ] : null;
+        objects[id] = {
+          id,
+          type: "form_field",
+          bbox,
+          raw: { ...field, bbox },
+          semantic: {
+            role: "form_field",
+            fieldType: field.fieldType,
+            fieldName: field.name,
+            value: field.value,
+            defaultValue: field.defaultValue,
+            optionValue: field.optionValue,
+            checked: field.checked,
+            defaultChecked: field.defaultChecked,
+            options: field.options || [],
+            multiple: Boolean(field.multiple),
+            maxLength: field.maxLength ?? null
+          },
+          accessibility: {
+            role: "form",
+            label: field.label || field.name,
+            description: field.description || "",
+            required: Boolean(field.required),
+            readOnly: Boolean(field.readOnly)
+          },
+          provenance: { method: "annotation", confidence: 1 }
+        };
+        if (!field.xfa) content.push(id);
+        formObjectIds.push(id);
+        forms.fields.push({ ...field, objectId: id, pageId: pid });
+        if (!Array.isArray(forms.byName[field.name])) forms.byName[field.name] = [];
+        forms.byName[field.name].push(id);
+      });
+      pages[pid] = {
+        id: pid,
+        num: page.page_number,
+        width: page.width,
+        height: page.height,
+        background: lay?.page_image || "",
+        content,
+        forms: formObjectIds,
+        xfa: lay?.xfa || null
+      };
+    }
+    return {
+      document: {
+        title: options.title || data.document?.title || "Document",
+        pages: pageIds,
+        metadata: { ...data.document?.metadata ?? {}, title: data.document?.title, language: data.document?.language }
+      },
+      pages,
+      objects,
+      forms
+    };
+  }
+  async function buildAccessibleHtml(source, options = {}) {
+    const data = await documentData(source, {
+      ...options,
+      includeLayout: true,
+      includeImages: options.includeImages !== false,
+      includeForms: options.includeForms !== false,
+      includePageImages: options.pageBackgrounds !== false,
+      includeVectors: options.includeVectors === true,
+      dpi: options.dpi ?? 150
+    });
+    const ir = dataToIR(data, options);
+    const bytes = options.includeOriginal === false ? null : await sourceBytes2(source);
+    const html = buildFidelityHtml(ir, {
+      title: data.document.title,
+      lang: data.document.language || "en",
+      rag: { chunks: data.chunks },
+      originalName: data.document.source,
+      originalPdfSrc: bytes ? `data:application/pdf;base64,${bytesToBase643(bytes)}` : void 0,
+      formSubmitEndpoint: options.formSubmitEndpoint || null,
+      allowPdfSubmitActions: options.allowPdfSubmitActions === true,
+      formRules: options.formRules || null,
+      ...options.html ?? {}
+    });
+    return { html, data, ir };
+  }
+  function serverlessCapabilities() {
+    return {
+      text: true,
+      layout: true,
+      images: true,
+      vectors: true,
+      interactiveForms: true,
+      saveFilledPdf: true,
+      electronicSignatures: true,
+      xfa: true,
+      pageImages: true,
+      ocr: typeof document !== "undefined",
+      rag: true,
+      accessibleHtml: true,
+      zipPackage: true,
+      streamingLargeFiles: true,
+      aiQnA: false,
+      translation: false,
+      note: "AI Q&A and translation need a server-held key; everything else runs in the browser."
+    };
+  }
+
+  // src/forms.js
+  function getPdfjs3() {
+    const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
+    if (!lib) throw new Error("[codbdocs] pdfjsLib not found. Load PDF.js before saving a filled PDF.");
+    return lib;
+  }
+  async function sourceBytes3(source) {
+    if (source instanceof Uint8Array) return source.slice(0);
+    if (source instanceof ArrayBuffer) return new Uint8Array(source.slice(0));
+    if (source && typeof source.arrayBuffer === "function") return new Uint8Array(await source.arrayBuffer());
+    if (typeof source === "string") {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error(`[codbdocs] Unable to load PDF (${response.status}).`);
+      return new Uint8Array(await response.arrayBuffer());
+    }
+    throw new Error("[codbdocs] Unsupported PDF source.");
+  }
+  function checkedFor(field, value) {
+    const option = String(field.optionValue || "On");
+    if (Array.isArray(value)) return value.map(String).includes(option);
+    if (typeof value === "boolean") return value;
+    return value != null && String(value) === option;
+  }
+  function applyFormValuesToStorage(pdf, fields, values = {}) {
+    if (!pdf?.annotationStorage) throw new Error("[codbdocs] The PDF document has no annotation storage.");
+    let applied = 0;
+    const stored = /* @__PURE__ */ new Set();
+    for (const field of fields || []) {
+      const id = field.annotationId || field.id || (field.xfa ? field.dataId || field.name : null);
+      const name = field.name || field.fieldName || field.dataId;
+      if (!id || !name || !Object.prototype.hasOwnProperty.call(values, name)) continue;
+      const value = values[name];
+      if (field.fieldType === "button" || field.fieldType === "signature") continue;
+      if (field.xfa && field.fieldType === "radio") {
+        if (stored.has(id)) continue;
+        stored.add(id);
+        const selected = (fields || []).find((item) => item.xfa && item.name === name && String(item.optionValue) === String(value));
+        pdf.annotationStorage.setValue(id, { value: selected ? selected.xfaOn || selected.optionValue : field.xfaOff || "off" });
+        applied += 1;
+        continue;
+      }
+      if (field.xfa) {
+        let next = value;
+        if (field.fieldType === "checkbox" || field.fieldType === "radio") {
+          next = checkedFor(field, value) ? field.optionValue || field.xfaOn || "1" : field.xfaOff || "0";
+        }
+        pdf.annotationStorage.setValue(id, { value: next == null ? "" : next });
+      } else if (field.fieldType === "checkbox" || field.fieldType === "radio") {
+        pdf.annotationStorage.setValue(id, { value: checkedFor(field, value) });
+      } else {
+        pdf.annotationStorage.setValue(id, { value: value == null ? "" : value });
+      }
+      applied += 1;
+    }
+    return applied;
+  }
+  async function extractFields(pdf) {
+    if (pdf.isPureXfa) {
+      const fields2 = [];
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        if (typeof page.getXfa === "function") fields2.push(...extractXfaFormFields(await page.getXfa(), pageNumber));
+      }
+      return fields2;
+    }
+    const fieldObjects = typeof pdf.getFieldObjects === "function" ? await pdf.getFieldObjects() : null;
+    const fields = [];
+    for (const [name, widgets] of Object.entries(fieldObjects || {})) {
+      for (const widget of Array.isArray(widgets) ? widgets : []) {
+        const field = normalizeFormField({ ...widget, fieldName: widget.fieldName || name });
+        if (field) fields.push({ ...field, annotationId: field.id });
+      }
+    }
+    return fields;
+  }
+  async function saveFilledPdf(source, values = {}, options = {}) {
+    const pdfjsLib2 = getPdfjs3();
+    const bytes = await sourceBytes3(source);
+    const task = pdfjsLib2.getDocument({ data: bytes.slice(0), enableXfa: options.enableXfa !== false });
+    const pdf = await task.promise;
+    try {
+      const fields = options.fields || await extractFields(pdf);
+      applyFormValuesToStorage(pdf, fields, values);
+      return new Uint8Array(await pdf.saveDocument());
+    } finally {
+      try {
+        await pdf.destroy();
+      } catch {
+      }
+    }
+  }
+
+  // src/browser.js
+  var STOP_WORDS = /* @__PURE__ */ new Set([
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "been",
+    "by",
+    "for",
+    "from",
+    "has",
+    "have",
+    "how",
+    "i",
+    "in",
+    "is",
+    "it",
+    "do",
+    "does",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "was",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with"
+  ]);
+  var BROWSER_ONLY_PROFILES = Object.freeze({
+    lite: Object.freeze({
+      name: "lite",
+      description: "Low-memory extraction, reflow, forms and local retrieval.",
+      options: Object.freeze({
+        includeLayout: true,
+        includeImages: false,
+        includeForms: true,
+        enableXfa: true,
+        includeVectors: false,
+        includePageImages: false,
+        pageBackgrounds: false,
+        includeOriginal: false,
+        ocr: false,
+        dpi: 96
+      })
+    }),
+    standard: Object.freeze({
+      name: "standard",
+      description: "Faithful accessible HTML with OCR, forms, XFA and local PDF saving.",
+      options: Object.freeze({
+        includeLayout: true,
+        includeImages: true,
+        includeForms: true,
+        enableXfa: true,
+        includeVectors: false,
+        includePageImages: true,
+        pageBackgrounds: true,
+        includeOriginal: true,
+        ocr: "auto",
+        dpi: 120
+      })
+    }),
+    max: Object.freeze({
+      name: "max",
+      description: "Complete offline package with OCR, page images, vectors and the original PDF.",
+      options: Object.freeze({
+        includeLayout: true,
+        includeImages: true,
+        includeForms: true,
+        enableXfa: true,
+        includeVectors: true,
+        includePageImages: true,
+        pageBackgrounds: true,
+        includeOriginal: true,
+        ocr: "auto",
+        dpi: 150
+      })
+    })
+  });
+  var REMOTE_OPTION_KEYS = Object.freeze([
+    "aiEndpoint",
+    "translationEndpoint",
+    "feedbackEndpoint",
+    "formSubmitEndpoint"
+  ]);
+  function runtimeValue(name) {
+    try {
+      return globalThis[name];
+    } catch {
+      return void 0;
+    }
+  }
+  function browserNavigator() {
+    return typeof navigator !== "undefined" ? navigator : {};
+  }
+  function providerMethod(provider, method) {
+    if (typeof provider === "function") return provider;
+    if (provider && typeof provider[method] === "function") return provider[method].bind(provider);
+    return null;
+  }
+  function assertBrowserOnlyOptions(options) {
+    const nested = [options.html, options.htmlOptions].filter((value) => value && typeof value === "object");
+    for (const key of REMOTE_OPTION_KEYS) {
+      if (options[key] || nested.some((value) => value[key])) {
+        throw new Error(`[codbdocs] ${key} is not available in browser-only mode. Use a local provider or a DOM event.`);
+      }
+    }
+    if (options.allowPdfSubmitActions === true || nested.some((value) => value.allowPdfSubmitActions === true)) {
+      throw new Error("[codbdocs] PDF network submit actions are disabled in browser-only mode.");
+    }
+  }
+  function processingOptions(profile, common, overrides = {}) {
+    const requested = {
+      ...profile.options,
+      ...common,
+      ...overrides
+    };
+    assertBrowserOnlyOptions(requested);
+    return {
+      ...requested,
+      formSubmitEndpoint: null,
+      allowPdfSubmitActions: false
+    };
+  }
+  function sourceSize(source) {
+    if (source instanceof Uint8Array || source instanceof ArrayBuffer) return source.byteLength;
+    if (source && typeof source.size === "number") return source.size;
+    return 0;
+  }
+  function validateSource(source, localFilesOnly) {
+    if (localFilesOnly && typeof source === "string") {
+      throw new Error("[codbdocs] URL sources are disabled because localFilesOnly is enabled.");
+    }
+    return source;
+  }
+  function terms(value) {
+    return String(value || "").toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g)?.filter((word) => word.length > 1 && !STOP_WORDS.has(word)).map((word) => {
+      if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+      if (word.length > 5 && word.endsWith("ing")) return word.slice(0, -3);
+      if (word.length > 4 && word.endsWith("ed")) return word.slice(0, -2);
+      if (word.length > 3 && word.endsWith("s")) return word.slice(0, -1);
+      return word;
+    }) || [];
+  }
+  function chunksFromData(data) {
+    if (Array.isArray(data?.chunks) && data.chunks.length) return data.chunks;
+    return (data?.pages || []).map((page) => ({
+      id: `page-${page.page_number || page.page || 1}`,
+      page: page.page_number || page.page || 1,
+      text: page.text || ""
+    }));
+  }
+  function retrieveBrowserOnly(data, query, options = {}) {
+    const queryTerms = terms(query);
+    const phrase = String(query || "").trim().toLowerCase();
+    const limit = Math.max(1, options.limit ?? 5);
+    return chunksFromData(data).map((chunk) => {
+      const text = String(chunk.text || "");
+      const lower = text.toLowerCase();
+      const tokens = terms(text);
+      const counts = /* @__PURE__ */ new Map();
+      for (const token of tokens) counts.set(token, (counts.get(token) || 0) + 1);
+      let score = queryTerms.reduce((sum, token) => sum + Math.min(4, counts.get(token) || 0), 0);
+      if (phrase.length > 2 && lower.includes(phrase)) score += 8;
+      return { ...chunk, score };
+    }).filter((chunk) => chunk.score > 0 || queryTerms.length === 0).sort((a, b) => b.score - a.score || (a.page || 0) - (b.page || 0)).slice(0, limit);
+  }
+  function summarizeBrowserOnly(data, options = {}) {
+    const maxSentences = Math.max(1, options.maxSentences ?? 5);
+    const maxChars = Math.max(120, options.maxChars ?? 1200);
+    const source = (data?.pages || []).map((page) => page.text || "").join(" ").replace(/\s+/g, " ").trim();
+    if (!source) return { answer: "", passages: [], offline: true, generated: false };
+    const sentences = source.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [source];
+    const frequency = /* @__PURE__ */ new Map();
+    for (const word of terms(source)) frequency.set(word, (frequency.get(word) || 0) + 1);
+    const selected = sentences.map((sentence, index) => {
+      const words = terms(sentence);
+      const score = words.reduce((sum, word) => sum + (frequency.get(word) || 0), 0) / Math.sqrt(words.length || 1);
+      return { sentence: sentence.trim(), index, score };
+    }).filter((item) => item.sentence.length > 20).sort((a, b) => b.score - a.score).slice(0, maxSentences).sort((a, b) => a.index - b.index);
+    const passages = [];
+    let answer = "";
+    for (const item of selected) {
+      const next = `${answer}${answer ? " " : ""}${item.sentence}`;
+      if (next.length > maxChars && answer) break;
+      answer = next.slice(0, maxChars);
+      passages.push(item.sentence);
+    }
+    return { answer, passages, offline: true, generated: false };
+  }
+  function browserOnlyCapabilities(options = {}) {
+    const nav = browserNavigator();
+    const providers = options.providers || {};
+    const pdfjs = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
+    const tesseract = typeof window !== "undefined" && window.Tesseract;
+    const ai = providerMethod(providers.ai, "ask");
+    const translation = providerMethod(providers.translation, "translate");
+    const vision = providerMethod(providers.vision, "describe");
+    const base = serverlessCapabilities();
+    return {
+      browserOnly: true,
+      backendRequired: false,
+      profileNames: Object.keys(BROWSER_ONLY_PROFILES),
+      runtime: {
+        browser: typeof window !== "undefined" && typeof document !== "undefined",
+        pdfjs: Boolean(pdfjs),
+        tesseract: Boolean(tesseract),
+        webAssembly: typeof WebAssembly !== "undefined",
+        workers: typeof Worker !== "undefined",
+        offscreenCanvas: typeof OffscreenCanvas !== "undefined",
+        indexedDB: Boolean(runtimeValue("indexedDB")),
+        webCrypto: Boolean(runtimeValue("crypto")?.subtle),
+        webGPU: Boolean(nav.gpu),
+        speech: typeof speechSynthesis !== "undefined",
+        fileSystemAccess: typeof showSaveFilePicker !== "undefined",
+        deviceMemoryGB: nav.deviceMemory || null,
+        logicalProcessors: nav.hardwareConcurrency || null
+      },
+      features: {
+        ...base,
+        offlineGroundedQnA: true,
+        localGenerativeQnA: Boolean(ai),
+        localTranslation: Boolean(translation),
+        localImageDescription: Boolean(vision),
+        remediatedPdfUaWriter: false,
+        trustedCertificateSignatures: false,
+        automaticCrossOriginCrawling: false,
+        realtimeCollaboration: false
+      },
+      limits: {
+        xfa: "PDF.js-compatible XFA plus CodbDocs browser rules; Acrobat-only services and arbitrary scripts are not executed.",
+        crawling: "Same-origin URLs, CORS-enabled URLs and user-selected files only while the browser application is running.",
+        signatures: "Typed, drawn and uploaded electronic signatures; certificate-backed PDF signatures need a local signing integration.",
+        collaboration: "Export/import review packages unless the host application supplies a synchronization provider.",
+        localModels: "Generative answers, translation and image descriptions depend on an optional WebGPU or WebAssembly model provider.",
+        pdfUa: "Accessibility auditing and HTML remediation are available; writing a fully tagged PDF/UA structure tree is not yet implemented."
+      }
+    };
+  }
+  function recommendBrowserOnlyProfile(input = {}) {
+    const nav = browserNavigator();
+    const bytes = input.bytes ?? input.size ?? 0;
+    const pages = input.pages ?? 0;
+    const memory = input.deviceMemoryGB ?? nav.deviceMemory ?? 4;
+    const reasons = [];
+    let profile = "standard";
+    if (memory <= 2 || bytes > 100 * 1024 * 1024 || pages > 500) {
+      profile = "lite";
+      reasons.push("The document or device is resource constrained.");
+    } else if (memory >= 8 && bytes <= 25 * 1024 * 1024 && pages <= 150) {
+      profile = "max";
+      reasons.push("The device has enough memory for page images, vectors and an embedded original.");
+    } else {
+      reasons.push("Balanced fidelity and browser memory use.");
+    }
+    return { profile, reasons, bytes, pages, deviceMemoryGB: memory };
+  }
+  function createBrowserOnlySDK(options = {}) {
+    const selected = options.profile || "standard";
+    const profile = BROWSER_ONLY_PROFILES[selected];
+    if (!profile) {
+      throw new Error(`[codbdocs] Unknown browser-only profile "${selected}". Use lite, standard or max.`);
+    }
+    const providers = options.providers || {};
+    const common = { ...options.processing || {} };
+    const localFilesOnly = options.localFilesOnly === true;
+    assertBrowserOnlyOptions(common);
+    const api = {
+      mode: "browser-only",
+      profile: profile.name,
+      profileOptions: { ...profile.options },
+      capabilities: () => browserOnlyCapabilities({ providers }),
+      recommendProfile: (sourceOrMetrics = {}) => recommendBrowserOnlyProfile(
+        sourceOrMetrics && (sourceOrMetrics.bytes != null || sourceOrMetrics.pages != null) ? sourceOrMetrics : { bytes: sourceSize(sourceOrMetrics) }
+      ),
+      process: (source, overrides = {}) => documentData(
+        validateSource(source, localFilesOnly),
+        processingOptions(profile, common, overrides)
+      ),
+      buildHtml: (source, overrides = {}) => buildAccessibleHtml(
+        validateSource(source, localFilesOnly),
+        processingOptions(profile, common, overrides)
+      ),
+      package: (source, overrides = {}) => packageDocumentFull(
+        validateSource(source, localFilesOnly),
+        processingOptions(profile, common, overrides)
+      ),
+      saveFilledPdf: (source, values, overrides = {}) => saveFilledPdf(
+        validateSource(source, localFilesOnly),
+        values,
+        { enableXfa: true, ...overrides }
+      ),
+      retrieve: (data, query, overrides = {}) => retrieveBrowserOnly(data, query, overrides),
+      ask: async (data, question, overrides = {}) => {
+        const passages = retrieveBrowserOnly(data, question, overrides);
+        const ask = providerMethod(providers.ai, "ask");
+        if (ask) return ask({ question, passages, data, options: overrides });
+        const answer = passages[0]?.text || "No matching passage was found in this document.";
+        return {
+          answer,
+          passages,
+          citations: passages.map((passage) => ({ page: passage.page, chunk: passage.id })),
+          confidence: passages.length ? Math.min(1, 0.35 + passages[0].score / 20) : 0,
+          offline: true,
+          generated: false
+        };
+      },
+      summarize: async (data, overrides = {}) => {
+        const fallback = summarizeBrowserOnly(data, overrides);
+        const summarize = providerMethod(providers.ai, "summarize");
+        return summarize ? summarize({ data, fallback, options: overrides }) : fallback;
+      },
+      translate: async (text, target, overrides = {}) => {
+        const translate = providerMethod(providers.translation, "translate");
+        if (!translate) {
+          throw new Error("[codbdocs] Browser-only translation needs a local translation provider.");
+        }
+        return translate({ text, target, sourceLanguage: overrides.sourceLanguage || "auto", options: overrides });
+      },
+      describeImage: async (image, context = {}, overrides = {}) => {
+        const describe = providerMethod(providers.vision, "describe");
+        if (!describe) {
+          throw new Error("[codbdocs] Browser-only image descriptions need a local vision provider.");
+        }
+        return describe({ image, context, options: overrides });
+      }
+    };
+    return Object.freeze(api);
+  }
+
+  // src/brain.js
   function analyzeSpatialLayout(items, pageSize) {
     if (!items || items.length === 0) {
       return { columns: 0, rows: [], headings: [], flow: "unknown" };
@@ -3151,7 +6813,7 @@ ${backendDataScripts}
     return regions;
   }
 
-  // packages/core/src/layers.js
+  // src/layers.js
   var TextLayer = class {
     constructor() {
       this.pages = [];
@@ -3466,7 +7128,7 @@ ${backendDataScripts}
     }
   };
 
-  // packages/core/src/content.js
+  // src/content.js
   var BlockTypes = {
     HEADING: "heading",
     PARAGRAPH: "paragraph",
@@ -3998,7 +7660,7 @@ ${backendDataScripts}
     return dist < threshold;
   }
 
-  // packages/core/src/query.js
+  // src/query.js
   function executeQuery(contentGraph, query, graph = null) {
     if (graph && graph.planQuery && graph.hybridSearch) {
       const plan = graph.planQuery(query);
@@ -4162,7 +7824,7 @@ ${backendDataScripts}
     }));
   }
 
-  // packages/core/src/rag.js
+  // src/rag.js
   async function extractImages(page, options = {}) {
     const {
       format = "png",
@@ -4934,2047 +8596,14 @@ ${backendDataScripts}
     return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
   }
 
-  // packages/core/src/workers.js
+  // src/workers.js
   var HAS_OFFSCREEN = typeof OffscreenCanvas !== "undefined";
   var HAS_WORKERS = typeof Worker !== "undefined";
   function canUseWorkers() {
     return HAS_OFFSCREEN && HAS_WORKERS;
   }
 
-  // packages/core/src/exporters.js
-  function mdEscape(text) {
-    return String(text || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/^([#>*+\-]|\d+\.)\s*/gm, "\\$&");
-  }
-  function buildRAGContext(ir, contentGraph) {
-    const pages = (ir.document.pages || []).map((pageId) => {
-      const page = ir.pages[pageId];
-      if (!page) return null;
-      const blocks = [];
-      const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean);
-      for (const obj of objects) {
-        if (obj.type === "text" && obj.semantic?.text) {
-          blocks.push({
-            type: obj.semantic.role || "text",
-            text: obj.semantic.text,
-            bbox: obj.bbox || null,
-            fontSize: obj.raw?.fontSize || null,
-            font: obj.raw?.font || null,
-            color: obj.raw?.color || null
-          });
-        } else if (obj.type === "image") {
-          blocks.push({
-            type: "image",
-            alt: obj.accessibility?.alt || obj.semantic?.caption || "",
-            caption: obj.semantic?.caption || "",
-            bbox: obj.bbox || null,
-            width: obj.raw?.width || null,
-            height: obj.raw?.height || null
-          });
-        } else if (obj.type === "link") {
-          blocks.push({
-            type: "link",
-            text: obj.semantic?.text || "",
-            url: obj.raw?.url || null,
-            dest: obj.raw?.dest || null,
-            bbox: obj.bbox || null
-          });
-        }
-      }
-      const text = objects.filter((o) => o.type === "text" && o.semantic?.text).map((o) => o.semantic.text).join(" ");
-      const pageEntities = contentGraph ? (contentGraph.pages || []).find((pg) => pg.page === page.num)?.entities || [] : [];
-      return {
-        page: page.num,
-        size: { width: page.width, height: page.height },
-        text,
-        summary: summarizeText(text),
-        blocks,
-        entities: pageEntities,
-        accessibility: {
-          hasTaggedStructure: Boolean(ir.structure?.[pageId]),
-          readingOrderItems: Array.isArray(page.readingOrder) ? page.readingOrder.length : 0,
-          language: page.language || ir.document.metadata?.language || null,
-          textQuality: page.textQuality || null
-        },
-        fidelity: {
-          hasRaster: Boolean(page.background),
-          width: page.width,
-          height: page.height,
-          rotation: page.rotation || 0
-        }
-      };
-    }).filter(Boolean);
-    const entityTypes = {};
-    const blockTypes = {};
-    const content = contentGraph || {};
-    (content.allBlocks || []).forEach((b) => {
-      blockTypes[b.type] = (blockTypes[b.type] || 0) + 1;
-    });
-    (content.allEntities || []).forEach((e) => {
-      entityTypes[e.type] = (entityTypes[e.type] || 0) + 1;
-    });
-    return {
-      format: "codbdocs-rag-v2",
-      aiContract: {
-        version: "1.0",
-        purpose: "Grounded document search, summaries, metadata extraction, citations, and accessible descriptions.",
-        recommendedFlow: [
-          "Use pages and chunks as retrievable passages.",
-          "Use metadata, entities, tables, relationships, and accessibility fields to enrich prompts.",
-          "Return page citations using page or pageNumber.",
-          "Use fidelity dimensions and bounding boxes when highlighting source evidence."
-        ],
-        extensionPoints: {
-          search: ["fullText", "pages[].text", "pages[].blocks", "chunks"],
-          summaries: ["pages[].summary", "documentSummary", "outline"],
-          metadata: ["metadata", "entityTypes", "pages[].entities"],
-          accessibility: ["accessibility", "pages[].accessibility"]
-        }
-      },
-      source: ir.document.metadata?.title || "PDF document",
-      title: ir.document.metadata?.title || null,
-      author: ir.document.metadata?.author || null,
-      createdAt: ir.document.metadata?.creationDate || ir.document.metadata?.modDate || null,
-      documentType: content.documentType || ir.document.type || null,
-      pageCount: (ir.document.pages || []).length,
-      pages,
-      documentSummary: summarizeText(pages.map((p) => p.text).join(" "), 600),
-      fullText: pages.map((p) => `[Page ${p.page}]
-${p.text}`).join("\n\n"),
-      blockTypes,
-      entityTypes,
-      tables: content.allTables ? content.allTables.map((t) => t.toJSON ? t.toJSON() : t) : [],
-      relationships: content.allRelationships || [],
-      metadata: ir.document.metadata || {},
-      accessibility: {
-        language: ir.document.metadata?.language || null,
-        taggedPages: pages.filter((p) => p.accessibility?.hasTaggedStructure).length,
-        pageCount: pages.length,
-        screenReaderFriendly: pages.some((p) => p.text && p.text.trim())
-      },
-      security: ir.document.security ? summarizeSecurity(ir.document.security) : null,
-      outline: ir.document.navigation?.outline || []
-    };
-  }
-  function summarizeText(text, limit = 320) {
-    const clean = String(text || "").replace(/\s+/g, " ").trim();
-    if (!clean) return "";
-    if (clean.length <= limit) return clean;
-    const cut = clean.lastIndexOf(".", limit);
-    return clean.slice(0, cut > limit * 0.55 ? cut + 1 : limit).trim() + "...";
-  }
-  function summarizeSecurity(security) {
-    if (!security) return null;
-    const out = {};
-    for (const [k, v] of Object.entries(security)) {
-      if (typeof v === "boolean" || typeof v === "string" || typeof v === "number") {
-        out[k] = v;
-      }
-    }
-    return out;
-  }
-  function flowLines(objects, { lineTolerance = 1 } = {}) {
-    const texts = objects.filter((o) => o && o.type === "text" && o.semantic?.text).map((o) => {
-      const b = o.bbox || [0, 0, 0, 0];
-      return { o, x: b[0], y: b[1], w: b[2], h: b[3] || 0, cy: b[1] + (b[3] || 0) / 2 };
-    });
-    if (!texts.length) return [];
-    const medianH = texts.map((t) => t.h).sort((a, b) => a - b)[Math.floor(texts.length / 2)] || 1;
-    const tol = Math.max(2, medianH * 0.45 * lineTolerance);
-    const lines = [];
-    const sortedByY = [...texts].sort((a, b) => b.cy - a.cy);
-    for (const t of sortedByY) {
-      let placed = null;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
-        const lineY = line.reduce((s, x) => s + x.cy, 0) / line.length;
-        if (Math.abs(t.cy - lineY) <= tol) {
-          placed = line;
-          break;
-        }
-      }
-      if (placed) placed.push(t);
-      else lines.push([t]);
-    }
-    const lineTexts = lines.map((line) => line.sort((a, b) => a.x - b.x).map((t) => String(t.o.semantic.text).replace(/\s+/g, " ").trim()).filter(Boolean).join(" ").replace(/\s+/g, " ")).filter((t) => t.length);
-    const paragraphs = [];
-    for (const lt of lineTexts) paragraphs.push([lt]);
-    return paragraphs;
-  }
-  function toMarkdown(ir, contentGraph) {
-    const out = [];
-    const title = ir.document.metadata?.title || "Document";
-    const author = ir.document.metadata?.author || "";
-    out.push(`# ${title}`);
-    if (author) out.push(`
-_By ${author}_`);
-    out.push("");
-    for (const pageId of ir.document.pages || []) {
-      const page = ir.pages[pageId];
-      if (!page) continue;
-      const objects = (page.content || []).map((id) => ir.objects[id]).filter(Boolean).sort(byReadingOrder);
-      let inTable = false;
-      let pending = [];
-      const flush = () => {
-        if (pending.length) {
-          for (const par of flowLines(pending)) {
-            out.push(mdEscape(par.join(" ")));
-            out.push("");
-          }
-          pending = [];
-        }
-      };
-      for (const obj of objects) {
-        const role = obj.semantic?.role || "text";
-        if (obj.type === "text" && obj.semantic?.text) {
-          const text = String(obj.semantic.text).replace(/\s+/g, " ").trim();
-          if (!text) continue;
-          switch (role) {
-            case "heading": {
-              flush();
-              const level = Math.min(6, Math.max(2, obj.semantic.level || 2));
-              out.push(`${"#".repeat(level)} ${mdEscape(text)}`);
-              out.push("");
-              break;
-            }
-            case "list":
-            // fall through: handled as plain text since list grouping is in content graph
-            default:
-              pending.push(obj);
-              break;
-          }
-        } else if (obj.type === "image") {
-          flush();
-          const alt = obj.accessibility?.alt || obj.semantic?.caption || "Image";
-          out.push(`![${mdEscape(alt)}](${obj.raw?.src ? "" : ""})`);
-          if (obj.semantic?.caption) {
-            out.push(`*${mdEscape(obj.semantic.caption)}*`);
-          }
-          out.push("");
-        } else if (obj.type === "link") {
-          flush();
-          const text = obj.semantic?.text || obj.raw?.url || "link";
-          const href = obj.raw?.url || obj.raw?.href || "#";
-          out.push(`[${mdEscape(text)}](${href})`);
-          out.push("");
-        } else if (role === "separator") {
-          flush();
-          out.push("---");
-          out.push("");
-        }
-      }
-      flush();
-    }
-    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
-  }
-  function toReflowedText(ir) {
-    const pages = (ir.document.pages || []).map((pageId) => {
-      const page = ir.pages[pageId];
-      if (!page) return null;
-      const objs = (page.content || []).map((id) => ir.objects[id]).filter((o) => o && (o.type === "text" || o.type === "link") && (o.semantic?.text || o.raw?.url));
-      const paragraphs = flowLines(objs).map((par) => par.join(" "));
-      return { page: page.num, text: paragraphs.join("\n\n") };
-    }).filter(Boolean);
-    return {
-      pageCount: pages.length,
-      pages,
-      fullText: pages.map((p) => `--- page ${p.page} ---
-${p.text}`).join("\n\n")
-    };
-  }
-  function toFullJSON(ir, contentGraph) {
-    const pages = (ir.document.pages || []).map((pageId) => {
-      const page = ir.pages[pageId];
-      if (!page) return null;
-      return {
-        id: pageId,
-        page: page.num,
-        size: { width: page.width, height: page.height },
-        rotation: page.rotation || 0,
-        mediaBox: page.mediaBox || null,
-        cropBox: page.cropBox || null,
-        labels: page.labels || null,
-        background: page.background || null,
-        textObjects: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "text").map((o) => ({
-          id: o.id,
-          text: o.semantic?.text || "",
-          role: o.semantic?.role || "text",
-          level: o.semantic?.level || null,
-          bbox: o.bbox || null,
-          font: o.raw?.font || null,
-          fontSize: o.raw?.fontSize || null,
-          color: o.raw?.color || null,
-          transform: o.raw?.transform || null
-        })),
-        images: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "image").map((o) => ({
-          id: o.id,
-          bbox: o.bbox || null,
-          width: o.raw?.width || null,
-          height: o.raw?.height || null,
-          alt: o.accessibility?.alt || "",
-          caption: o.semantic?.caption || "",
-          src: o.raw?.src || null
-        })),
-        links: (page.content || []).map((id) => ir.objects[id]).filter((o) => o && o.type === "link").map((o) => ({
-          id: o.id,
-          bbox: o.bbox || null,
-          text: o.semantic?.text || "",
-          url: o.raw?.url || null,
-          dest: o.raw?.dest || null
-        })),
-        vectors: (page.vectors || []).map((id) => ir.vectors[id]).filter(Boolean),
-        annotations: page.annotations || [],
-        markedContent: page.markedContent || [],
-        artifacts: page.artifacts || []
-      };
-    }).filter(Boolean);
-    const payload = {
-      format: "codbdocs-full-json",
-      version: ir.version || "1.0",
-      document: {
-        id: ir.document.id || null,
-        title: ir.document.metadata?.title || null,
-        author: ir.document.metadata?.author || null,
-        type: contentGraph?.documentType || ir.document.type || null,
-        metadata: ir.document.metadata || {},
-        security: ir.document.security || {},
-        outline: ir.document.navigation?.outline || [],
-        labels: ir.document.navigation?.labels || []
-      },
-      pageCount: pages.length,
-      pages
-    };
-    if (contentGraph) {
-      payload.content = {
-        documentType: contentGraph.documentType || null,
-        blocks: contentGraph.allBlocks ? contentGraph.allBlocks.map((b) => b.toJSON ? b.toJSON() : b) : [],
-        entities: contentGraph.allEntities || [],
-        tables: contentGraph.allTables ? contentGraph.allTables.map((t) => t.toJSON ? t.toJSON() : t) : [],
-        relationships: contentGraph.allRelationships || [],
-        summary: contentGraph.getSummary ? contentGraph.getSummary() : null
-      };
-    }
-    return payload;
-  }
-  function byReadingOrder(a, b) {
-    const ay = a.bbox?.[1] || 0;
-    const by = b.bbox?.[1] || 0;
-    if (Math.abs(ay - by) > 10) return by - ay;
-    return (a.bbox?.[0] || 0) - (b.bbox?.[0] || 0);
-  }
-
-  // packages/core/src/viewer.js
-  function generateViewerChrome(ragPayload) {
-    const outline = ragPayload && ragPayload.outline || [];
-    return {
-      toolbar: viewerToolbarHTML(),
-      sidebar: viewerSidebarHTML(outline),
-      script: viewerScript(),
-      styles: viewerStyles()
-    };
-  }
-  function viewerToolbarHTML() {
-    return `
-  <div class="codbdocs-toolbar" role="group" aria-label="Document viewer controls">
-    <div class="codbdocs-searchbox">
-      <input type="search" id="codbdocs-search-input" aria-label="Search this document"
-        placeholder="Search document\u2026" autocomplete="off">
-      <span id="codbdocs-search-count" class="codbdocs-search-count" role="status" aria-live="polite"></span>
-    </div>
-    <div class="codbdocs-sep" aria-hidden="true"></div>
-    <button type="button" class="codbdocs-toggle" id="codbdocs-view-pdf" data-codbdocs-view="pdf" aria-pressed="true">PDF</button>
-    <button type="button" class="codbdocs-toggle" id="codbdocs-view-text" data-codbdocs-view="text" aria-pressed="false">Text</button>
-    <button type="button" class="codbdocs-toggle" id="codbdocs-view-both" data-codbdocs-view="both" aria-pressed="false">Both</button>
-    <div class="codbdocs-sep" aria-hidden="true"></div>
-    <button type="button" class="codbdocs-btn" id="codbdocs-page-prev" aria-label="Previous page">\u2039</button>
-    <span id="codbdocs-page-label" class="codbdocs-page-label" aria-live="polite">Page 1 / 1</span>
-    <button type="button" class="codbdocs-btn" id="codbdocs-page-next" aria-label="Next page">\u203A</button>
-    <div class="codbdocs-sep" aria-hidden="true"></div>
-    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-out" aria-label="Zoom out">\u2212</button>
-    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-fit" aria-label="Fit to width">Fit</button>
-    <button type="button" class="codbdocs-btn" id="codbdocs-zoom-in" aria-label="Zoom in">+</button>
-    <div class="codbdocs-sep" aria-hidden="true"></div>
-    <button type="button" class="codbdocs-toggle" id="codbdocs-contrast" aria-pressed="false">High contrast</button>
-    <button type="button" class="codbdocs-btn" id="codbdocs-outline-toggle" aria-expanded="true" aria-controls="codbdocs-outline">Outline</button>
-    <button type="button" class="codbdocs-btn codbdocs-return-btn" id="codbdocs-return-referrer">Return</button>
-  </div>
-  `;
-  }
-  function viewerSidebarHTML(outline) {
-    const lis = renderOutlineList(outline);
-    return `
-  <aside id="codbdocs-outline" class="codbdocs-outline" aria-label="Document outline">
-    <section class="codbdocs-search-results-wrap" aria-label="Search results">
-      <h2 class="codbdocs-panel-title">Search Results</h2>
-      <div id="codbdocs-search-results" class="codbdocs-search-results" role="list"></div>
-    </section>
-    <section class="codbdocs-outline-wrap" aria-label="Outline">
-      <h2 class="codbdocs-panel-title">Outline</h2>
-    <div class="codbdocs-outline-inner">
-      ${lis || '<p class="codbdocs-outline-empty">No outline in this document.</p>'}
-    </div>
-    </section>
-  </aside>
-  `;
-  }
-  function renderOutlineList(nodes, depth) {
-    if (!Array.isArray(nodes) || nodes.length === 0) return "";
-    const d = depth || 0;
-    let html = '<ul class="codbdocs-outline-list">';
-    for (const node of nodes) {
-      const label = escapeHTML(node.title || "Untitled");
-      const page = node.page || node.pageNum || 0;
-      const dest = encodeURIComponent(node.title || "");
-      html += `<li class="codbdocs-outline-item" style="padding-left:${d * 14}px"><a href="#codbdocs-search" class="codbdocs-outline-link" data-outline-dest="${dest}"
-         data-outline-page="${page}">${label}</a></li>`;
-      if (node.items && node.items.length) html += renderOutlineList(node.items, d + 1);
-    }
-    html += "</ul>";
-    return html;
-  }
-  function viewerStyles() {
-    return `
-  <style id="codbdocs-viewer-styles">
-    body { max-width: none; margin: 0; padding: 20px; }
-    #codbdocs-viewer { display: flex; align-items: flex-start; gap: 16px; max-width: 1200px; margin: 0 auto; padding: 0 12px 40px; }
-    #codbdocs-main { flex: 1 1 auto; min-width: 0; overflow: auto; }
-    .pdf-page { width: fit-content; max-width: none; padding: 0; overflow: hidden; }
-    .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
-    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; }
-    .codbdocs-sidebar { width: 240px; flex: 0 0 240px; }
-    .codbdocs-outline { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); max-height: 70vh; overflow: auto; position: sticky; top: 12px; }
-    .codbdocs-outline-list { list-style: none; margin: 0; padding: 0; }
-    .codbdocs-outline-item { border-bottom: 1px solid #f0f0f0; }
-    .codbdocs-outline-link { display: block; padding: 5px 6px; color: #334; text-decoration: none; font-size: 13px; border-radius: 4px; }
-    .codbdocs-outline-link:hover, .codbdocs-outline-link.is-active { background: #eef1ff; color: #1c2b8a; }
-    .codbdocs-outline-empty { color: #888; font-size: 13px; padding: 6px; margin: 0; }
-    .codbdocs-panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #667; margin: 2px 6px 8px; }
-    .codbdocs-search-results-wrap { border-bottom: 1px solid #eee; margin-bottom: 10px; padding-bottom: 10px; }
-    .codbdocs-search-result { display: block; width: 100%; text-align: left; border: 0; border-radius: 6px; background: transparent; padding: 7px 8px; margin: 2px 0; color: #334; cursor: pointer; font-size: 12px; }
-    .codbdocs-search-result:hover, .codbdocs-search-result.is-active { background: #fff4cc; color: #222; }
-    .codbdocs-search-result-page { display: block; font-weight: 700; margin-bottom: 2px; }
-    .codbdocs-search-result-snippet { display: block; color: #667; line-height: 1.35; }
-    .codbdocs-toolbar { display: flex; align-items: center; gap: 6px; background: #1f2430; color: #fff; padding: 8px 12px; border-radius: 8px; margin: 12px auto; flex-wrap: wrap; justify-content: center; position: sticky; top: 0; z-index: 40; box-shadow: 0 2px 6px rgba(0,0,0,.25); max-width: 1180px; }
-    .codbdocs-toolbar .codbdocs-toggle, .codbdocs-toolbar .codbdocs-btn { background: #2b3140; color: #cfd6e6; border: 1px solid #40475a; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
-    .codbdocs-toolbar .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
-    .codbdocs-toolbar .codbdocs-btn:hover, .codbdocs-toolbar .codbdocs-toggle:hover { background: #394159; }
-    .codbdocs-return-btn { margin-left: auto; }
-    .codbdocs-searchbox { display: flex; align-items: center; gap: 8px; }
-    .codbdocs-searchbox input { padding: 6px 10px; border: 1px solid #40475a; border-radius: 6px; background: #0d1117; color: #eee; font-size: 13px; width: 220px; }
-    .codbdocs-searchbox input:focus { outline: 2px solid #4361ee; }
-    .codbdocs-search-count { font-size: 12px; color: #9aa4bd; min-width: 28px; text-align: center; white-space: nowrap; }
-    .codbdocs-page-label { color: #cfd6e6; font-size: 13px; min-width: 90px; text-align: center; }
-    .codbdocs-sep { width: 1px; height: 22px; background: #3a4155; margin: 0 2px; }
-    .codbdocs-viewer-hint { color: #9aa4bd; font-size: 11px; text-align: center; margin: 8px auto 0; max-width: 1180px; }
-
-    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
-    body[data-codbdocs-view="text"] .pdf-embedded-image { display: none; }
-    body[data-codbdocs-view="pdf"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
-    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text-layer { visibility: visible; pointer-events: auto; }
-    body[data-codbdocs-view="pdf"][data-codbdocs-searching="true"] .pdf-text.sr-highlight { color: #000 !important; }
-
-    .pdf-text.sr-highlight { background: rgba(255, 213, 79, 0.9); color: #000; border-radius: 2px; }
-    .pdf-text.sr-highlight.is-current { background: #ff8c1a; color: #000; }
-    .codbdocs-zoom-wrap { position: relative; margin: 20px auto; transform-origin: top center; transition: width .15s ease, height .15s ease; }
-
-    body[data-codbdocs-contrast="high"] { background: #000; color: #fff; }
-    body[data-codbdocs-contrast="high"] .pdf-page { box-shadow: 0 0 0 1px #777; }
-    body[data-codbdocs-contrast="high"] .codbdocs-outline { border-color: #555; }
-    :focus-visible { outline: 3px solid #4361ee; outline-offset: 1px; }
-    .skip-link { position: absolute; left: -999px; top: 0; background: #4361ee; color: #fff; padding: 8px 12px; border-radius: 0 0 6px 0; z-index: 100; }
-    .skip-link:focus { left: 0; }
-    @media (max-width: 900px) { #codbdocs-viewer { flex-direction: column; } .codbdocs-sidebar { width: 100%; flex: 1 1 auto; } .codbdocs-outline { position: static; max-height: none; } }
-  </style>
-  `;
-  }
-  function viewerScript() {
-    return `
-  <script>
-  (function () {
-    var $ = function (s, r) { return (r || document).querySelector(s); };
-    var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
-
-    var body = document.body;
-    var pages = $$('.pdf-page');
-    var currentPage = 1;
-    var zoom = 1;
-    var fitMode = true;
-    var rag = {};
-    var ragEl = $('#codbdocs-rag');
-    if (ragEl) {
-      try { rag = JSON.parse(ragEl.textContent || '{}') || {}; } catch (e) { rag = {}; }
-    }
-    var pageTextIndex = (rag.pages || []).map(function (p) {
-      return { page: p.page || 1, text: normalize(p.text || ''), raw: p.text || '' };
-    });
-    if (!pageTextIndex.length) {
-      pageTextIndex = pages.map(function (pg, i) {
-        var text = $$('.pdf-text', pg).map(function (el) { return el.textContent || ''; }).join(' ');
-        return { page: i + 1, text: normalize(text), raw: text };
-      });
-    }
-
-    // Wrap each page so zoom scales raster + text together and keeps alignment.
-    pages.forEach(function (pg) {
-      var wrap = document.createElement('div');
-      wrap.className = 'codbdocs-zoom-wrap';
-      pg.parentNode.insertBefore(wrap, pg);
-      wrap.appendChild(pg);
-      pg.style.margin = '0 auto';
-    });
-    var wraps = $$('.codbdocs-zoom-wrap');
-    function applyZoom() {
-      wraps.forEach(function (w) {
-        var pg = $('.pdf-page', w);
-        if (!pg) return;
-        w.style.width = (pg.offsetWidth * zoom) + 'px';
-        w.style.height = (pg.offsetHeight * zoom) + 'px';
-        pg.style.transform = 'scale(' + zoom + ')';
-        pg.style.transformOrigin = 'top center';
-      });
-    }
-    function fitWidth() {
-      var main = $('#codbdocs-main') || document.body;
-      var first = pages[0];
-      if (!main || !first || !first.offsetWidth) return;
-      var available = Math.max(280, main.clientWidth - 24);
-      zoom = Math.max(0.35, Math.min(2, +(available / first.offsetWidth).toFixed(2)));
-      fitMode = true;
-      applyZoom();
-    }
-
-    function updatePageLabel(n) {
-      var total = pages.length;
-      currentPage = Math.max(1, Math.min(total || 1, n || 1));
-      var label = $('#codbdocs-page-label');
-      if (label) label.textContent = 'Page ' + currentPage + ' / ' + (total || 1);
-    }
-
-    function setView(v) {
-      body.dataset.codbdocsView = v;
-      var states = { pdf: false, text: false, both: false };
-      states[v] = true;
-      ['pdf', 'text', 'both'].forEach(function (k) {
-        var b = $('#codbdocs-view-' + k);
-        if (b) { b.classList.toggle('is-active', states[k]); b.setAttribute('aria-pressed', states[k] ? 'true' : 'false'); }
-      });
-    }
-
-    function gotoPage(n, opts) {
-      opts = opts || {};
-      var total = pages.length;
-      if (!total) return;
-      n = Math.max(1, Math.min(total, n));
-      updatePageLabel(n);
-      var el = pages[n - 1];
-      if (el) {
-        var wrap = el.closest('.codbdocs-zoom-wrap');
-        var target = wrap || el;
-        if (opts.smooth) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        else target.scrollIntoView({ block: 'start' });
-      }
-    }
-
-    var prevBtn = $('#codbdocs-page-prev'), nextBtn = $('#codbdocs-page-next');
-    if (prevBtn) prevBtn.addEventListener('click', function () { gotoPage(currentPage - 1, { smooth: true }); });
-    if (nextBtn) nextBtn.addEventListener('click', function () { gotoPage(currentPage + 1, { smooth: true }); });
-
-    var returnBtn = $('#codbdocs-return-referrer');
-    if (returnBtn) returnBtn.addEventListener('click', function () {
-      if (document.referrer) window.location.href = document.referrer;
-      else window.history.back();
-    });
-
-    var zi = $('#codbdocs-zoom-in'), zo = $('#codbdocs-zoom-out'), zf = $('#codbdocs-zoom-fit');
-    if (zi) zi.addEventListener('click', function () { fitMode = false; zoom = Math.min(3, +(zoom + 0.25).toFixed(2)); applyZoom(); });
-    if (zo) zo.addEventListener('click', function () { fitMode = false; zoom = Math.max(0.35, +(zoom - 0.25).toFixed(2)); applyZoom(); });
-    if (zf) zf.addEventListener('click', fitWidth);
-    window.addEventListener('resize', function () { if (fitMode) fitWidth(); });
-
-    $$('#codbdocs-viewer [data-codbdocs-view]').forEach(function (b) {
-      b.addEventListener('click', function () { setView(b.getAttribute('data-codbdocs-view')); });
-    });
-
-    // Toggles (binding after view-mode handlers since the layout is re-generated).
-    var views = { pdf: $('#codbdocs-view-pdf'), text: $('#codbdocs-view-text'), both: $('#codbdocs-view-both') };
-    if (views.pdf) views.pdf.addEventListener('click', function () { setView('pdf'); });
-    if (views.text) views.text.addEventListener('click', function () { setView('text'); });
-    if (views.both) views.both.addEventListener('click', function () { setView('both'); });
-
-    // High contrast
-    var contrastBtn = $('#codbdocs-contrast');
-    if (contrastBtn) contrastBtn.addEventListener('click', function () {
-      var on = body.dataset.codbdocsContrast !== 'high';
-      body.dataset.codbdocsContrast = on ? 'high' : 'normal';
-      contrastBtn.classList.toggle('is-active', on);
-      contrastBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-
-    // Outline toggle
-    var outlineToggle = $('#codbdocs-outline-toggle');
-    var outline = $('#codbdocs-outline');
-    if (outlineToggle && outline) {
-      outlineToggle.addEventListener('click', function () {
-        var open = outline.style.display !== 'none';
-        outline.style.display = open ? 'none' : 'block';
-        outlineToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
-      });
-      $$('.codbdocs-outline-link', outline).forEach(function (a) {
-        a.addEventListener('click', function (e) {
-          e.preventDefault();
-          var page = parseInt(a.getAttribute('data-outline-page'), 10) || 1;
-          gotoPage(page, { smooth: true });
-          $$('.codbdocs-outline-link').forEach(function (x) { x.classList.remove('is-active'); });
-          a.classList.add('is-active');
-        });
-      });
-    }
-
-    if ('IntersectionObserver' in window) {
-      var observer = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (!entry.isIntersecting) return;
-          var page = parseInt(entry.target.getAttribute('data-pdf-page'), 10);
-          if (page) updatePageLabel(page);
-        });
-      }, { threshold: 0.45 });
-      pages.forEach(function (pg) { observer.observe(pg); });
-    }
-
-    // ---- Offline search over positioned text runs ----
-    function normalize(s) { return String(s || '').toLowerCase().replace(/\\s+/g, ' ').trim(); }
-
-    // Index: every positioned text run -> {el, page, text}
-    var index = [];
-    var root = $('#codbdocs-root');
-    $$('.pdf-text', root).forEach(function (el) {
-      var t = (el.textContent || '').trim();
-      if (!t) return;
-      var pg = parseInt(el.getAttribute('data-pdf-page'), 10) || 1;
-      index.push({ el: el, page: pg, text: normalize(t) });
-    });
-
-    var searchInput = $('#codbdocs-search-input');
-    var countEl = $('#codbdocs-search-count');
-    var resultsEl = $('#codbdocs-search-results');
-    var matches = [];
-    var cursor = -1;
-
-    function clearHighlights() {
-      matches.forEach(function (m) {
-        m.el.classList.remove('sr-highlight', 'is-current');
-      });
-      matches = [];
-      cursor = -1;
-    }
-
-    function snippet(text, query) {
-      text = String(text || '').replace(/s+/g, ' ').trim();
-      var lower = text.toLowerCase();
-      var pos = lower.indexOf(query);
-      if (pos < 0) return text.slice(0, 160) + (text.length > 160 ? '...' : '');
-      var start = Math.max(0, pos - 60);
-      var end = Math.min(text.length, pos + query.length + 90);
-      return (start ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
-    }
-
-    function renderResults(query, pageMatches) {
-      if (!resultsEl) return;
-      resultsEl.textContent = '';
-      if (!query) return;
-      if (!pageMatches.length) {
-        var empty = document.createElement('p');
-        empty.className = 'codbdocs-outline-empty';
-        empty.textContent = 'No RAG page matches.';
-        resultsEl.appendChild(empty);
-        return;
-      }
-      pageMatches.slice(0, 40).forEach(function (p, i) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'codbdocs-search-result';
-        btn.setAttribute('role', 'listitem');
-        btn.setAttribute('data-result-page', p.page);
-        var label = document.createElement('span');
-        label.className = 'codbdocs-search-result-page';
-        label.textContent = 'Page ' + p.page;
-        var snip = document.createElement('span');
-        snip.className = 'codbdocs-search-result-snippet';
-        snip.textContent = snippet(p.raw, query);
-        btn.appendChild(label);
-        btn.appendChild(snip);
-        btn.addEventListener('click', function () {
-          $$('.codbdocs-search-result').forEach(function (x) { x.classList.remove('is-active'); });
-          btn.classList.add('is-active');
-          var matchIndex = matches.findIndex(function (m) { return m.page === p.page; });
-          if (matchIndex >= 0) goMatch(matchIndex, false);
-          else gotoPage(p.page, { smooth: true });
-        });
-        if (i === 0) btn.classList.add('is-active');
-        resultsEl.appendChild(btn);
-      });
-    }
-
-    function runSearch(query) {
-      clearHighlights();
-      query = normalize(query);
-      if (!query) {
-        body.dataset.codbdocsSearching = 'false';
-        renderResults('', []);
-        if (countEl) countEl.textContent = '';
-        return;
-      }
-      body.dataset.codbdocsSearching = 'true';
-      matches = index.filter(function (m) { return m.text.indexOf(query) !== -1; });
-      var pageMatches = pageTextIndex.filter(function (p) { return p.text.indexOf(query) !== -1; });
-      renderResults(query, pageMatches);
-      if (countEl) countEl.textContent = matches.length + ' run' + (matches.length === 1 ? '' : 's') + ' / ' + pageMatches.length + ' page' + (pageMatches.length === 1 ? '' : 's');
-      if (!matches.length) {
-        if (pageMatches.length) gotoPage(pageMatches[0].page, { smooth: true });
-        return;
-      }
-      matches.forEach(function (m, i) {
-        m.el.classList.add('sr-highlight');
-        m.el.setAttribute('data-sr-index', i);
-      });
-      goMatch(0, true);
-    }
-
-    function goMatch(i, first) {
-      if (!matches.length) return;
-      if (i < 0) i = matches.length - 1;
-      if (i >= matches.length) i = 0;
-      cursor = i;
-      matches.forEach(function (m, k) { m.el.classList.toggle('is-current', k === i); });
-      gotoPage(matches[i].page, { smooth: !first });
-      matches[i].el.scrollIntoView({ block: 'center', behavior: first ? 'auto' : 'smooth' });
-    }
-
-    if (searchInput) {
-      var timer = null;
-      searchInput.addEventListener('input', function () {
-        clearTimeout(timer);
-        timer = setTimeout(function () { runSearch(searchInput.value); }, 220);
-      });
-      searchInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (matches.length) goMatch(e.shiftKey ? cursor - 1 : cursor + 1, false);
-        }
-      });
-    }
-
-    // Keyboard shortcuts: f=search, p/n=page, c=contrast, o=outline
-    document.addEventListener('keydown', function (e) {
-      var tag = (e.target && e.target.tagName) || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      var k = (e.key || '').toLowerCase();
-      if (k === 'f') { e.preventDefault(); if (searchInput) { searchInput.focus(); searchInput.select(); } }
-      else if (k === 'p') gotoPage(currentPage - 1, { smooth: true });
-      else if (k === 'n') gotoPage(currentPage + 1, { smooth: true });
-      else if (k === 'c' && contrastBtn) contrastBtn.click();
-      else if (k === 'o' && outlineToggle) outlineToggle.click();
-    });
-
-    // init
-    setView('pdf');
-    fitWidth();
-    gotoPage(1);
-  })();
-  <\/script>
-  `;
-  }
-  function escapeHTML(str) {
-    return String(str == null ? "" : str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  }
-
-  // packages/core/src/pdfir.js
-  function bytesToBase642(bytes) {
-    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.slice(i, i + 32768));
-    if (typeof btoa === "function") return btoa(bin);
-    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let out = "";
-    for (let i = 0; i < bin.length; i += 3) {
-      const a = bin.charCodeAt(i), b = bin.charCodeAt(i + 1), c = bin.charCodeAt(i + 2);
-      out += alphabet[a >> 2] + alphabet[(a & 3) << 4 | b >> 4] + (Number.isNaN(b) ? "=" : alphabet[(b & 15) << 2 | c >> 6]) + (Number.isNaN(c) ? "=" : alphabet[c & 63]);
-    }
-    return out;
-  }
-  function textToBase642(text) {
-    if (typeof TextEncoder !== "undefined") return bytesToBase642(new TextEncoder().encode(String(text)));
-    const encoded = unescape(encodeURIComponent(String(text)));
-    const bytes = new Uint8Array(encoded.length);
-    for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
-    return bytesToBase642(bytes);
-  }
-  function embeddedImageSrc2(src) {
-    src = String(src || "");
-    return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : "";
-  }
-  function createIR() {
-    return {
-      version: "1.0",
-      document: {
-        id: generateId("doc"),
-        hash: null,
-        title: null,
-        type: "unknown",
-        metadata: {},
-        pages: [],
-        structure: null,
-        resources: {},
-        navigation: {},
-        security: {},
-        provenance: { source: "pdf", extraction: "native" }
-      },
-      pages: {},
-      objects: {},
-      entities: {},
-      relationships: {},
-      concepts: {},
-      images: {},
-      tables: {},
-      forms: { fields: [], byName: {} },
-      annotations: {},
-      vectors: {},
-      resources: {},
-      structure: {},
-      assets: {}
-    };
-  }
-  function addPage(ir, pageNum, data) {
-    const pageId = `page_${pageNum}`;
-    ir.pages[pageId] = {
-      id: pageId,
-      num: pageNum,
-      width: data.width || 0,
-      height: data.height || 0,
-      rotation: data.rotation || 0,
-      mediaBox: data.mediaBox || null,
-      cropBox: data.cropBox || null,
-      content: [],
-      vectors: [],
-      images: [],
-      annotations: [],
-      forms: [],
-      labels: data.labels || null
-    };
-    ir.document.pages.push(pageId);
-    return ir.pages[pageId];
-  }
-  function addTextObject(ir, pageId, data) {
-    const id = generateId("text");
-    ir.objects[id] = {
-      id,
-      type: "text",
-      page: pageId,
-      raw: {
-        glyphs: data.glyphs || [],
-        font: data.font || null,
-        fontSize: data.fontSize || 12,
-        color: data.color || null,
-        transform: data.transform || [1, 0, 0, 1, 0, 0],
-        text: data.text || "",
-        encoding: data.encoding || null
-      },
-      semantic: {
-        role: data.role || "paragraph",
-        level: data.level || null,
-        text: data.text || ""
-      },
-      accessibility: {
-        role: data.accessRole || "P"
-      },
-      provenance: {
-        method: "native",
-        confidence: 1
-      },
-      bbox: data.bbox || null
-    };
-    ir.pages[pageId]?.content.push(id);
-    return ir.objects[id];
-  }
-  function materializeOCRObject(ir, pageId, { text, source, confidence, pageSize } = {}) {
-    const body = (text || "").replace(/\s+/g, " ").trim();
-    if (!body) return null;
-    const page = ir.pages[pageId];
-    const hasTextObjects = (page?.content || []).some((id) => ir.objects[id]?.type === "text");
-    if (hasTextObjects) return null;
-    const size = pageSize || { width: page?.width || 0, height: page?.height || 0 };
-    const obj = addTextObject(ir, pageId, {
-      text: body,
-      bbox: [0, 0, size.width, size.height],
-      font: null,
-      fontSize: null,
-      color: null,
-      transform: null
-    });
-    if (obj) {
-      obj.raw.source = source || "ocr";
-      obj.raw.textSource = source || "ocr";
-      obj.raw.confidence = confidence != null ? confidence : null;
-      obj.provenance.method = source || "ocr";
-      obj.provenance.confidence = confidence != null ? confidence / 100 : 0.5;
-    }
-    return obj;
-  }
-  function addVectorObject(ir, pageId, data) {
-    const id = generateId("vec");
-    ir.vectors[id] = {
-      id,
-      type: data.type || "path",
-      // path, line, rect, circle, curve, arrow
-      page: pageId,
-      points: data.points || [],
-      from: data.from || null,
-      to: data.to || null,
-      bbox: data.bbox || null,
-      graphicsState: {
-        stroke: data.stroke || null,
-        fill: data.fill || null,
-        lineWidth: data.lineWidth || 1,
-        lineCap: data.lineCap || "butt",
-        lineJoin: data.lineJoin || "miter",
-        dash: data.dash || null,
-        opacity: data.opacity || 1,
-        blendMode: data.blendMode || "Normal",
-        transform: data.transform || [1, 0, 0, 1, 0, 0],
-        clip: data.clip || null
-      },
-      semantic: {
-        role: data.semanticRole || null
-        // table_border, checkbox, form_field, separator, decoration
-      },
-      provenance: {
-        method: "native",
-        confidence: 1
-      }
-    };
-    ir.pages[pageId]?.vectors.push(id);
-    return ir.vectors[id];
-  }
-  function addObject(ir, pageId, data) {
-    const id = generateId(data.type || "obj");
-    ir.objects[id] = {
-      id,
-      type: data.type,
-      page: pageId,
-      raw: data.raw || {},
-      semantic: data.semantic || {},
-      accessibility: data.accessibility || {},
-      provenance: data.provenance || { method: "native", confidence: 1 },
-      bbox: data.bbox || null
-    };
-    ir.pages[pageId]?.content.push(id);
-    return ir.objects[id];
-  }
-  function humanizeFieldName(name) {
-    return String(name || "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[._\-]+/g, " ").replace(/\s+/g, " ").trim().replace(/^./, (char) => char.toUpperCase());
-  }
-  function normalizeFieldOptions(options) {
-    return (Array.isArray(options) ? options : []).map((option) => {
-      if (option && typeof option === "object") {
-        const value = option.exportValue ?? option.value ?? option.displayValue ?? option.label ?? "";
-        const label = option.displayValue ?? option.label ?? option.exportValue ?? option.value ?? "";
-        return { value: String(value), label: String(label) };
-      }
-      return { value: String(option ?? ""), label: String(option ?? "") };
-    });
-  }
-  function normalizeFieldValue(value) {
-    if (Array.isArray(value)) return value.map((item) => String(item ?? ""));
-    return value == null ? "" : String(value);
-  }
-  function normalizeFieldRect(rect) {
-    if (!Array.isArray(rect) || rect.length < 4) return null;
-    const x1 = Number(rect[0]) || 0;
-    const y1 = Number(rect[1]) || 0;
-    const x2 = Number(rect[2]) || 0;
-    const y2 = Number(rect[3]) || 0;
-    return [Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)];
-  }
-  function normalizeFormField(field, pageNumber = null) {
-    if (!field || field.subtype && field.subtype !== "Widget" && field.type !== "form_field") return null;
-    const pdfType = String(field.fieldType || field.type || "").toLowerCase();
-    let fieldType = "text";
-    if (pdfType === "tx" || pdfType === "text") {
-      fieldType = field.password ? "password" : field.multiLine ? "textarea" : "text";
-    } else if (pdfType === "ch" || pdfType === "choice" || pdfType === "combobox" || pdfType === "listbox") {
-      fieldType = field.combo || pdfType === "combobox" ? "dropdown" : "listbox";
-    } else if (pdfType === "btn" || pdfType === "button" || pdfType === "checkbox" || pdfType === "radiobutton") {
-      fieldType = field.pushButton ? "button" : field.radioButton || pdfType === "radiobutton" ? "radio" : "checkbox";
-    } else if (pdfType === "sig" || pdfType === "signature") {
-      fieldType = "signature";
-    }
-    const fieldName = String(field.fieldName || field.name || field.id || "field");
-    const optionValue = String(field.buttonValue ?? field.exportValue ?? field.optionValue ?? "On");
-    const value = normalizeFieldValue(field.fieldValue ?? field.value);
-    const defaultValue = normalizeFieldValue(field.defaultFieldValue ?? field.defaultValue);
-    const scalarValue = Array.isArray(value) ? value[0] ?? "" : value;
-    const checked = fieldType === "radio" ? scalarValue === optionValue : fieldType === "checkbox" ? Boolean(scalarValue && scalarValue !== "Off" && (scalarValue === optionValue || /^(true|yes|on|1|x)$/i.test(scalarValue))) : false;
-    const baseLabel = String(field.alternativeText || field.alternateFieldName || field.label || humanizeFieldName(fieldName));
-    const label = fieldType === "radio" && optionValue && !baseLabel.toLowerCase().includes(optionValue.toLowerCase()) ? `${baseLabel}: ${humanizeFieldName(optionValue)}` : baseLabel;
-    return {
-      id: field.id || null,
-      annotationId: field.annotationId || field.id || null,
-      page: pageNumber ?? (Number.isInteger(field.page) ? field.page + 1 : null),
-      name: fieldName,
-      label,
-      description: String(field.contents || field.description || ""),
-      fieldType,
-      pdfFieldType: field.fieldType || field.type || null,
-      value,
-      defaultValue,
-      optionValue,
-      checked,
-      defaultChecked: fieldType === "radio" ? String(Array.isArray(defaultValue) ? defaultValue[0] ?? "" : defaultValue) === optionValue : fieldType === "checkbox" ? Boolean(defaultValue && defaultValue !== "Off") : false,
-      options: normalizeFieldOptions(field.options),
-      multiple: Boolean(field.multiSelect),
-      required: Boolean(field.required),
-      readOnly: Boolean(field.readOnly),
-      hidden: Boolean(field.hidden),
-      maxLength: Number.isFinite(Number(field.maxLen ?? field.maxLength)) ? Number(field.maxLen ?? field.maxLength) : null,
-      rect: Array.isArray(field.rect) ? field.rect.map(Number) : null,
-      bbox: normalizeFieldRect(field.rect),
-      actions: field.actions || null,
-      url: field.url || null,
-      action: field.action || null,
-      resetForm: field.resetForm || null,
-      newWindow: Boolean(field.newWindow),
-      xfa: Boolean(field.xfa),
-      dataId: field.dataId || null,
-      fieldId: field.fieldId || null,
-      xfaOn: field.xfaOn ?? null,
-      xfaOff: field.xfaOff ?? null
-    };
-  }
-  function extractXfaFormFields(tree, pageNumber = null) {
-    const fields = [];
-    const walk = (node) => {
-      if (!node || typeof node !== "object") return;
-      if (["input", "textarea", "select", "button"].includes(node.name)) {
-        const attrs = node.attributes || {};
-        const inputType = String(attrs.type || "").toLowerCase();
-        const fieldType = node.name === "textarea" ? "textarea" : node.name === "select" ? attrs.multiple ? "listbox" : "dropdown" : node.name === "button" ? "button" : inputType === "radio" || inputType === "checkbox" || inputType === "password" ? inputType : "text";
-        const name = String(attrs.dataId || attrs.fieldId || attrs.name || attrs.id || `xfa-field-${fields.length + 1}`);
-        const optionValue = String(attrs.xfaOn ?? attrs.value ?? "On");
-        const checked = Boolean(attrs.checked);
-        fields.push({
-          id: attrs.fieldId || attrs.id || null,
-          annotationId: attrs.dataId || null,
-          dataId: attrs.dataId || null,
-          fieldId: attrs.fieldId || null,
-          page: pageNumber,
-          name,
-          label: String(attrs["aria-label"] || attrs.xfaName || name.replace(/\d+$/, "").replace(/[_-]+/g, " ")),
-          description: "",
-          fieldType,
-          pdfFieldType: "XFA",
-          value: checked ? optionValue : attrs.value ?? attrs.textContent ?? "",
-          defaultValue: checked ? optionValue : attrs.value ?? attrs.textContent ?? "",
-          optionValue,
-          xfaOn: attrs.xfaOn ?? optionValue,
-          xfaOff: attrs.xfaOff ?? "off",
-          checked,
-          defaultChecked: checked,
-          options: node.name === "select" ? (node.children || []).filter((child) => child?.name === "option").map((child) => ({
-            value: String(child.attributes?.value ?? child.value ?? ""),
-            label: String(child.value ?? child.attributes?.value ?? "")
-          })) : [],
-          multiple: Boolean(attrs.multiple),
-          required: Boolean(attrs.required || attrs["aria-required"]),
-          readOnly: Boolean(attrs.readOnly || attrs.readonly || attrs.disabled),
-          hidden: inputType === "hidden",
-          maxLength: Number.isFinite(Number(attrs.maxLength)) ? Number(attrs.maxLength) : null,
-          rect: null,
-          bbox: null,
-          actions: null,
-          url: null,
-          xfa: true
-        });
-      }
-      for (const child of node.children || []) walk(child);
-    };
-    walk(tree);
-    return fields;
-  }
-  function registerFormField(ir, pageId, field, pageNumber = null) {
-    const normalized = normalizeFormField(field, pageNumber);
-    if (!normalized) return null;
-    const obj = addObject(ir, pageId, {
-      type: "form_field",
-      raw: { ...normalized },
-      semantic: {
-        role: "form_field",
-        fieldType: normalized.fieldType,
-        fieldName: normalized.name,
-        value: normalized.value,
-        defaultValue: normalized.defaultValue,
-        optionValue: normalized.optionValue,
-        checked: normalized.checked,
-        defaultChecked: normalized.defaultChecked,
-        options: normalized.options,
-        multiple: normalized.multiple,
-        maxLength: normalized.maxLength
-      },
-      accessibility: {
-        role: "form",
-        label: normalized.label,
-        description: normalized.description,
-        required: normalized.required,
-        readOnly: normalized.readOnly
-      },
-      bbox: normalized.bbox,
-      provenance: { method: "annotation", confidence: 1 }
-    });
-    if (!ir.forms || typeof ir.forms !== "object") ir.forms = { fields: [], byName: {} };
-    if (!Array.isArray(ir.forms.fields)) ir.forms.fields = [];
-    if (!ir.forms.byName || typeof ir.forms.byName !== "object") ir.forms.byName = {};
-    const record = { ...normalized, objectId: obj.id, pageId };
-    ir.forms.fields.push(record);
-    if (!Array.isArray(ir.forms.byName[normalized.name])) ir.forms.byName[normalized.name] = [];
-    ir.forms.byName[normalized.name].push(obj.id);
-    if (ir.pages[pageId] && !ir.pages[pageId].forms.includes(obj.id)) ir.pages[pageId].forms.push(obj.id);
-    return obj;
-  }
-  async function extractVectors(page) {
-    const opList = await page.getOperatorList();
-    const vectors = [];
-    const transformStack = [];
-    const styleStack = [];
-    let currentTransform = [1, 0, 0, 1, 0, 0];
-    let currentStroke = null;
-    let currentFill = null;
-    let currentLineWidth = 1;
-    let currentLineCap = "butt";
-    let currentLineJoin = "miter";
-    let currentDash = null;
-    let currentClip = null;
-    let pathPoints = [];
-    let pathStart = null;
-    const FN = pdfjsLib?.OPS || {};
-    const isOp = (fn, name, fallback) => fn === (FN[name] ?? fallback);
-    const multiply = (m1, m2) => {
-      const [a1, b1, c1, d1, e1, f1] = m1;
-      const [a2, b2, c2, d2, e2, f2] = m2;
-      return [
-        a1 * a2 + c1 * b2,
-        b1 * a2 + d1 * b2,
-        a1 * c2 + c1 * d2,
-        b1 * c2 + d1 * d2,
-        a1 * e2 + c1 * f2 + e1,
-        b1 * e2 + d1 * f2 + f1
-      ];
-    };
-    const color = (args) => {
-      if (!Array.isArray(args)) return null;
-      const vals = args.slice(0, 3).map((v) => Math.max(0, Math.min(1, Number(v) > 1 ? Number(v) / 255 : Number(v))));
-      return { colorSpace: "DeviceRGB", color: vals };
-    };
-    const cmyk = (args) => Array.isArray(args) ? { colorSpace: "DeviceCMYK", color: args.slice(0, 4).map(Number) } : null;
-    const pushVector = (paint) => {
-      if (pathPoints.length === 0) return;
-      vectors.push(createVector("path", page, {
-        points: [...pathPoints],
-        stroke: paint.stroke ? currentStroke : null,
-        fill: paint.fill ? currentFill : null,
-        lineWidth: currentLineWidth,
-        lineCap: currentLineCap,
-        lineJoin: currentLineJoin,
-        dash: currentDash,
-        clip: currentClip,
-        transform: currentTransform
-      }));
-      pathPoints = [];
-      pathStart = null;
-    };
-    const readConstructedPath = (args) => {
-      const ops = args?.[0] || [];
-      const coords = args?.[1] || [];
-      let c = 0;
-      for (const op of ops) {
-        if (op === FN.moveTo) {
-          const pt = { op: "moveTo", x: coords[c], y: coords[c + 1] };
-          pathStart = { x: pt.x, y: pt.y };
-          pathPoints.push(pt);
-          c += 2;
-        } else if (op === FN.lineTo) {
-          pathPoints.push({ op: "lineTo", x: coords[c], y: coords[c + 1] });
-          c += 2;
-        } else if (op === FN.curveTo) {
-          pathPoints.push({ op: "curveTo", x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 4], y: coords[c + 5] });
-          c += 6;
-        } else if (op === FN.curveTo2) {
-          const last = pathPoints[pathPoints.length - 1] || { x: 0, y: 0 };
-          pathPoints.push({ op: "curveTo", x1: last.x, y1: last.y, x2: coords[c], y2: coords[c + 1], x: coords[c + 2], y: coords[c + 3] });
-          c += 4;
-        } else if (op === FN.curveTo3) {
-          pathPoints.push({ op: "curveTo", x1: coords[c], y1: coords[c + 1], x2: coords[c + 2], y2: coords[c + 3], x: coords[c + 2], y: coords[c + 3] });
-          c += 4;
-        } else if (op === FN.rectangle) {
-          const [x, y, w, h] = coords.slice(c, c + 4);
-          pathStart = { x, y };
-          pathPoints.push({ op: "moveTo", x, y });
-          pathPoints.push({ op: "lineTo", x: x + w, y });
-          pathPoints.push({ op: "lineTo", x: x + w, y: y + h });
-          pathPoints.push({ op: "lineTo", x, y: y + h });
-          pathPoints.push({ op: "closePath" });
-          c += 4;
-        } else if (op === FN.closePath) {
-          pathPoints.push({ op: "closePath" });
-        }
-      }
-    };
-    for (let i = 0; i < opList.fnArray.length; i++) {
-      const fn = opList.fnArray[i];
-      const args = opList.argsArray[i];
-      if (isOp(fn, "transform", 8)) {
-        if (args && args.length >= 6) {
-          currentTransform = multiply(currentTransform, args.slice(0, 6));
-        }
-        continue;
-      }
-      if (isOp(fn, "constructPath")) {
-        readConstructedPath(args);
-        continue;
-      }
-      switch (fn) {
-        // Path operations
-        case FN.moveTo:
-          if (args) {
-            pathStart = { x: args[0], y: args[1] };
-            pathPoints.push({ op: "moveTo", x: args[0], y: args[1] });
-          }
-          break;
-        case FN.lineTo:
-          if (args) {
-            pathPoints.push({ op: "lineTo", x: args[0], y: args[1] });
-          }
-          break;
-        case FN.curveTo:
-          if (args) {
-            pathPoints.push({ op: "curveTo", x1: args[0], y1: args[1], x2: args[2], y2: args[3], x: args[4], y: args[5] });
-          }
-          break;
-        case FN.rectangle:
-          if (args && args.length >= 4) {
-            vectors.push(createVector("rect", page, {
-              bbox: [args[0], args[1], args[2], args[3]],
-              stroke: currentStroke,
-              fill: currentFill,
-              lineWidth: currentLineWidth,
-              lineCap: currentLineCap,
-              lineJoin: currentLineJoin,
-              dash: currentDash,
-              clip: currentClip,
-              transform: currentTransform
-            }));
-          }
-          break;
-        // Stroke
-        case FN.stroke:
-        case FN.closeStroke:
-          if (fn === FN.closeStroke) pathPoints.push({ op: "closePath" });
-          pushVector({ stroke: true, fill: false });
-          break;
-        // Fill
-        case FN.fill:
-        case FN.eoFill:
-        case FN.closeFill:
-          if (fn === FN.closeFill) pathPoints.push({ op: "closePath" });
-          pushVector({ stroke: false, fill: true });
-          break;
-        // Fill and stroke
-        case FN.fillStroke:
-        case FN.eoFillStroke:
-        case FN.closeFillStroke:
-        case FN.closeEOFillStroke:
-          if (fn === FN.closeFillStroke || fn === FN.closeEOFillStroke) pathPoints.push({ op: "closePath" });
-          pushVector({ stroke: true, fill: true });
-          break;
-        // Close path
-        case FN.closePath:
-          pathPoints.push({ op: "closePath" });
-          break;
-        // Graphics state
-        case FN.save:
-          transformStack.push(currentTransform.slice());
-          styleStack.push({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip });
-          break;
-        case FN.restore: {
-          currentTransform = transformStack.pop() || [1, 0, 0, 1, 0, 0];
-          const style2 = styleStack.pop();
-          if (style2) ({ currentStroke, currentFill, currentLineWidth, currentLineCap, currentLineJoin, currentDash, currentClip } = style2);
-          break;
-        }
-        case FN.setStrokeRGBColor:
-          currentStroke = color(args);
-          break;
-        case FN.setFillRGBColor:
-          currentFill = color(args);
-          break;
-        case FN.setStrokeCMYKColor:
-          currentStroke = cmyk(args);
-          break;
-        case FN.setFillCMYKColor:
-          currentFill = cmyk(args);
-          break;
-        case FN.setLineWidth:
-          if (args) currentLineWidth = args[0];
-          break;
-        case FN.setLineCap:
-          if (args) {
-            const caps = ["butt", "round", "square"];
-            currentLineCap = caps[args[0]] || "butt";
-          }
-          break;
-        case FN.setLineJoin:
-          if (args) {
-            const joins = ["miter", "round", "bevel"];
-            currentLineJoin = joins[args[0]] || "miter";
-          }
-          break;
-        case FN.setDash:
-          if (args) currentDash = args[0];
-          break;
-        // Clipping
-        case FN.clip:
-        case FN.eoClip:
-          currentClip = [...pathPoints];
-          break;
-      }
-    }
-    return vectors;
-  }
-  function createVector(type, page, data) {
-    return {
-      type,
-      ...data,
-      semanticRole: classifyVector(type, data)
-    };
-  }
-  function classifyVector(type, data) {
-    if (type === "rect") {
-      const [x, y, w, h] = data.bbox || [0, 0, 0, 0];
-      const area = w * h;
-      if (w > 8 && w < 20 && h > 8 && h < 20 && Math.abs(w - h) < 3) {
-        return "checkbox";
-      }
-      if (h < 2 && w > 20) return "separator";
-      if (data.stroke && data.fill === null && area > 100) {
-        return "table_border";
-      }
-      return "border";
-    }
-    if (type === "path") {
-      if (data.points.length === 2 && data.points[0].op === "moveTo" && data.points[1].op === "lineTo") {
-        const dx = data.points[1].x - data.points[0].x;
-        const dy = data.points[1].y - data.points[0].y;
-        if (Math.abs(dx) > 20 && Math.abs(dy) < 2) return "horizontal_line";
-        if (Math.abs(dy) > 20 && Math.abs(dx) < 2) return "vertical_line";
-        return "line";
-      }
-      if (data.points.length > 10) return "complex_path";
-    }
-    return null;
-  }
-  function auditAccessibility(ir) {
-    const issues = [];
-    let score = 100;
-    for (const pageId of ir.document.pages) {
-      const page = ir.pages[pageId];
-      if (!page) continue;
-      const pageNum = parseInt(pageId.split("_")[1]);
-      for (const objId of page.content) {
-        const obj = ir.objects[objId];
-        if (obj?.type === "image" && !obj.accessibility?.alt) {
-          issues.push({
-            type: "missing_alt_text",
-            page: pageNum,
-            element: objId,
-            severity: "error",
-            message: "Image has no alternative text",
-            suggestion: "Add descriptive alt text for screen readers"
-          });
-          score -= 5;
-        }
-      }
-      const headings = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading");
-      let prevLevel = 0;
-      for (const heading of headings) {
-        const level = heading.semantic.level || 1;
-        if (level > prevLevel + 1 && prevLevel > 0) {
-          issues.push({
-            type: "heading_skip",
-            page: pageNum,
-            element: heading.id,
-            severity: "warning",
-            message: `Heading level skipped from H${prevLevel} to H${level}`,
-            suggestion: `Use H${prevLevel + 1} instead`
-          });
-          score -= 2;
-        }
-        prevLevel = level;
-      }
-      for (const vecId of page.vectors || []) {
-        const vec = ir.vectors[vecId];
-        if (vec?.semantic?.role === "table_border") {
-          const nearbyTexts = page.content.map((id) => ir.objects[id]).filter((obj) => obj?.bbox && isNear(vec.bbox, obj.bbox));
-          const hasHeader = nearbyTexts.some(
-            (t) => t.raw?.fontSize > 12 || t.semantic?.role === "heading"
-          );
-          if (!hasHeader) {
-            issues.push({
-              type: "table_no_header",
-              page: pageNum,
-              element: vecId,
-              severity: "warning",
-              message: "Table may be missing header row",
-              suggestion: "Ensure first row contains column headers"
-            });
-            score -= 2;
-          }
-        }
-      }
-      if (page.content.length > 5) {
-        const sorted = [...page.content].map((id) => ir.objects[id]).filter((obj) => obj?.bbox).sort((a, b) => a.bbox[1] - b.bbox[1]);
-        for (let i = 1; i < sorted.length; i++) {
-          const prev = sorted[i - 1];
-          const curr = sorted[i];
-          if (prev.bbox[1] > curr.bbox[1] + 50) {
-            issues.push({
-              type: "reading_order",
-              page: pageNum,
-              element: curr.id,
-              severity: "info",
-              message: "Element may be out of reading order",
-              suggestion: "Verify content reads correctly top-to-bottom"
-            });
-            score -= 1;
-          }
-        }
-      }
-      for (const objId of page.content) {
-        const obj = ir.objects[objId];
-        if (obj?.type === "text" && obj.raw?.color) {
-        }
-      }
-      if (!ir.document.metadata?.language) {
-        issues.push({
-          type: "missing_language",
-          page: 1,
-          severity: "warning",
-          message: "Document language not specified",
-          suggestion: "Set document.language for screen reader pronunciation"
-        });
-        score -= 3;
-      }
-      if (!ir.document.metadata?.title) {
-        issues.push({
-          type: "missing_title",
-          page: 1,
-          severity: "warning",
-          message: "Document has no title",
-          suggestion: "Set document.metadata.title"
-        });
-        score -= 2;
-      }
-    }
-    return {
-      score: Math.max(0, score),
-      issues,
-      summary: {
-        errors: issues.filter((i) => i.severity === "error").length,
-        warnings: issues.filter((i) => i.severity === "warning").length,
-        info: issues.filter((i) => i.severity === "info").length
-      }
-    };
-  }
-  function generateAccessibilityTree(ir) {
-    const tree = { type: "Document", children: [] };
-    for (const pageId of ir.document.pages) {
-      const page = ir.pages[pageId];
-      if (!page) continue;
-      const pageNode = { type: "Page", properties: { pageNumber: page.num }, children: [] };
-      for (const objId of page.content) {
-        const obj = ir.objects[objId];
-        if (!obj) continue;
-        const node = {
-          type: obj.accessibility?.role || mapRole(obj.semantic?.role),
-          properties: {},
-          children: []
-        };
-        if (obj.semantic?.text) {
-          node.children.push({ type: "Text", content: obj.semantic.text });
-        }
-        if (obj.semantic?.role === "heading") {
-          node.properties.level = obj.semantic.level || 1;
-        }
-        pageNode.children.push(node);
-      }
-      tree.children.push(pageNode);
-    }
-    return tree;
-  }
-  function mapRole(role) {
-    const map = {
-      heading: "Heading",
-      paragraph: "Paragraph",
-      table: "Table",
-      list: "List",
-      image: "Figure",
-      form_field: "Form",
-      signature: "Signature"
-    };
-    return map[role] || "Paragraph";
-  }
-  function isNear(bbox1, bbox2, threshold = 100) {
-    if (!bbox1 || !bbox2) return false;
-    const cx1 = bbox1[0] + bbox1[2] / 2;
-    const cy1 = bbox1[1] + bbox1[3] / 2;
-    const cx2 = bbox2[0] + bbox2[2] / 2;
-    const cy2 = bbox2[1] + bbox2[3] / 2;
-    return Math.sqrt(Math.pow(cx1 - cx2, 2) + Math.pow(cy1 - cy2, 2)) < threshold;
-  }
-  function exportHTML(ir, options = {}) {
-    const {
-      mode = "visual",
-      // 'visual' | 'accessible' | 'intelligent' | 'selectable'
-      includeDataAttributes: includeDataAttributes2 = true
-    } = options;
-    const ragPayload = buildRAGPayload(ir);
-    const viewer = generateViewerChrome(ragPayload);
-    let html = '<!DOCTYPE html>\n<html lang="' + (ir.document.metadata?.language || "en") + '">\n<head>\n';
-    html += '<meta charset="UTF-8">\n';
-    html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
-    html += "<title>" + escapeHTML2(ir.document.metadata?.title || "Document") + "</title>\n";
-    html += generateVisualStyles(ir);
-    html += generateAccessibleStyles();
-    html += viewer.styles;
-    html += '</head>\n<body data-codbdocs-view="pdf">\n';
-    html += '<a class="skip-link" href="#codbdocs-root">Skip to document</a>\n';
-    html += '<main role="document" id="codbdocs-root">\n';
-    html += '<div id="codbdocs-viewer">\n';
-    html += '<aside class="codbdocs-sidebar">\n';
-    html += viewer.sidebar;
-    html += "</aside>\n";
-    html += '<div id="codbdocs-main">\n';
-    html += viewer.toolbar;
-    html += '<div class="codbdocs-viewer-hint">Keyboard: <b>F</b> search &middot; <b>P</b>/<b>N</b> page &middot; <b>C</b> contrast &middot; <b>O</b> outline</div>\n';
-    for (const pageId of ir.document.pages) {
-      const page = ir.pages[pageId];
-      if (!page) continue;
-      const nativeText = pageHasNativeText(page, ir);
-      const attrs = (includeDataAttributes2 ? ` data-pdf-page="${page.num}" data-pdf-page-id="${pageId}"` : "") + ` data-native-text="${nativeText ? "1" : "0"}"`;
-      const pageLabel = page.labels?.print || `Page ${page.num}`;
-      html += `<section class="pdf-page"${attrs} aria-label="${escapeHTML2(pageLabel)}" role="region">
-`;
-      html += renderPageVectorLayer(page, ir);
-      if (page.background) {
-        html += `<div class="pdf-page-raster" aria-hidden="true">
-`;
-        html += `<img src="${page.background}" alt="" width="${page.width}" height="${page.height}">
-`;
-        html += renderPageImages(page, ir, attrs);
-        html += "</div>\n";
-      } else {
-        html += renderPageVisual(page, ir, attrs);
-      }
-      if (page.background) {
-        html += renderPagePositionedText(page, ir, attrs);
-      } else {
-        html += renderPageAccessible(page, ir, attrs, mode);
-      }
-      html += "</section>\n";
-    }
-    html += "</div>\n";
-    html += "</div>\n";
-    html += "</main>\n";
-    html += viewer.script;
-    html += "</body>\n</html>";
-    return html;
-  }
-  function renderPageImages(page, ir, attrs) {
-    let html = "";
-    for (const objId of page.content) {
-      const obj = ir.objects[objId];
-      if (!obj || obj.type !== "image") continue;
-      const src = embeddedImageSrc2(obj.raw?.src);
-      if (!src) continue;
-      const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
-      const top = cssTop2(page, y, h);
-      const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
-      html += `<img class="pdf-embedded-image"${attrs} data-pdf-object="${objId}" `;
-      html += `src="${src}" alt="${alt}" style="position:absolute;left:${x}px;top:${top}px;width:${w}px;height:${h}px;" width="${w}" height="${h}">
-`;
-    }
-    return html;
-  }
-  function buildRAGPayload(ir) {
-    return buildRAGContext(ir, null);
-  }
-  function formFieldMarkup(obj, page, positioned = true) {
-    const field = { ...obj.raw || {}, ...obj.semantic || {} };
-    const type = field.fieldType || "text";
-    const name = field.fieldName || field.name || obj.id || "field";
-    const label = obj.accessibility?.label || field.label || humanizeFieldName(name);
-    const value = field.value ?? "";
-    const values = Array.isArray(value) ? value.map(String) : [String(value ?? "")];
-    const id = `pdf-form-${obj.id}`;
-    const readOnly = obj.accessibility?.readOnly || field.readOnly;
-    const required = obj.accessibility?.required || field.required;
-    const common = ` id="${escapeHTML2(id)}" name="${escapeHTML2(name)}" aria-label="${escapeHTML2(label)}"` + (required ? ' required aria-required="true"' : "") + (readOnly && !["text", "password", "textarea"].includes(type) ? ' disabled aria-readonly="true"' : "") + (readOnly && ["text", "password", "textarea"].includes(type) ? ' readonly aria-readonly="true"' : "");
-    if (field.hidden) return `<input type="hidden"${common} value="${escapeHTML2(values[0])}">`;
-    let control = "";
-    if (type === "checkbox" || type === "radio") {
-      control = `<input type="${type}"${common} value="${escapeHTML2(field.optionValue || "On")}"${field.checked ? " checked" : ""}>`;
-    } else if (type === "dropdown" || type === "listbox") {
-      const options = (field.options || []).map((option) => {
-        const optionValue = String(option?.value ?? option ?? "");
-        const optionLabel = String(option?.label ?? optionValue);
-        return `<option value="${escapeHTML2(optionValue)}"${values.includes(optionValue) ? " selected" : ""}>${escapeHTML2(optionLabel)}</option>`;
-      }).join("");
-      control = `<select${common}${field.multiple ? " multiple" : ""}${type === "listbox" ? ` size="${Math.min(8, Math.max(2, (field.options || []).length || 2))}"` : ""}>${options}</select>`;
-    } else if (type === "textarea") {
-      control = `<textarea${common}${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ""}>${escapeHTML2(values[0])}</textarea>`;
-    } else if (type === "button") {
-      control = `<button type="button"${common} disabled>${escapeHTML2(label)}</button>`;
-    } else if (type === "signature") {
-      control = `<output${common} class="pdf-signature">${escapeHTML2(values[0] || "Unsigned")}</output>`;
-    } else {
-      control = `<input type="${type === "password" ? "password" : "text"}"${common} value="${escapeHTML2(values[0])}"${field.maxLength ? ` maxlength="${Number(field.maxLength)}"` : ""}>`;
-    }
-    const data = ` data-pdf-object="${escapeHTML2(obj.id)}" data-form-name="${escapeHTML2(name)}"`;
-    if (!positioned) return `<div class="pdf-form-field"${data}><label for="${escapeHTML2(id)}">${escapeHTML2(label)}</label>${control}</div>
-`;
-    const [x = 0, y = 0, w = 0, h = 0] = obj.bbox || [];
-    return `<div class="pdf-form-field pdf-form-field-positioned"${data} style="left:${Number(x) || 0}px;top:${cssTop2(page, y, h)}px;width:${Number(w) || 0}px;height:${Number(h) || 0}px"><label class="pdf-sr-only" for="${escapeHTML2(id)}">${escapeHTML2(label)}</label>${control}</div>
-`;
-  }
-  function renderPageVisual(page, ir, attrs) {
-    let html = '<div class="pdf-text-canvas" style="position:relative;width:' + (page.width || 0) + "px;height:" + (page.height || 0) + 'px;">\n';
-    for (const objId of page.content) {
-      const obj = ir.objects[objId];
-      if (!obj) continue;
-      if (obj.type === "text") {
-        const bbox = obj.bbox || [];
-        const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic?.text || "")}</div>
-`;
-      } else if (obj.type === "image") {
-        const bbox = obj.bbox || [];
-        const src = embeddedImageSrc2(obj.raw?.src || "");
-        if (src) {
-          html += `<img class="pdf-image"${attrs} data-pdf-object="${objId}" src="${src}" alt="${escapeHTML2(obj.accessibility?.alt || "Image")}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
-`;
-        } else {
-          html += `<div class="pdf-image"${attrs} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;">[Image]</div>
-`;
-        }
-      } else if (obj.type === "link") {
-        const bbox = obj.bbox || [];
-        const href = escapeHTML2(obj.raw?.href || "#");
-        html += `<a class="pdf-link"${attrs} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
-`;
-      }
-    }
-    html += "</div>\n";
-    return html;
-  }
-  function renderPagePositionedText(page, ir, attrs) {
-    let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
-    for (const objId of page.content) {
-      const obj = ir.objects[objId];
-      if (!obj) continue;
-      const dataAttr = includeDataAttributes(objId, attrs);
-      const bbox = obj.bbox || [];
-      if (obj.type === "text" && obj.semantic?.text) {
-        const style = textRunStyle(obj);
-        html += `<div class="pdf-text"${dataAttr} data-pdf-object="${objId}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3] || obj.raw?.fontSize || 12)}px;font-size:${obj.raw?.fontSize || 12}px;${style}">${escapeHTML2(obj.semantic.text)}</div>
-`;
-      } else if (obj.type === "image") {
-        const src = embeddedImageSrc2(obj.raw?.src || "");
-        const alt = escapeHTML2(obj.accessibility?.alt || obj.semantic?.caption || "Image");
-        if (src) {
-          html += `<img class="pdf-image"${dataAttr} data-pdf-object="${objId}" src="${src}" alt="${alt}" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">
-`;
-        }
-      } else if (obj.type === "link") {
-        const href = escapeHTML2(obj.raw?.href || "#");
-        const text = escapeHTML2(obj.semantic?.text || obj.raw?.url || "link");
-        html += `<a class="pdf-link"${dataAttr} data-pdf-object="${objId}" href="${href}" target="_blank" rel="noopener" style="position:absolute;left:${bbox[0] || 0}px;top:${cssTop2(page, bbox[1], bbox[3])}px;width:${bbox[2] || 0}px;height:${bbox[3] || 0}px;">${text}</a>
-`;
-      } else if (obj.type === "form_field") {
-        html += formFieldMarkup(obj, page, true);
-      }
-    }
-    html += "</div>\n";
-    return html;
-  }
-  function renderPageAccessible(page, ir, attrs, mode) {
-    let html = '<div class="pdf-text-layer" aria-label="Selectable text">\n';
-    for (const objId of page.content) {
-      const obj = ir.objects[objId];
-      if (!obj) continue;
-      const dataAttr = includeDataAttributes(objId, attrs);
-      const role = obj.semantic?.role || "paragraph";
-      if (obj.type === "image") {
-        const alt = obj.accessibility?.alt || obj.semantic?.caption || (mode === "intelligent" ? "AI-generated description" : "Image");
-        const src = embeddedImageSrc2(obj.raw?.src || "");
-        html += `<figure${dataAttr}>
-`;
-        if (src) html += `<img src="${escapeHTML2(src)}" alt="${escapeHTML2(alt)}" loading="lazy">
-`;
-        if (obj.semantic?.caption) html += `<figcaption>${escapeHTML2(obj.semantic.caption)}</figcaption>
-`;
-        if (mode === "intelligent" && obj.provenance?.method === "vision") {
-          html += `<small class="ai-generated">AI-generated description</small>
-`;
-        }
-        html += "</figure>\n";
-      } else if (role === "heading") {
-        const level = obj.semantic?.level || 2;
-        html += `<h${level}${dataAttr}>${escapeHTML2(obj.semantic?.text || "")}</h${level}>
-`;
-      } else if (role === "table") {
-        html += `<table${dataAttr}>
-`;
-        html += `<caption>${escapeHTML2(obj.semantic?.caption || "Table")}</caption>
-`;
-        html += "</table>\n";
-      } else if (role === "list") {
-        html += `<ul${dataAttr}>
-`;
-        html += "</ul>\n";
-      } else if (obj.type === "link") {
-        const href = escapeHTML2(obj.raw?.href || "#");
-        html += `<a${dataAttr} href="${href}" target="_blank" rel="noopener">${escapeHTML2(obj.semantic?.text || obj.raw?.url || "link")}</a>
-`;
-      } else if (obj.type === "form_field") {
-        html += formFieldMarkup(obj, page, true);
-      } else if (obj.type === "text" && obj.semantic?.text) {
-        const style = textRunStyle(obj);
-        html += `<p${dataAttr}${style ? ' style="' + style + '"' : ""}>${escapeHTML2(obj.semantic.text)}</p>
-`;
-      }
-    }
-    for (const vecId of page.vectors || []) {
-      const vec = ir.vectors[vecId];
-      if (!vec) continue;
-      if (vec.semantic?.role === "separator") {
-        html += `<hr${attrs} data-pdf-vector="${vecId}">
-`;
-      }
-    }
-    html += "</div>\n";
-    return html;
-  }
-  function textRunStyle(obj) {
-    let style = "";
-    const font = obj.raw?.font;
-    if (font) {
-      style += `font-family:${sanitizeFontName(font)}, system-ui, sans-serif;`;
-    }
-    const color = obj.raw?.color;
-    if (color) {
-      style += `color:${escapeCSSColor(color)};`;
-    }
-    return style;
-  }
-  function cssTop2(page, y, height = 0) {
-    const pageHeight = Number(page?.height) || 0;
-    const yy = Number(y) || 0;
-    const hh = Number(height) || 0;
-    return Math.max(0, pageHeight - yy - hh);
-  }
-  function sanitizeFontName(name) {
-    return String(name).replace(/[^A-Za-z0-9]+/g, " ").replace(/^\d+\s?/, "").trim() || "sans-serif";
-  }
-  function escapeCSSColor(color) {
-    return String(color).replace(/[^0-9A-Za-z#.,()% ]/g, "");
-  }
-  function includeDataAttributes(objId, attrs) {
-    return attrs ? `${attrs} data-pdf-object="${objId}"` : ` data-pdf-object="${objId}"`;
-  }
-  function generateVisualStyles(ir) {
-    return `<style>
-    body { margin: 0; padding: 20px; background: #f5f5f5; font-family: system-ui, sans-serif; }
-    .pdf-page { background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; position: relative; width: fit-content; }
-    .pdf-page-raster { position: relative; z-index: 0; }
-    .pdf-page[data-native-text="1"] .pdf-page-raster { display: none; }
-    .pdf-page-raster > img { display: block; position: relative; z-index: 1; width: auto; height: auto; max-width: none; }
-    .pdf-embedded-image { position: absolute; z-index: 2; }
-    .pdf-vector-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
-    /* The positioned text layer sits directly over the raster at the same
-       coordinates, so it renders on top of the pixels and stays selectable.
-       This makes the page look exactly like the source PDF while keeping
-       every run precise and copyable. */
-    .pdf-text-layer { position: absolute; inset: 0; z-index: 3; user-select: text; }
-    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
-    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
-    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
-    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
-    .pdf-text { position: absolute; white-space: pre; line-height: 1; transform-origin: 0 0; }
-    body[data-codbdocs-view="pdf"] .pdf-page[data-native-text="0"] .pdf-text { color: transparent !important; }
-    body[data-codbdocs-view="text"] .pdf-page[data-native-text="0"] .pdf-text { color: #111 !important; }
-    .pdf-image { border: 1px dashed #ccc; }
-    .pdf-rect { border: 1px solid #000; }
-    .pdf-form-field-positioned { position: absolute; z-index: 5; }
-    .pdf-form-field-positioned input:not([type="checkbox"]):not([type="radio"]),
-    .pdf-form-field-positioned select,
-    .pdf-form-field-positioned textarea,
-    .pdf-form-field-positioned button,
-    .pdf-form-field-positioned output { box-sizing: border-box; width: 100%; height: 100%; min-width: 0; margin: 0; font: inherit; }
-    .pdf-form-field-positioned input[type="checkbox"],
-    .pdf-form-field-positioned input[type="radio"] { width: 100%; height: 100%; margin: 0; }
-    .pdf-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .pdf-signature { display: flex; align-items: center; padding: 2px 4px; border: 1px solid #777; background: #f7f7f7; }
-    .ai-generated { color: #999; font-style: italic; }
-  </style>
-`;
-  }
-  function renderPageVectorLayer(page, ir) {
-    if (!Array.isArray(page.vectors) || !page.vectors.length) return "";
-    let body = "";
-    for (const vecId of page.vectors) {
-      const vec = ir.vectors[vecId];
-      if (!vec) continue;
-      const stroke = escapeHTML2(vec.graphicsState?.stroke || "#000");
-      const fill = escapeHTML2(vec.graphicsState?.fill || "none");
-      const width = Number(vec.graphicsState?.lineWidth) || 1;
-      if (vec.type === "rect" && Array.isArray(vec.bbox)) {
-        const [x = 0, y = 0, w2 = 0, h2 = 0] = vec.bbox;
-        body += `<rect x="${Number(x) || 0}" y="${Number(y) || 0}" width="${Math.abs(Number(w2) || 0)}" height="${Math.abs(Number(h2) || 0)}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
-      } else if (vec.type === "path" && Array.isArray(vec.points)) {
-        let d = "";
-        for (const p of vec.points) {
-          if (p.op === "moveTo") d += `M${Number(p.x) || 0} ${Number(p.y) || 0} `;
-          else if (p.op === "lineTo") d += `L${Number(p.x) || 0} ${Number(p.y) || 0} `;
-          else if (p.op === "curveTo") d += `C${Number(p.x1) || 0} ${Number(p.y1) || 0} ${Number(p.x2) || 0} ${Number(p.y2) || 0} ${Number(p.x3) || 0} ${Number(p.y3) || 0} `;
-          else if (p.op === "closePath") d += "Z ";
-        }
-        if (d.trim()) body += `<path d="${escapeHTML2(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
-      }
-    }
-    if (!body) return "";
-    const w = Number(page.width) || 0;
-    const h = Number(page.height) || 0;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
-    return `<img class="pdf-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase642(svg)}">
-`;
-  }
-  function pageHasNativeText(page, ir) {
-    return (page.content || []).some((id) => {
-      const obj = ir.objects[id];
-      if (!obj || obj.type !== "text" || !obj.semantic?.text) return false;
-      const method = String(obj.provenance?.method || obj.raw?.source || obj.raw?.textSource || "native").toLowerCase();
-      return method !== "ocr" && method !== "fusion";
-    });
-  }
-  function generateAccessibleStyles() {
-    return `<style>
-    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a2e; max-width: 820px; margin: 0 auto; }
-    .pdf-page { margin: 40px 0; padding: 10px 0; position: relative; }
-    .pdf-page-raster { position: relative; }
-    .pdf-page-raster > img { display: block; width: auto; height: auto; max-width: none; }
-    .pdf-text-layer { position: absolute; inset: 10px 0 0; }
-    h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; }
-    p { margin: 0.5em 0; }
-    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f5f5f5; font-weight: 600; }
-    figure { margin: 1em 0; }
-    img { max-width: 100%; height: auto; }
-    figcaption { font-size: 0.9em; color: #666; margin-top: 4px; }
-    .ai-generated { color: #999; font-size: 0.8em; font-style: italic; }
-    hr { border: none; border-top: 1px solid #eee; margin: 1em 0; }
-    .codbdocs-toolbar { max-width: 820px; margin: 12px auto; padding: 8px; display: flex; gap: 8px; justify-content: center; }
-    .codbdocs-toggle { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
-    .codbdocs-toggle.is-active { background: #4361ee; color: #fff; border-color: #4361ee; }
-    body[data-codbdocs-view="text"] .pdf-page-raster { display: none; }
-    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
-    @media (prefers-contrast: high) { body { background: #000; color: #fff; } a { color: #ff0; } }
-  </style>
-`;
-  }
-  async function extractStructureTree(page) {
-    try {
-      const structTree = await page.getStructTree();
-      if (!structTree) return null;
-      return convertStructTreeNode(structTree);
-    } catch (e) {
-      return null;
-    }
-  }
-  function convertStructTreeNode(node) {
-    if (!node) return null;
-    const result = {
-      type: node.type || "Unknown",
-      role: node.role || node.type,
-      children: []
-    };
-    if (node.alt) result.alt = node.alt;
-    if (node.lang) result.lang = node.lang;
-    if (node.altText) result.altText = node.altText;
-    if (node.children) {
-      for (const child of node.children) {
-        if (typeof child === "string") {
-          result.children.push({ type: "Text", content: child });
-        } else {
-          const converted = convertStructTreeNode(child);
-          if (converted) result.children.push(converted);
-        }
-      }
-    }
-    return result;
-  }
-  async function extractAnnotations(page) {
-    try {
-      const annotations = await page.getAnnotations({ intent: "display" });
-      if (!annotations || annotations.length === 0) return [];
-      return annotations.map((ann) => ({
-        id: ann.id,
-        type: mapAnnotationType(ann.subtype),
-        subtype: ann.subtype,
-        rect: ann.rect,
-        // [x1, y1, x2, y2]
-        color: ann.color,
-        contents: ann.contents || "",
-        title: ann.title || "",
-        modificationDate: ann.modDate,
-        creationDate: ann.creationDate,
-        flags: ann.flags,
-        // Form-specific
-        fieldName: ann.fieldName,
-        fieldType: ann.fieldType,
-        fieldValue: ann.fieldValue,
-        defaultFieldValue: ann.defaultFieldValue,
-        alternativeText: ann.alternativeText,
-        fieldFlags: ann.fieldFlags,
-        readOnly: ann.readOnly,
-        required: ann.required,
-        hidden: ann.hidden,
-        maxLen: ann.maxLen,
-        multiLine: ann.multiLine,
-        password: ann.password,
-        comb: ann.comb,
-        doNotScroll: ann.doNotScroll,
-        combo: ann.combo,
-        multiSelect: ann.multiSelect,
-        checkBox: ann.checkBox,
-        radioButton: ann.radioButton,
-        pushButton: ann.pushButton,
-        buttonValue: ann.buttonValue,
-        exportValue: ann.exportValue,
-        buttonWidgetType: ann.buttonWidgetType,
-        options: ann.options,
-        actions: ann.actions,
-        action: ann.action,
-        resetForm: ann.resetForm,
-        // Link-specific
-        url: ann.url,
-        unsafeUrl: ann.unsafeUrl,
-        newWindow: ann.newWindow,
-        dest: ann.dest,
-        // Markup-specific
-        strokeWidth: ann.strokeWidth,
-        strokeColor: ann.strokeColor,
-        fillColor: ann.fillColor,
-        opacity: ann.opacity
-      }));
-    } catch (e) {
-      return [];
-    }
-  }
-  function mapAnnotationType(subtype) {
-    const typeMap = {
-      "Text": "note",
-      "Link": "link",
-      "FreeText": "free_text",
-      "Line": "line",
-      "Square": "square",
-      "Circle": "circle",
-      "Polygon": "polygon",
-      "PolyLine": "polyline",
-      "Highlight": "highlight",
-      "Underline": "underline",
-      "Squiggly": "squiggly",
-      "StrikeOut": "strikeout",
-      "Stamp": "stamp",
-      "Caret": "caret",
-      "Ink": "ink",
-      "Popup": "popup",
-      "FileAttachment": "file_attachment",
-      "Sound": "sound",
-      "Movie": "movie",
-      "Widget": "form_field",
-      "Screen": "screen",
-      "PrinterMark": "printer_mark",
-      "TrapNet": "trap_net",
-      "Watermark": "watermark",
-      "3D": "3d",
-      "Redact": "redact"
-    };
-    return typeMap[subtype] || subtype || "unknown";
-  }
-  function detectReadingOrder(ir, pageNum) {
-    const pageId = `page_${pageNum}`;
-    const page = ir.pages[pageId];
-    if (!page) return [];
-    const objects = [];
-    for (const objId of page.content) {
-      const obj = ir.objects[objId];
-      if (obj && obj.bbox) {
-        objects.push({
-          id: objId,
-          type: obj.type,
-          bbox: obj.bbox,
-          text: obj.semantic?.text || "",
-          // Calculate center point for sorting
-          centerX: obj.bbox[0] + obj.bbox[2] / 2,
-          centerY: obj.bbox[1] + obj.bbox[3] / 2
-        });
-      }
-    }
-    for (const vecId of page.vectors || []) {
-      const vec = ir.vectors[vecId];
-      if (vec && vec.bbox && vec.semantic?.role) {
-        objects.push({
-          id: vecId,
-          type: "vector",
-          bbox: vec.bbox,
-          text: vec.semantic.role,
-          centerX: vec.bbox[0] + vec.bbox[2] / 2,
-          centerY: vec.bbox[1] + vec.bbox[3] / 2
-        });
-      }
-    }
-    if (objects.length === 0) return [];
-    const sorted = objects.sort((a, b) => {
-      const yDiff = a.centerY - b.centerY;
-      if (Math.abs(yDiff) > 10) return yDiff;
-      return a.centerX - b.centerX;
-    });
-    return sorted.map((obj, index) => ({
-      ...obj,
-      readingOrder: index
-    }));
-  }
-  function getReadingOrderSequence(ir, pageNum) {
-    const order = detectReadingOrder(ir, pageNum);
-    return order.map((item) => item.id);
-  }
-  var idCounter = 0;
-  function generateId(prefix) {
-    return `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`;
-  }
-  function escapeHTML2(str) {
-    if (str == null) return "";
-    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-
-  // packages/core/src/extended.js
+  // src/extended.js
   async function extractDocumentMetadata(pdf) {
     try {
       const metadata = await pdf.getMetadata();
@@ -7344,7 +8973,7 @@ ${p.text}`).join("\n\n")
     }).map((obj) => obj.id);
   }
 
-  // packages/core/src/graphics.js
+  // src/graphics.js
   var ColorSpaceTypes = {
     DEVICE_RGB: "DeviceRGB",
     DEVICE_CMYK: "DeviceCMYK",
@@ -7644,7 +9273,7 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/pdfcreator.js
+  // src/pdfcreator.js
   var PDFCreator = class {
     constructor() {
       this.objects = [];
@@ -7926,7 +9555,8 @@ ${p.text}`).join("\n\n")
         if (!id) continue;
         const stops = [...match[2].matchAll(/<stop\b[^>]*>/gi)].map((s) => {
           const tag = s[0];
-          return /stop-color\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] || /stop-color\s*:\s*([^;"']+)/i.exec(tag)?.[1];
+          const color = /stop-color\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] || /stop-color\s*:\s*([^;"']+)/i.exec(tag)?.[1];
+          return color;
         }).filter(Boolean);
         defs.paints[id] = stops[stops.length - 1] || stops[0] || "#000";
       }
@@ -7938,7 +9568,12 @@ ${p.text}`).join("\n\n")
       const style = (tag, name) => new RegExp(`${name}\\s*:\\s*([^;"']+)`, "i").exec(attr(tag, "style") || "")?.[1];
       const paint = (tag, name, fallback) => this.resolveSvgPaint(attr(tag, name) || style(tag, name) || fallback, defs);
       const strokeWidth = (tag) => Number(attr(tag, "stroke-width") || style(tag, "stroke-width") || 1);
-      const common = (tag, fillFallback = "#000", strokeFallback = null) => ({ fill: paint(tag, "fill", fillFallback), stroke: paint(tag, "stroke", strokeFallback), strokeWidth: strokeWidth(tag), transform: this.svgTransform(attr(tag, "transform")) });
+      const common = (tag, fillFallback = "#000", strokeFallback = null) => ({
+        fill: paint(tag, "fill", fillFallback),
+        stroke: paint(tag, "stroke", strokeFallback),
+        strokeWidth: strokeWidth(tag),
+        transform: this.svgTransform(attr(tag, "transform"))
+      });
       for (const match of svg.matchAll(/<path\b[^>]*\bd\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
         const tag = match[0];
         const commands = this.svgPathToPdf(match[1]);
@@ -7950,7 +9585,10 @@ ${p.text}`).join("\n\n")
         const y = Number(attr(tag, "y") || 0);
         const w = Number(attr(tag, "width") || 0);
         const h = Number(attr(tag, "height") || 0);
-        if (w && h) out.push({ commands: [`${this.num(x)} ${this.num(y)} ${this.num(w)} ${this.num(h)} re`], ...common(tag) });
+        if (w && h) out.push({
+          commands: [`${this.num(x)} ${this.num(y)} ${this.num(w)} ${this.num(h)} re`],
+          ...common(tag)
+        });
       }
       for (const match of svg.matchAll(/<circle\b[^>]*>/gi)) {
         const tag = match[0];
@@ -7968,7 +9606,10 @@ ${p.text}`).join("\n\n")
         const y1 = Number(attr(tag, "y1") || 0);
         const x2 = Number(attr(tag, "x2") || 0);
         const y2 = Number(attr(tag, "y2") || 0);
-        out.push({ commands: [`${this.num(x1)} ${this.num(y1)} m`, `${this.num(x2)} ${this.num(y2)} l`], ...common(tag, null, "#000") });
+        out.push({
+          commands: [`${this.num(x1)} ${this.num(y1)} m`, `${this.num(x2)} ${this.num(y2)} l`],
+          ...common(tag, null, "#000")
+        });
       }
       for (const match of svg.matchAll(/<polyline\b[^>]*>|<polygon\b[^>]*>/gi)) {
         const tag = match[0];
@@ -8018,26 +9659,37 @@ ${p.text}`).join("\n\n")
           x = (rel ? x : 0) + n();
           y = (rel ? y : 0) + n();
           commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
-          lastCx = x2; lastCy = y2; lastQx = lastQy = null;
+          lastCx = x2;
+          lastCy = y2;
+          lastQx = lastQy = null;
         } else if (c === "S") {
           const x1 = lastCx == null ? x : 2 * x - lastCx, y1 = lastCy == null ? y : 2 * y - lastCy;
           const x2 = (rel ? x : 0) + n(), y2 = (rel ? y : 0) + n();
-          x = (rel ? x : 0) + n(); y = (rel ? y : 0) + n();
+          x = (rel ? x : 0) + n();
+          y = (rel ? y : 0) + n();
           commands.push(`${this.num(x1)} ${this.num(y1)} ${this.num(x2)} ${this.num(y2)} ${this.num(x)} ${this.num(y)} c`);
-          lastCx = x2; lastCy = y2; lastQx = lastQy = null;
+          lastCx = x2;
+          lastCy = y2;
+          lastQx = lastQy = null;
         } else if (c === "Q" || c === "T") {
-          const qx = c === "T" ? (lastQx == null ? x : 2 * x - lastQx) : (rel ? x : 0) + n();
-          const qy = c === "T" ? (lastQy == null ? y : 2 * y - lastQy) : (rel ? y : 0) + n();
+          const qx = c === "T" ? lastQx == null ? x : 2 * x - lastQx : (rel ? x : 0) + n();
+          const qy = c === "T" ? lastQy == null ? y : 2 * y - lastQy : (rel ? y : 0) + n();
           const ex = (rel ? x : 0) + n(), ey = (rel ? y : 0) + n();
-          const c1x = x + (2 / 3) * (qx - x), c1y = y + (2 / 3) * (qy - y);
-          const c2x = ex + (2 / 3) * (qx - ex), c2y = ey + (2 / 3) * (qy - ey);
+          const c1x = x + 2 / 3 * (qx - x), c1y = y + 2 / 3 * (qy - y);
+          const c2x = ex + 2 / 3 * (qx - ex), c2y = ey + 2 / 3 * (qy - ey);
           commands.push(`${this.num(c1x)} ${this.num(c1y)} ${this.num(c2x)} ${this.num(c2y)} ${this.num(ex)} ${this.num(ey)} c`);
-          x = ex; y = ey; lastQx = qx; lastQy = qy; lastCx = lastCy = null;
+          x = ex;
+          y = ey;
+          lastQx = qx;
+          lastQy = qy;
+          lastCx = lastCy = null;
         } else if (c === "A") {
           const rx = n(), ry = n(), rot = n(), large = n(), sweep = n();
           const ex = (rel ? x : 0) + n(), ey = (rel ? y : 0) + n();
           commands.push(...this.arcToBezier(x, y, rx, ry, rot, large, sweep, ex, ey));
-          x = ex; y = ey; lastCx = lastCy = lastQx = lastQy = null;
+          x = ex;
+          y = ey;
+          lastCx = lastCy = lastQx = lastQy = null;
         } else if (c === "Z") {
           commands.push("h");
           x = sx;
@@ -8056,26 +9708,72 @@ ${p.text}`).join("\n\n")
     svgTransform(value) {
       if (!value) return null;
       let m = [1, 0, 0, 1, 0, 0];
-      const multiply = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+      const multiply2 = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
       for (const match of String(value).matchAll(/(matrix|translate|scale|rotate)\(([^\)]*)\)/gi)) {
         const args = match[2].split(/[\s,]+/).map(Number).filter(Number.isFinite);
         let next = null;
         if (match[1] === "matrix" && args.length >= 6) next = args.slice(0, 6);
         if (match[1] === "translate") next = [1, 0, 0, 1, args[0] || 0, args[1] || 0];
         if (match[1] === "scale") next = [args[0] ?? 1, 0, 0, args[1] ?? args[0] ?? 1, 0, 0];
-        if (match[1] === "rotate") { const a = (args[0] || 0) * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a); next = [cos, sin, -sin, cos, 0, 0]; }
-        if (next) m = multiply(m, next);
+        if (match[1] === "rotate") {
+          const a = (args[0] || 0) * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+          next = [cos, sin, -sin, cos, 0, 0];
+        }
+        if (next) m = multiply2(m, next);
       }
       return m;
     }
     ellipsePath(cx, cy, rx, ry) {
       const k = 0.5522847498307936;
-      return [`${this.num(cx + rx)} ${this.num(cy)} m`, `${this.num(cx + rx)} ${this.num(cy + k * ry)} ${this.num(cx + k * rx)} ${this.num(cy + ry)} ${this.num(cx)} ${this.num(cy + ry)} c`, `${this.num(cx - k * rx)} ${this.num(cy + ry)} ${this.num(cx - rx)} ${this.num(cy + k * ry)} ${this.num(cx - rx)} ${this.num(cy)} c`, `${this.num(cx - rx)} ${this.num(cy - k * ry)} ${this.num(cx - k * rx)} ${this.num(cy - ry)} ${this.num(cx)} ${this.num(cy - ry)} c`, `${this.num(cx + k * rx)} ${this.num(cy - ry)} ${this.num(cx + rx)} ${this.num(cy - k * ry)} ${this.num(cx + rx)} ${this.num(cy)} c`, "h"];
+      return [
+        `${this.num(cx + rx)} ${this.num(cy)} m`,
+        `${this.num(cx + rx)} ${this.num(cy + k * ry)} ${this.num(cx + k * rx)} ${this.num(cy + ry)} ${this.num(cx)} ${this.num(cy + ry)} c`,
+        `${this.num(cx - k * rx)} ${this.num(cy + ry)} ${this.num(cx - rx)} ${this.num(cy + k * ry)} ${this.num(cx - rx)} ${this.num(cy)} c`,
+        `${this.num(cx - rx)} ${this.num(cy - k * ry)} ${this.num(cx - k * rx)} ${this.num(cy - ry)} ${this.num(cx)} ${this.num(cy - ry)} c`,
+        `${this.num(cx + k * rx)} ${this.num(cy - ry)} ${this.num(cx + rx)} ${this.num(cy - k * ry)} ${this.num(cx + rx)} ${this.num(cy)} c`,
+        "h"
+      ];
     }
     arcToBezier(x1, y1, rx, ry, rotation, largeArcFlag, sweepFlag, x2, y2) {
       if (!rx || !ry) return [`${this.num(x2)} ${this.num(y2)} l`];
       if (Math.abs(x1 - x2) < 1e-3 && Math.abs(y1 - y2) < 1e-3) return [];
-      return [`${this.num(x2)} ${this.num(y2)} l`];
+      const phi = rotation * Math.PI / 180, cos = Math.cos(phi), sin = Math.sin(phi);
+      const dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
+      let x1p = cos * dx + sin * dy, y1p = -sin * dx + cos * dy;
+      rx = Math.abs(rx);
+      ry = Math.abs(ry);
+      const lam = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+      if (lam > 1) {
+        const s = Math.sqrt(lam);
+        rx *= s;
+        ry *= s;
+      }
+      const sign = largeArcFlag === sweepFlag ? -1 : 1;
+      const sq = Math.max(0, (rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p) / (rx * rx * y1p * y1p + ry * ry * x1p * x1p));
+      const coef = sign * Math.sqrt(sq);
+      const cxp = coef * (rx * y1p / ry), cyp = coef * (-ry * x1p / rx);
+      const cx = cos * cxp - sin * cyp + (x1 + x2) / 2, cy = sin * cxp + cos * cyp + (y1 + y2) / 2;
+      const angle = (ux, uy, vx, vy) => {
+        const dot = ux * vx + uy * vy, len = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+        const a = Math.acos(Math.max(-1, Math.min(1, dot / len)));
+        return ux * vy - uy * vx < 0 ? -a : a;
+      };
+      let theta1 = angle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+      let delta = angle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+      if (!sweepFlag && delta > 0) delta -= 2 * Math.PI;
+      if (sweepFlag && delta < 0) delta += 2 * Math.PI;
+      const segs = Math.ceil(Math.abs(delta) / (Math.PI / 2));
+      const out = [];
+      for (let i = 0; i < segs; i++) {
+        const a1 = theta1 + i * delta / segs, a2 = theta1 + (i + 1) * delta / segs;
+        const t = 4 / 3 * Math.tan((a2 - a1) / 4);
+        const p = (a) => [cx + rx * Math.cos(a) * cos - ry * Math.sin(a) * sin, cy + rx * Math.cos(a) * sin + ry * Math.sin(a) * cos];
+        const p1 = p(a1), p2 = p(a2);
+        const c1 = [p1[0] + t * (-rx * Math.sin(a1) * cos - ry * Math.cos(a1) * sin), p1[1] + t * (-rx * Math.sin(a1) * sin + ry * Math.cos(a1) * cos)];
+        const c2 = [p2[0] - t * (-rx * Math.sin(a2) * cos - ry * Math.cos(a2) * sin), p2[1] - t * (-rx * Math.sin(a2) * sin + ry * Math.cos(a2) * cos)];
+        out.push(`${this.num(c1[0])} ${this.num(c1[1])} ${this.num(c2[0])} ${this.num(c2[1])} ${this.num(p2[0])} ${this.num(p2[1])} c`);
+      }
+      return out;
     }
     decodeDataUrl(src) {
       const m = /^data:[^,]+,(.*)$/i.exec(src);
@@ -8102,8 +9800,8 @@ ${p.text}`).join("\n\n")
       if (!value || value === "none" || value === "transparent") return null;
       const named = { black: "#000000", white: "#ffffff", red: "#ff0000", green: "#008000", blue: "#0000ff" };
       value = String(named[value] || value).trim();
-      const rgb = /^rgb\(([^)]+)\)$/i.exec(value);
-      if (rgb) return rgb[1].split(",").slice(0, 3).map((v) => Number(v.trim()) / 255);
+      const rgb2 = /^rgb\(([^)]+)\)$/i.exec(value);
+      if (rgb2) return rgb2[1].split(",").slice(0, 3).map((v) => Number(v.trim()) / 255);
       const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
       if (!hex) return null;
       const h = hex[1].length === 3 ? hex[1].split("").map((ch) => ch + ch).join("") : hex[1];
@@ -8149,8 +9847,8 @@ ${p.text}`).join("\n\n")
 `));
       parts.push(encoder.encode("0000000000 65535 f \n"));
       for (let i = 1; i < this.currentObject; i++) {
-        const offset = offsets.get(i) || 0;
-        parts.push(encoder.encode(`${String(offset).padStart(10, "0")} 00000 n 
+        const offset2 = offsets.get(i) || 0;
+        parts.push(encoder.encode(`${String(offset2).padStart(10, "0")} 00000 n 
 `));
       }
       parts.push(encoder.encode("trailer\n"));
@@ -8300,7 +9998,7 @@ ${p.text}`).join("\n\n")
     return createPDF(ir, options);
   }
 
-  // packages/core/src/advanced.js
+  // src/advanced.js
   var SignatureSubFilter = {
     ADOBE_PKCS7_S4: "adbe.pkcs7.sha1",
     ADOBE_PKCS7_DETACHED: "adbe.pkcs7.detached",
@@ -8861,7 +10559,7 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/quality.js
+  // src/quality.js
   function analyzeTextQuality(pageData, contentItems, pageSize) {
     const issues = [];
     let score = 1;
@@ -9606,7 +11304,7 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/edgecases.js
+  // src/edgecases.js
   function detectRotationSkew(pageData, contentItems, vectors) {
     const result = {
       rotation: pageData.rotation || 0,
@@ -10176,7 +11874,7 @@ ${p.text}`).join("\n\n")
     };
   }
 
-  // packages/core/src/expansion.js
+  // src/expansion.js
   var CONCEPT_SYNONYMS = {
     contract: ["agreement", "award", "deal", "pact", "compact", "accord", "arrangement", "understanding", "contractual"],
     money: ["funds", "payment", "amount", "cost", "price", "value", "expenditure", "expense", "budget", "appropriation", "disbursement", "compensation"],
@@ -10326,7 +12024,7 @@ ${p.text}`).join("\n\n")
       includeFuzzy = false,
       documentTerms = null
     } = options;
-    const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
+    const terms2 = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
     const expanded = /* @__PURE__ */ new Map();
     function addTerm(term, weight, source) {
       if (!term || term.length < 2) return;
@@ -10338,11 +12036,11 @@ ${p.text}`).join("\n\n")
         expanded.set(term, { weight, sources: [source] });
       }
     }
-    for (const term of terms) {
+    for (const term of terms2) {
       addTerm(term, 1, "original");
     }
     if (includeSynonyms) {
-      for (const term of terms) {
+      for (const term of terms2) {
         const synonyms = findSynonyms(term);
         for (const syn of synonyms) {
           addTerm(syn, 0.7, "synonym");
@@ -10366,13 +12064,13 @@ ${p.text}`).join("\n\n")
       }
     }
     if (includeStems) {
-      for (const term of terms) {
+      for (const term of terms2) {
         const s = stem(term);
         if (s !== term) addTerm(s, 0.5, "stem");
       }
     }
     if (includeNGrams) {
-      const fullQuery = terms.join(" ");
+      const fullQuery = terms2.join(" ");
       const bigrams = wordNGrams(fullQuery, 2);
       for (const gram of bigrams) {
         addTerm(gram, 0.4, "bigram");
@@ -10380,7 +12078,7 @@ ${p.text}`).join("\n\n")
     }
     if (includeFuzzy && documentTerms) {
       const vocab = Array.isArray(documentTerms) ? documentTerms : Object.keys(documentTerms);
-      for (const term of terms) {
+      for (const term of terms2) {
         const match = bestFuzzyMatch(term, vocab, 0.7);
         if (match && match.word !== term) {
           addTerm(match.word, 0.3 * match.score, "fuzzy");
@@ -10414,8 +12112,8 @@ ${p.text}`).join("\n\n")
         }
       }
     }
-    for (const [type, terms] of Object.entries(ENTITY_TYPE_EXPANSIONS)) {
-      if (terms.includes(lower)) {
+    for (const [type, terms2] of Object.entries(ENTITY_TYPE_EXPANSIONS)) {
+      if (terms2.includes(lower)) {
         synonyms.add(type);
       }
     }
@@ -10547,7 +12245,7 @@ ${p.text}`).join("\n\n")
     return results.slice(0, maxResults);
   }
 
-  // packages/core/src/concepts.js
+  // src/concepts.js
   var ConceptNode = class {
     constructor(id, type, text, options = {}) {
       this.id = id;
@@ -12175,7 +13873,7 @@ ${p.text}`).join("\n\n")
     return results;
   }
 
-  // packages/core/src/docaccess.js
+  // src/docaccess.js
   function escapeHTML3(str) {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -12188,6 +13886,13 @@ ${p.text}`).join("\n\n")
     const issues = [];
     let score = 100;
     const criteria = {};
+    const addIssue = (criterion, issue) => {
+      if (!criteria[criterion]) criteria[criterion] = { name: issue.name || criterion, status: "pass", issues: [] };
+      criteria[criterion].status = issue.severity === "info" ? criteria[criterion].status === "fail" ? "fail" : "warning" : "fail";
+      if (issue.element) criteria[criterion].issues.push(issue.element);
+      issues.push(issue);
+      score -= issue.penalty ?? (issue.severity === "error" ? 5 : issue.severity === "warning" ? 2 : 0);
+    };
     criteria["1.1.1"] = { name: "Non-text Content", status: "pass", issues: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
@@ -12276,6 +13981,7 @@ ${p.text}`).join("\n\n")
       }
     }
     criteria["1.4.3"] = { name: "Contrast (Minimum)", status: "pass", issues: [] };
+    criteria["1.4.6"] = { name: "Contrast (Enhanced)", status: "pass", issues: [] };
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
       if (!page) continue;
@@ -12296,9 +14002,41 @@ ${p.text}`).join("\n\n")
               suggestion: "Increase contrast between text and background colors"
             });
             score -= 3;
+          } else if (ratio < 7) {
+            addIssue("1.4.6", {
+              type: "aaa_contrast_enhanced",
+              wcag: "1.4.6",
+              page: parseInt(pageId.split("_")[1]),
+              element: objId,
+              severity: "warning",
+              message: `Text contrast ratio ${ratio.toFixed(2)}:1 is below WCAG AAA 7:1 target`,
+              suggestion: "Use the high-contrast overlay or increase foreground/background contrast to at least 7:1 for normal text",
+              penalty: 1
+            });
           }
         }
       }
+    }
+    criteria["1.4.8"] = { name: "Visual Presentation", status: "pass", issues: [] };
+    const longTextObjects = [];
+    for (const pageId of ir.document.pages) {
+      const page = ir.pages[pageId];
+      if (!page) continue;
+      for (const objId of page.content || []) {
+        const obj = ir.objects[objId];
+        const text = obj?.semantic?.text || obj?.raw?.text || "";
+        if (obj?.type === "text" && text.length > 120) longTextObjects.push({ id: objId, page: parseInt(pageId.split("_")[1]), text });
+      }
+    }
+    if (longTextObjects.length) {
+      addIssue("1.4.8", {
+        type: "aaa_visual_presentation_overlay_required",
+        wcag: "1.4.8",
+        severity: "info",
+        message: "Long-form text requires user-adjustable presentation controls for AAA.",
+        suggestion: "Provide reflow, high contrast, zoom, line-height, spacing, and readable-width controls as an overlay.",
+        penalty: 0
+      });
     }
     criteria["1.4.11"] = { name: "Non-text Contrast", status: "pass", issues: [] };
     criteria["2.1.1"] = { name: "Keyboard", status: "pass", issues: [] };
@@ -12332,6 +14070,8 @@ ${p.text}`).join("\n\n")
       score -= 5;
     }
     criteria["2.4.6"] = { name: "Headings and Labels", status: "pass", issues: [] };
+    criteria["2.4.10"] = { name: "Section Headings", status: "pass", issues: [] };
+    let headingCount = 0;
     for (const pageId of ir.document.pages) {
       const page = ir.pages[pageId];
       if (!page) continue;
@@ -12350,7 +14090,18 @@ ${p.text}`).join("\n\n")
           });
           score -= 2;
         }
+        if (obj?.semantic?.role === "heading") headingCount += 1;
       }
+    }
+    if ((ir.document.pages || []).length > 1 && headingCount === 0) {
+      addIssue("2.4.10", {
+        type: "aaa_missing_section_headings",
+        wcag: "2.4.10",
+        severity: "warning",
+        message: "Multi-page document has no detected section headings",
+        suggestion: "Add or infer descriptive section headings for AAA navigation.",
+        penalty: 2
+      });
     }
     criteria["3.1.1"] = { name: "Language of Page", status: "pass", issues: [] };
     if (!ir.document.metadata?.language) {
@@ -12365,6 +14116,37 @@ ${p.text}`).join("\n\n")
       score -= 5;
     }
     criteria["3.1.2"] = { name: "Language of Parts", status: "pass", issues: [] };
+    criteria["3.1.3"] = { name: "Unusual Words", status: "pass", issues: [] };
+    criteria["3.1.4"] = { name: "Abbreviations", status: "pass", issues: [] };
+    criteria["3.1.5"] = { name: "Reading Level", status: "pass", issues: [] };
+    const allText = (ir.document.pages || []).flatMap((pageId) => {
+      const page = ir.pages[pageId];
+      return (page?.content || []).map((id) => ir.objects[id]).filter(Boolean).map((obj) => obj.semantic?.text || obj.raw?.text || "");
+    }).join(" ");
+    const reading = estimateReadingLevel(allText);
+    if (reading.words >= 100 && reading.grade > 9) {
+      addIssue("3.1.5", {
+        type: "aaa_reading_level",
+        wcag: "3.1.5",
+        severity: "warning",
+        message: `Estimated reading grade ${reading.grade.toFixed(1)} is above the AAA lower-secondary target`,
+        suggestion: "Provide a plain-language summary or simplified companion text.",
+        penalty: 2,
+        detail: reading
+      });
+    }
+    const abbreviations = findLikelyAbbreviations(allText);
+    if (abbreviations.length) {
+      addIssue("3.1.4", {
+        type: "aaa_abbreviations_need_expansion",
+        wcag: "3.1.4",
+        severity: "info",
+        message: `Likely abbreviations need expansion for AAA: ${abbreviations.slice(0, 12).join(", ")}`,
+        suggestion: "Provide an abbreviation glossary or first-use expansion.",
+        penalty: 0,
+        abbreviations
+      });
+    }
     criteria["4.1.2"] = { name: "Name, Role, Value", status: "pass", issues: [] };
     for (const [id, obj] of Object.entries(ir.objects)) {
       if (obj?.semantic?.role === "form_field") {
@@ -12382,42 +14164,14 @@ ${p.text}`).join("\n\n")
         }
       }
     }
-    criteria["1.4.6"] = criteria["1.4.6"] || { name: "Contrast (Enhanced)", status: "pass", issues: [] };
-    criteria["1.4.8"] = criteria["1.4.8"] || { name: "Visual Presentation", status: "pass", issues: [] };
-    criteria["2.4.10"] = criteria["2.4.10"] || { name: "Section Headings", status: "pass", issues: [] };
-    criteria["3.1.4"] = criteria["3.1.4"] || { name: "Abbreviations", status: "pass", issues: [] };
-    criteria["3.1.5"] = criteria["3.1.5"] || { name: "Reading Level", status: "pass", issues: [] };
-    const allText = (ir.document.pages || []).flatMap((pageId) => {
-      const page = ir.pages[pageId];
-      return (page?.content || []).map((id) => ir.objects[id]).filter(Boolean).map((obj) => obj.semantic?.text || obj.raw?.text || "");
-    }).join(" ");
-    const headingCount = (ir.document.pages || []).flatMap((pageId) => (ir.pages[pageId]?.content || []).map((id) => ir.objects[id]).filter((obj) => obj?.semantic?.role === "heading")).length;
-    if ((ir.document.pages || []).length > 1 && headingCount === 0) {
-      criteria["2.4.10"].status = "fail";
-      issues.push({ type: "aaa_missing_section_headings", wcag: "2.4.10", severity: "warning", message: "Multi-page document has no detected section headings", suggestion: "Add or infer descriptive section headings for AAA navigation." });
-      score -= 2;
-    }
-    const reading = estimateReadingLevel(allText);
-    if (reading.words >= 100 && reading.grade > 9) {
-      criteria["3.1.5"].status = "fail";
-      issues.push({ type: "aaa_reading_level", wcag: "3.1.5", severity: "warning", message: `Estimated reading grade ${reading.grade.toFixed(1)} is above the AAA lower-secondary target`, suggestion: "Provide a plain-language summary or simplified companion text.", detail: reading });
-      score -= 2;
-    }
-    const abbreviations = findLikelyAbbreviations(allText);
-    if (abbreviations.length) {
-      criteria["3.1.4"].status = "warning";
-      issues.push({ type: "aaa_abbreviations_need_expansion", wcag: "3.1.4", severity: "info", message: `Likely abbreviations need expansion for AAA: ${abbreviations.slice(0, 12).join(", ")}`, suggestion: "Provide an abbreviation glossary or first-use expansion.", abbreviations });
-    }
-    if (allText.length > 600) {
-      criteria["1.4.8"].status = "warning";
-      issues.push({ type: "aaa_visual_presentation_overlay_required", wcag: "1.4.8", severity: "info", message: "Long-form text requires user-adjustable presentation controls for AAA.", suggestion: "Provide reflow, high contrast, zoom, line-height, spacing, and readable-width controls as an overlay." });
-    }
     const hasErrors = issues.some((i) => i.severity === "error");
     const hasWarnings = issues.some((i) => i.severity === "warning");
+    const hasAaaWarnings = issues.some((i) => String(i.wcag || "").match(/^(1\.4\.6|1\.4\.8|2\.4\.10|3\.1\.[345])$/) && i.severity !== "info");
     let level = "AAA";
     if (score < 60) level = "fail";
     else if (score < 80 || hasErrors) level = "A";
     else if (score < 95 || hasWarnings) level = "AA";
+    if (level === "AAA" && hasAaaWarnings) level = "AA";
     return {
       score: Math.max(0, score),
       level,
@@ -13416,7 +15170,7 @@ ${customStyles}
     return { html, text, audit, remediations };
   }
 
-  // packages/core/src/workspace.js
+  // src/workspace.js
   function createWorkspace(options = {}) {
     const { name = "Workspace", description = "" } = options;
     const workspace = {
@@ -13585,7 +15339,7 @@ ${customStyles}
     return workspace;
   }
 
-  // packages/core/src/persistence.js
+  // src/persistence.js
   var DB_NAME = "codbdocs";
   var DB_VERSION = 1;
   var STORE_NAME = "documents";
@@ -13708,7 +15462,7 @@ ${customStyles}
     }
   }
 
-  // packages/core/src/guards.js
+  // src/guards.js
   function normalizeIR(ir) {
     if (!ir || typeof ir !== "object") {
       throw new TypeError("codbdocs: an IR object is required (received " + (ir === null ? "null" : typeof ir) + ")");
@@ -13796,1267 +15550,7 @@ ${customStyles}
     };
   }
 
-  // packages/core/src/forms.js
-  function getPdfjs() {
-    const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
-    if (!lib) throw new Error("[codbdocs] pdfjsLib not found. Load PDF.js before saving a filled PDF.");
-    return lib;
-  }
-  async function sourceBytes(source) {
-    if (source instanceof Uint8Array) return source.slice(0);
-    if (source instanceof ArrayBuffer) return new Uint8Array(source.slice(0));
-    if (source && typeof source.arrayBuffer === "function") return new Uint8Array(await source.arrayBuffer());
-    if (typeof source === "string") {
-      const response = await fetch(source);
-      if (!response.ok) throw new Error(`[codbdocs] Unable to load PDF (${response.status}).`);
-      return new Uint8Array(await response.arrayBuffer());
-    }
-    throw new Error("[codbdocs] Unsupported PDF source.");
-  }
-  function checkedFor(field, value) {
-    const option = String(field.optionValue || "On");
-    if (Array.isArray(value)) return value.map(String).includes(option);
-    if (typeof value === "boolean") return value;
-    return value != null && String(value) === option;
-  }
-  function applyFormValuesToStorage(pdf, fields, values = {}) {
-    if (!pdf?.annotationStorage) throw new Error("[codbdocs] The PDF document has no annotation storage.");
-    let applied = 0;
-    const stored = /* @__PURE__ */ new Set();
-    for (const field of fields || []) {
-      const id = field.annotationId || field.id || (field.xfa ? field.dataId || field.name : null);
-      const name = field.name || field.fieldName || field.dataId;
-      if (!id || !name || !Object.prototype.hasOwnProperty.call(values, name)) continue;
-      const value = values[name];
-      if (field.fieldType === "button" || field.fieldType === "signature") continue;
-      if (field.xfa && field.fieldType === "radio") {
-        if (stored.has(id)) continue;
-        stored.add(id);
-        const selected = (fields || []).find((item) => item.xfa && item.name === name && String(item.optionValue) === String(value));
-        pdf.annotationStorage.setValue(id, { value: selected ? selected.xfaOn || selected.optionValue : field.xfaOff || "off" });
-        applied += 1;
-        continue;
-      }
-      if (field.xfa) {
-        let next = value;
-        if (field.fieldType === "checkbox" || field.fieldType === "radio") {
-          next = checkedFor(field, value) ? field.optionValue || field.xfaOn || "1" : field.xfaOff || "0";
-        }
-        pdf.annotationStorage.setValue(id, { value: next == null ? "" : next });
-      } else if (field.fieldType === "checkbox" || field.fieldType === "radio") {
-        pdf.annotationStorage.setValue(id, { value: checkedFor(field, value) });
-      } else {
-        pdf.annotationStorage.setValue(id, { value: value == null ? "" : value });
-      }
-      applied += 1;
-    }
-    return applied;
-  }
-  async function extractFields(pdf) {
-    if (pdf.isPureXfa) {
-      const fields2 = [];
-      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-        const page = await pdf.getPage(pageNumber);
-        if (typeof page.getXfa === "function") fields2.push(...extractXfaFormFields(await page.getXfa(), pageNumber));
-      }
-      return fields2;
-    }
-    const fieldObjects = typeof pdf.getFieldObjects === "function" ? await pdf.getFieldObjects() : null;
-    const fields = [];
-    for (const [name, widgets] of Object.entries(fieldObjects || {})) {
-      for (const widget of Array.isArray(widgets) ? widgets : []) {
-        const field = normalizeFormField({ ...widget, fieldName: widget.fieldName || name });
-        if (field) fields.push({ ...field, annotationId: field.id });
-      }
-    }
-    return fields;
-  }
-  async function saveFilledPdf(source, values = {}, options = {}) {
-    const pdfjsLib2 = getPdfjs();
-    const bytes = await sourceBytes(source);
-    const task = pdfjsLib2.getDocument({ data: bytes.slice(0), enableXfa: options.enableXfa !== false });
-    const pdf = await task.promise;
-    try {
-      const fields = options.fields || await extractFields(pdf);
-      applyFormValuesToStorage(pdf, fields, values);
-      return new Uint8Array(await pdf.saveDocument());
-    } finally {
-      try {
-        await pdf.destroy();
-      } catch {
-      }
-    }
-  }
-
-  // packages/core/src/large.js
-  function getPdfjs2() {
-    const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
-    if (!lib) {
-      throw new Error(
-        "[codbdocs] pdfjsLib not found. Load PDF.js before calling processLargeDocument()."
-      );
-    }
-    return lib;
-  }
-  async function openStreaming(source, options = {}) {
-    const pdfjsLib2 = getPdfjs2();
-    const { rangeChunkSize = 262144, password } = options;
-    let params;
-    let objectUrl = null;
-    if (typeof source === "string") {
-      params = { url: source };
-    } else if (source && typeof Blob !== "undefined" && source instanceof Blob) {
-      objectUrl = URL.createObjectURL(source);
-      params = { url: objectUrl };
-    } else if (source instanceof ArrayBuffer) {
-      params = { data: source };
-    } else if (source instanceof Uint8Array) {
-      params = { data: source };
-    } else if (source && typeof source.arrayBuffer === "function") {
-      params = { data: await source.arrayBuffer() };
-    } else {
-      throw new Error("[codbdocs] Unsupported source for processLargeDocument().");
-    }
-    const task = pdfjsLib2.getDocument({
-      ...params,
-      password,
-      rangeChunkSize,
-      disableAutoFetch: true,
-      disableStream: false,
-      // Keep PDF.js internal caches small on huge files.
-      maxImageSize: options.maxImageSize ?? 16777216
-    });
-    const pdf = await task.promise;
-    const release = async () => {
-      try {
-        await pdf.cleanup();
-        await pdf.destroy();
-      } catch {
-      }
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-    return { pdf, release };
-  }
-  async function extractPage(pdf, pageNumber, opts) {
-    const page = await pdf.getPage(pageNumber);
-    try {
-      const viewport = page.getViewport({ scale: 1 });
-      const textContent = await page.getTextContent();
-      const runs = [];
-      let text = "";
-      for (const item of textContent.items) {
-        if (!item.str) continue;
-        const t = item.transform || [1, 0, 0, 1, 0, 0];
-        if (opts.layout) {
-          runs.push({
-            text: item.str,
-            x: Math.round(t[4] * 100) / 100,
-            y: Math.round((viewport.height - t[5]) * 100) / 100,
-            width: Math.round((item.width || 0) * 100) / 100,
-            height: Math.round((item.height || 0) * 100) / 100,
-            fontName: item.fontName,
-            fontSize: Math.round(Math.hypot(t[2], t[3]) * 100) / 100,
-            dir: item.dir
-          });
-        }
-        text += item.str;
-        text += item.hasEOL ? "\n" : " ";
-      }
-      let image = null;
-      if (opts.rasterize) {
-        image = await rasterizePage(page, opts.rasterScale, opts.rasterType, opts.rasterQuality);
-      }
-      let annotations = null;
-      if (opts.annotations) {
-        const list = await page.getAnnotations({ intent: "display" });
-        annotations = list.map((a) => ({
-          subtype: a.subtype,
-          rect: a.rect,
-          url: a.url || a.unsafeUrl || null,
-          contents: a.contents || null,
-          fieldName: a.fieldName || null
-        }));
-      }
-      return {
-        page: pageNumber,
-        width: Math.round(viewport.width * 100) / 100,
-        height: Math.round(viewport.height * 100) / 100,
-        rotation: viewport.rotation,
-        text: text.replace(/[ \t]+\n/g, "\n").trim(),
-        runs: opts.layout ? runs : void 0,
-        annotations: annotations || void 0,
-        image
-      };
-    } finally {
-      try {
-        page.cleanup();
-      } catch {
-      }
-    }
-  }
-  async function rasterizePage(page, scale = 1.5, type = "image/png", quality = 0.85) {
-    const viewport = page.getViewport({ scale });
-    const width = Math.max(1, Math.floor(viewport.width));
-    const height = Math.max(1, Math.floor(viewport.height));
-    const canvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(width, height) : Object.assign(document.createElement("canvas"), { width, height });
-    const ctx = canvas.getContext("2d");
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    let bytes;
-    if (typeof canvas.convertToBlob === "function") {
-      const blob = await canvas.convertToBlob({ type, quality });
-      bytes = new Uint8Array(await blob.arrayBuffer());
-    } else {
-      const dataUrl = canvas.toDataURL(type, quality);
-      bytes = base64ToBytes(dataUrl.slice(dataUrl.indexOf(",") + 1));
-    }
-    canvas.width = 0;
-    canvas.height = 0;
-    return { type, width, height, bytes };
-  }
-  function chunkPageText(text, pageNumber, size, overlap) {
-    const chunks = [];
-    if (!text) return chunks;
-    const words = text.split(/\s+/).filter(Boolean);
-    const step = Math.max(1, size - overlap);
-    for (let i = 0; i < words.length; i += step) {
-      const slice = words.slice(i, i + size);
-      if (!slice.length) break;
-      chunks.push({
-        id: `p${pageNumber}-c${chunks.length + 1}`,
-        page: pageNumber,
-        text: slice.join(" "),
-        words: slice.length
-      });
-      if (i + size >= words.length) break;
-    }
-    return chunks;
-  }
-  async function processLargeDocument(source, options = {}) {
-    const {
-      batchSize = 2,
-      layout = true,
-      annotations = false,
-      rasterize = false,
-      rasterScale = 1.5,
-      rasterType = "image/png",
-      rasterQuality = 0.85,
-      chunkSize = 220,
-      chunkOverlap = 40,
-      keepPages = true,
-      keepImages = false,
-      onPage,
-      onProgress,
-      signal
-    } = options;
-    const started = Date.now();
-    const { pdf, release } = await openStreaming(source, options);
-    try {
-      const total = pdf.numPages;
-      const numbers = resolvePageList(options.pages, total);
-      let metadata = {};
-      try {
-        const meta = await pdf.getMetadata();
-        metadata = { ...meta.info || {} };
-      } catch {
-      }
-      let outline = [];
-      try {
-        outline = flattenOutline(await pdf.getOutline());
-      } catch {
-      }
-      const pages = [];
-      const chunks = [];
-      const images = [];
-      let characters = 0;
-      let words = 0;
-      let emptyPages = 0;
-      const opts = {
-        layout,
-        annotations,
-        rasterize,
-        rasterScale,
-        rasterType,
-        rasterQuality
-      };
-      for (let i = 0; i < numbers.length; i += batchSize) {
-        if (signal?.aborted) throw new Error("[codbdocs] aborted");
-        const batch = numbers.slice(i, i + batchSize);
-        const results = await Promise.all(batch.map((n) => extractPage(pdf, n, opts)));
-        for (const result of results) {
-          characters += result.text.length;
-          words += result.text ? result.text.split(/\s+/).filter(Boolean).length : 0;
-          if (!result.text) emptyPages += 1;
-          const pageChunks = chunkPageText(result.text, result.page, chunkSize, chunkOverlap);
-          chunks.push(...pageChunks);
-          if (result.image && keepImages) {
-            images.push({ page: result.page, ...result.image });
-          }
-          if (onPage) await onPage({ ...result, chunks: pageChunks });
-          if (keepPages) {
-            const { image, ...rest } = result;
-            pages.push(rest);
-          }
-          result.image = null;
-        }
-        try {
-          await pdf.cleanup();
-        } catch {
-        }
-        onProgress?.({
-          page: Math.min(i + batchSize, numbers.length),
-          total: numbers.length,
-          percent: Math.round(Math.min(i + batchSize, numbers.length) / numbers.length * 100)
-        });
-      }
-      return {
-        ok: true,
-        mode: "streaming",
-        pageCount: total,
-        processedPages: numbers.length,
-        metadata,
-        outline,
-        pages: keepPages ? pages : [],
-        chunks,
-        images: keepImages ? images : [],
-        metrics: {
-          characters,
-          words,
-          emptyPages,
-          chunkCount: chunks.length,
-          durationMs: Date.now() - started
-        }
-      };
-    } finally {
-      await release();
-    }
-  }
-  function resolvePageList(pages, total) {
-    if (!pages) return Array.from({ length: total }, (_, i) => i + 1);
-    if (Array.isArray(pages) && pages.length === 2 && pages.every((n) => typeof n === "number")) {
-      const [from, to] = pages;
-      const out = [];
-      for (let n = Math.max(1, from); n <= Math.min(total, to); n += 1) out.push(n);
-      return out;
-    }
-    if (Array.isArray(pages)) return pages.filter((n) => n >= 1 && n <= total);
-    return Array.from({ length: total }, (_, i) => i + 1);
-  }
-  function flattenOutline(items, depth = 0, out = []) {
-    for (const item of items || []) {
-      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
-      if (item.items?.length) flattenOutline(item.items, depth + 1, out);
-    }
-    return out;
-  }
-  var CRC_TABLE = (() => {
-    const table = new Uint32Array(256);
-    for (let i = 0; i < 256; i += 1) {
-      let c = i;
-      for (let k = 0; k < 8; k += 1) c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
-      table[i] = c >>> 0;
-    }
-    return table;
-  })();
-  function crc32(bytes) {
-    let c = 4294967295;
-    for (let i = 0; i < bytes.length; i += 1) c = CRC_TABLE[(c ^ bytes[i]) & 255] ^ c >>> 8;
-    return (c ^ 4294967295) >>> 0;
-  }
-  function toBytes(value) {
-    if (value instanceof Uint8Array) return value;
-    if (value instanceof ArrayBuffer) return new Uint8Array(value);
-    return new TextEncoder().encode(String(value));
-  }
-  function createZip(entries) {
-    const chunks = [];
-    const central = [];
-    let offset = 0;
-    const encoder = new TextEncoder();
-    for (const entry of entries) {
-      const nameBytes = encoder.encode(entry.name);
-      const data = toBytes(entry.data);
-      const crc = crc32(data);
-      const local = new Uint8Array(30 + nameBytes.length);
-      const lv = new DataView(local.buffer);
-      lv.setUint32(0, 67324752, true);
-      lv.setUint16(4, 20, true);
-      lv.setUint16(6, 2048, true);
-      lv.setUint16(8, 0, true);
-      lv.setUint32(14, crc, true);
-      lv.setUint32(18, data.length, true);
-      lv.setUint32(22, data.length, true);
-      lv.setUint16(26, nameBytes.length, true);
-      local.set(nameBytes, 30);
-      chunks.push(local, data);
-      const dir = new Uint8Array(46 + nameBytes.length);
-      const dv = new DataView(dir.buffer);
-      dv.setUint32(0, 33639248, true);
-      dv.setUint16(4, 20, true);
-      dv.setUint16(6, 20, true);
-      dv.setUint16(8, 2048, true);
-      dv.setUint16(10, 0, true);
-      dv.setUint32(16, crc, true);
-      dv.setUint32(20, data.length, true);
-      dv.setUint32(24, data.length, true);
-      dv.setUint16(28, nameBytes.length, true);
-      dv.setUint32(42, offset, true);
-      dir.set(nameBytes, 46);
-      central.push(dir);
-      offset += local.length + data.length;
-    }
-    const centralSize = central.reduce((sum, c) => sum + c.length, 0);
-    const end = new Uint8Array(22);
-    const ev = new DataView(end.buffer);
-    ev.setUint32(0, 101010256, true);
-    ev.setUint16(8, central.length, true);
-    ev.setUint16(10, central.length, true);
-    ev.setUint32(12, centralSize, true);
-    ev.setUint32(16, offset, true);
-    return new Blob([...chunks, ...central, end], { type: "application/zip" });
-  }
-  async function packageDocument(source, options = {}) {
-    const {
-      name = "document.pdf",
-      html = null,
-      includeOriginal = true,
-      includePageImages = true,
-      rasterScale = 1.5,
-      rasterType = "image/png",
-      onProgress
-    } = options;
-    const entries = [];
-    const pageFiles = [];
-    const result = await processLargeDocument(source, {
-      ...options,
-      rasterize: includePageImages,
-      rasterScale,
-      rasterType,
-      keepImages: false,
-      keepPages: true,
-      onProgress,
-      onPage: async (page) => {
-        if (page.image) {
-          const ext = page.image.type.split("/")[1].replace("jpeg", "jpg");
-          const file = `pages/page-${String(page.page).padStart(4, "0")}.${ext}`;
-          entries.push({ name: file, data: page.image.bytes });
-          pageFiles.push(file);
-        }
-        await options.onPage?.(page);
-      }
-    });
-    const transcript = result.pages.map((p) => `--- Page ${p.page} ---
-${p.text}`).join("\n\n");
-    const data = {
-      document: { name, pageCount: result.pageCount, metadata: result.metadata },
-      metrics: result.metrics,
-      outline: result.outline,
-      pages: result.pages,
-      chunks: result.chunks
-    };
-    if (html) entries.push({ name: "index.html", data: html });
-    entries.push({ name: "transcript.txt", data: transcript });
-    entries.push({ name: "rag.json", data: JSON.stringify({ chunks: result.chunks }, null, 2) });
-    entries.push({ name: "outline.json", data: JSON.stringify(result.outline, null, 2) });
-    entries.push({ name: "data.json", data: JSON.stringify(data, null, 2) });
-    if (includeOriginal) {
-      const bytes = await sourceBytes2(source);
-      if (bytes) entries.push({ name: "original.pdf", data: bytes });
-    }
-    const manifest = {
-      generator: "codbdocs/large",
-      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      document: name,
-      pageCount: result.pageCount,
-      files: entries.map((e) => e.name),
-      pageImages: pageFiles,
-      metrics: result.metrics
-    };
-    entries.push({ name: "manifest.json", data: JSON.stringify(manifest, null, 2) });
-    return { blob: createZip(entries), manifest, data };
-  }
-  async function sourceBytes2(source) {
-    if (source instanceof Uint8Array) return source;
-    if (source instanceof ArrayBuffer) return new Uint8Array(source);
-    if (source && typeof source.arrayBuffer === "function") {
-      return new Uint8Array(await source.arrayBuffer());
-    }
-    if (typeof source === "string") {
-      try {
-        const res = await fetch(source);
-        return new Uint8Array(await res.arrayBuffer());
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-  function base64ToBytes(b64) {
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-  function shouldStream(input, { maxBytes = 25 * 1024 * 1024, maxPages = 60 } = {}) {
-    const size = typeof input === "number" ? input : input?.size ?? 0;
-    const pages = typeof input === "object" ? input?.pageCount ?? 0 : 0;
-    return size > maxBytes || pages > maxPages;
-  }
-
-  // packages/core/src/serverless.js
-  function getPdfjs3() {
-    const lib = typeof window !== "undefined" && (window["pdfjs-dist/build/pdf"] || window.pdfjsLib);
-    if (!lib) {
-      throw new Error("[codbdocs] pdfjsLib not found. Load PDF.js before calling this API.");
-    }
-    return lib;
-  }
-  function makeCanvas(width, height) {
-    const w = Math.max(1, Math.floor(width));
-    const h = Math.max(1, Math.floor(height));
-    if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(w, h);
-    const el = document.createElement("canvas");
-    el.width = w;
-    el.height = h;
-    return el;
-  }
-  async function canvasToDataUri(canvas, type = "image/png", quality = 0.85) {
-    if (typeof canvas.convertToBlob === "function") {
-      const blob = await canvas.convertToBlob({ type, quality });
-      const buf = new Uint8Array(await blob.arrayBuffer());
-      return `data:${type};base64,${bytesToBase643(buf)}`;
-    }
-    return canvas.toDataURL(type, quality);
-  }
-  function bytesToBase643(bytes) {
-    let bin = "";
-    const step = 32768;
-    for (let i = 0; i < bytes.length; i += step) {
-      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
-    }
-    return btoa(bin);
-  }
-  async function extractPageVector(page, options = {}) {
-    const pdfjsLib2 = getPdfjs3();
-    const scale = options.scale ?? 1;
-    const viewport = page.getViewport({ scale });
-    const opList = await page.getOperatorList();
-    if (typeof pdfjsLib2.SVGGraphics === "function") {
-      try {
-        const gfx = new pdfjsLib2.SVGGraphics(page.commonObjs, page.objs);
-        gfx.embedFonts = options.embedFonts !== false;
-        const element = await gfx.getSVG(opList, viewport);
-        if (typeof XMLSerializer !== "undefined") {
-          return new XMLSerializer().serializeToString(element);
-        }
-        if (element?.outerHTML) return element.outerHTML;
-      } catch {
-      }
-    }
-    return buildSvgFromOperators(opList, viewport, pdfjsLib2);
-  }
-  function buildSvgFromOperators(opList, viewport, pdfjsLib2) {
-    const OPS = pdfjsLib2.OPS || {};
-    const parts = [];
-    let current = [];
-    let fill = "#000000";
-    let stroke = "#000000";
-    let lineWidth = 1;
-    const ctm = [1, 0, 0, -1, 0, viewport.height];
-    const pt = (x, y) => `${round(ctm[0] * x + ctm[2] * y + ctm[4])} ${round(ctm[1] * x + ctm[3] * y + ctm[5])}`;
-    const round = (n) => Math.round(n * 100) / 100;
-    for (let i = 0; i < opList.fnArray.length; i += 1) {
-      const fn = opList.fnArray[i];
-      const args = opList.argsArray[i] || [];
-      if (fn === OPS.setFillRGBColor) fill = rgb(args);
-      else if (fn === OPS.setStrokeRGBColor) stroke = rgb(args);
-      else if (fn === OPS.setLineWidth) lineWidth = args[0] ?? 1;
-      else if (fn === OPS.constructPath) {
-        const ops = args[0] || [];
-        const coords = args[1] || [];
-        let c = 0;
-        for (const op of ops) {
-          if (op === OPS.moveTo) {
-            current.push(`M ${pt(coords[c], coords[c + 1])}`);
-            c += 2;
-          } else if (op === OPS.lineTo) {
-            current.push(`L ${pt(coords[c], coords[c + 1])}`);
-            c += 2;
-          } else if (op === OPS.curveTo) {
-            current.push(
-              `C ${pt(coords[c], coords[c + 1])} ${pt(coords[c + 2], coords[c + 3])} ${pt(coords[c + 4], coords[c + 5])}`
-            );
-            c += 6;
-          } else if (op === OPS.rectangle) {
-            const [x, y, w, h] = coords.slice(c, c + 4);
-            current.push(
-              `M ${pt(x, y)} L ${pt(x + w, y)} L ${pt(x + w, y + h)} L ${pt(x, y + h)} Z`
-            );
-            c += 4;
-          } else if (op === OPS.closePath) {
-            current.push("Z");
-          }
-        }
-      } else if (fn === OPS.fill || fn === OPS.eoFill) {
-        if (current.length) parts.push(`<path d="${current.join(" ")}" fill="${fill}"/>`);
-        current = [];
-      } else if (fn === OPS.stroke || fn === OPS.closeStroke) {
-        if (current.length) {
-          parts.push(
-            `<path d="${current.join(" ")}" fill="none" stroke="${stroke}" stroke-width="${lineWidth}"/>`
-          );
-        }
-        current = [];
-      } else if (fn === OPS.endPath) {
-        current = [];
-      }
-    }
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(viewport.width)}" height="${Math.round(
-      viewport.height
-    )}" viewBox="0 0 ${Math.round(viewport.width)} ${Math.round(viewport.height)}">${parts.join("")}</svg>`;
-  }
-  function rgb(args) {
-    const [r = 0, g = 0, b = 0] = args;
-    const to = (v) => Math.max(0, Math.min(255, Math.round(v <= 1 ? v * 255 : v)));
-    return `rgb(${to(r)},${to(g)},${to(b)})`;
-  }
-  async function renderPageImage(page, options = {}) {
-    const dpi = options.dpi ?? 150;
-    const scale = options.scale ?? dpi / 72;
-    const type = options.type ?? "image/png";
-    const viewport = page.getViewport({ scale });
-    const canvas = makeCanvas(viewport.width, viewport.height);
-    const ctx = canvas.getContext("2d");
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    const dataUri = await canvasToDataUri(canvas, type, options.quality ?? 0.85);
-    const width = canvas.width;
-    const height = canvas.height;
-    canvas.width = 0;
-    canvas.height = 0;
-    return { dataUri, width, height, type, dpi: Math.round(scale * 72) };
-  }
-  async function extractPageImages(page, options = {}) {
-    const pdfjsLib2 = getPdfjs3();
-    const OPS = pdfjsLib2.OPS || {};
-    const viewport = page.getViewport({ scale: 1 });
-    const opList = await page.getOperatorList();
-    const out = [];
-    const transforms = [];
-    let ctm = [1, 0, 0, 1, 0, 0];
-    for (let i = 0; i < opList.fnArray.length; i += 1) {
-      const fn = opList.fnArray[i];
-      const args = opList.argsArray[i] || [];
-      if (fn === OPS.save) transforms.push(ctm.slice());
-      else if (fn === OPS.restore) ctm = transforms.pop() || [1, 0, 0, 1, 0, 0];
-      else if (fn === OPS.transform) ctm = multiply(ctm, args);
-      else if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
-        const name = args[0];
-        const img = await resolveImage(page, name);
-        if (!img) continue;
-        const width = Math.abs(ctm[0]);
-        const height = Math.abs(ctm[3]);
-        const x = ctm[4];
-        const y = viewport.height - ctm[5] - height;
-        let dataUri = "";
-        if (options.embed !== false) dataUri = await imageToDataUri(img);
-        out.push({
-          name: String(name),
-          x: Math.round(x * 100) / 100,
-          y: Math.round(y * 100) / 100,
-          width: Math.round(width * 100) / 100,
-          height: Math.round(height * 100) / 100,
-          pixelWidth: img.width,
-          pixelHeight: img.height,
-          data_uri: dataUri
-        });
-      }
-    }
-    return out;
-  }
-  function multiply(a, b) {
-    return [
-      a[0] * b[0] + a[2] * b[1],
-      a[1] * b[0] + a[3] * b[1],
-      a[0] * b[2] + a[2] * b[3],
-      a[1] * b[2] + a[3] * b[3],
-      a[0] * b[4] + a[2] * b[5] + a[4],
-      a[1] * b[4] + a[3] * b[5] + a[5]
-    ];
-  }
-  function resolveImage(page, name) {
-    return new Promise((resolve) => {
-      try {
-        if (page.objs.has(name)) return resolve(page.objs.get(name));
-        page.objs.get(name, (obj) => resolve(obj));
-        setTimeout(() => resolve(null), 3e3);
-      } catch {
-        resolve(null);
-      }
-    });
-  }
-  async function imageToDataUri(img) {
-    try {
-      if (img.bitmap && typeof createImageBitmap !== "undefined") {
-        const canvas2 = makeCanvas(img.width, img.height);
-        canvas2.getContext("2d").drawImage(img.bitmap, 0, 0);
-        return await canvasToDataUri(canvas2);
-      }
-      if (!img.data) return "";
-      const canvas = makeCanvas(img.width, img.height);
-      const ctx = canvas.getContext("2d");
-      const out = ctx.createImageData(img.width, img.height);
-      const src = img.data;
-      const channels = src.length / (img.width * img.height);
-      for (let i = 0, j = 0; i < out.data.length; i += 4) {
-        if (channels >= 4) {
-          out.data[i] = src[j];
-          out.data[i + 1] = src[j + 1];
-          out.data[i + 2] = src[j + 2];
-          out.data[i + 3] = src[j + 3];
-          j += 4;
-        } else if (channels >= 3) {
-          out.data[i] = src[j];
-          out.data[i + 1] = src[j + 1];
-          out.data[i + 2] = src[j + 2];
-          out.data[i + 3] = 255;
-          j += 3;
-        } else {
-          out.data[i] = out.data[i + 1] = out.data[i + 2] = src[j];
-          out.data[i + 3] = 255;
-          j += 1;
-        }
-      }
-      ctx.putImageData(out, 0, 0);
-      return await canvasToDataUri(canvas);
-    } catch {
-      return "";
-    }
-  }
-  var ocrWorkerPromise = null;
-  async function loadTesseract(provided) {
-    if (provided) return provided;
-    if (typeof window !== "undefined" && window.Tesseract) return window.Tesseract;
-    throw new Error("[codbdocs] Tesseract not found. Load or pass Tesseract before using OCR.");
-  }
-  async function getOcrWorker(language, providedTesseract) {
-    if (!ocrWorkerPromise) {
-      ocrWorkerPromise = (async () => {
-        const Tesseract = await loadTesseract(providedTesseract);
-        return Tesseract.createWorker(language || "eng");
-      })();
-    }
-    return ocrWorkerPromise;
-  }
-  async function terminateOcr() {
-    if (!ocrWorkerPromise) return;
-    try {
-      const worker = await ocrWorkerPromise;
-      await worker.terminate();
-    } catch {
-    }
-    ocrWorkerPromise = null;
-  }
-  async function ocrImage(image, options = {}) {
-    const worker = await getOcrWorker(options.language ?? "eng", options.tesseract);
-    const { data } = await worker.recognize(image);
-    return {
-      text: (data?.text || "").trim(),
-      confidence: data?.confidence ?? null,
-      words: data?.words?.length ?? 0
-    };
-  }
-  async function ocrPage(page, options = {}) {
-    const rendered = await renderPageImage(page, { dpi: options.dpi ?? 200 });
-    const result = await ocrImage(rendered.dataUri, options);
-    return { ...result, image: options.keepImage ? rendered : null };
-  }
-  async function documentData(source, options = {}) {
-    const {
-      title = "Document",
-      language = "en",
-      aiContext = "",
-      includeLayout = true,
-      includeImages = true,
-      includeForms = true,
-      includeVectors = true,
-      includePageImages = false,
-      includeOriginal = false,
-      ocr = "auto",
-      ocrMinChars = 24,
-      dpi = 150,
-      chunkSize = 220,
-      chunkOverlap = 40,
-      onProgress,
-      signal
-    } = options;
-    const started = Date.now();
-    const pdfjsLib2 = getPdfjs3();
-    const bytes = await sourceBytes3(source);
-    const loadingTask = pdfjsLib2.getDocument({
-      data: bytes ? bytes.slice(0) : void 0,
-      url: !bytes && typeof source === "string" ? source : void 0,
-      disableAutoFetch: true,
-      enableXfa: options.enableXfa !== false
-    });
-    const pdf = await loadingTask.promise;
-    let metadata = {};
-    try {
-      const meta = await pdf.getMetadata();
-      metadata = { ...meta.info || {} };
-    } catch {
-    }
-    let outlineRaw = [];
-    try {
-      outlineRaw = flattenOutline2(await pdf.getOutline());
-    } catch {
-    }
-    const total = pdf.numPages;
-    const numbers = resolvePages(options.pages, total);
-    const pages = [];
-    const layoutPages = [];
-    const chunks = [];
-    const headings = [];
-    const formFields = [];
-    let ocrPages = 0;
-    for (const num2 of numbers) {
-      if (signal?.aborted) throw new Error("[codbdocs] aborted");
-      const page = await pdf.getPage(num2);
-      const viewport = page.getViewport({ scale: 1 });
-      const content = await page.getTextContent();
-      const spans = [];
-      let text = "";
-      for (const item of content.items) {
-        if (!item.str) continue;
-        const t = item.transform || [1, 0, 0, 1, 0, 0];
-        const size = Math.round(Math.hypot(t[2], t[3]) * 100) / 100;
-        spans.push({
-          text: item.str,
-          x: Math.round(t[4] * 100) / 100,
-          y: Math.round((viewport.height - t[5] - (item.height || size)) * 100) / 100,
-          width: Math.round((item.width || 0) * 100) / 100,
-          height: Math.round((item.height || size) * 100) / 100,
-          font_size: size,
-          font_family: item.fontName || "",
-          direction: item.dir || "ltr"
-        });
-        text += item.str + (item.hasEOL ? "\n" : " ");
-      }
-      text = text.replace(/[ \t]+\n/g, "\n").trim();
-      let pageForms = [];
-      let pageXfa = null;
-      if (includeForms) {
-        try {
-          if (pdf.isPureXfa && typeof page.getXfa === "function") {
-            pageXfa = await page.getXfa();
-            pageForms = extractXfaFormFields(pageXfa, num2);
-          } else {
-            const annotations = await page.getAnnotations({ intent: "display" });
-            pageForms = annotations.filter((annotation) => annotation.subtype === "Widget" || annotation.fieldType).map((annotation) => normalizeFormField(annotation, num2)).filter(Boolean);
-          }
-          formFields.push(...pageForms);
-        } catch {
-          pageForms = [];
-        }
-      }
-      let pageOcr = false;
-      const wantOcr = ocr === true || ocr === "auto" && text.replace(/\s+/g, "").length < ocrMinChars;
-      if (wantOcr) {
-        try {
-          const result = await ocrPage(page, { language: options.ocrLanguage, dpi: Math.max(dpi, 200), tesseract: options.tesseract });
-          if (result.text) {
-            text = result.text;
-            pageOcr = true;
-            ocrPages += 1;
-          }
-        } catch {
-        }
-      }
-      for (const span of spans) {
-        if (span.font_size >= 14 && span.text.trim().length > 2) {
-          headings.push({
-            text: span.text.trim(),
-            page: num2,
-            level: span.font_size >= 20 ? 1 : span.font_size >= 16 ? 2 : 3,
-            font_size: span.font_size
-          });
-        }
-      }
-      pages.push({
-        page_number: num2,
-        width: Math.round(viewport.width * 100) / 100,
-        height: Math.round(viewport.height * 100) / 100,
-        text: text || `(No text could be extracted from page ${num2})`,
-        words: text ? text.split(/\s+/).filter(Boolean).length : 0,
-        spans: spans.length,
-        images: 0,
-        form_fields: pageForms.length,
-        ocr: pageOcr
-      });
-      chunks.push(...chunkText(text, num2, chunkSize, chunkOverlap, title));
-      if (includeLayout) {
-        const images = includeImages ? await extractPageImages(page) : [];
-        pages[pages.length - 1].images = images.length;
-        const entry = {
-          page_number: num2,
-          width: Math.round(viewport.width * 100) / 100,
-          height: Math.round(viewport.height * 100) / 100,
-          spans,
-          images,
-          forms: pageForms,
-          xfa: pageXfa,
-          vector_svg: "",
-          page_image: ""
-        };
-        if (includeVectors) {
-          try {
-            entry.vector_svg = await extractPageVector(page);
-          } catch {
-            entry.vector_svg = "";
-          }
-        }
-        if (includePageImages) {
-          try {
-            entry.page_image = (await renderPageImage(page, { dpi })).dataUri;
-          } catch {
-            entry.page_image = "";
-          }
-        }
-        layoutPages.push(entry);
-      }
-      try {
-        page.cleanup();
-      } catch {
-      }
-      onProgress?.({
-        page: pages.length,
-        total: numbers.length,
-        percent: Math.round(pages.length / numbers.length * 100)
-      });
-    }
-    const transcript = pages.map((p) => `--- Page ${p.page_number} ---
-${p.text}`).join("\n\n");
-    const outline = outlineRaw.length ? outlineRaw.map((o, i) => ({ text: o.title, level: o.level + 1, page: o.page ?? null, id: `o${i}` })) : headings;
-    const payload = {
-      document: {
-        title,
-        source: options.name || source && source.name || `${title}.pdf`,
-        language,
-        page_count: total,
-        bytes: bytes ? bytes.length : 0,
-        generated_at: (/* @__PURE__ */ new Date()).toISOString(),
-        metadata,
-        form_type: pdf.isPureXfa ? "xfa" : formFields.length ? "acroform" : "none"
-      },
-      metrics: {
-        pages: pages.length,
-        headings: outline.length,
-        rag_chunks: chunks.length,
-        rag_words: chunks.reduce((sum, c) => sum + c.words, 0),
-        total_spans: pages.reduce((sum, p) => sum + p.spans, 0),
-        form_fields: formFields.length,
-        text_pages: pages.filter((p) => !p.text.startsWith("(")).length,
-        ocr_pages: ocrPages,
-        characters: pages.reduce((sum, p) => sum + p.text.length, 0),
-        duration_ms: Date.now() - started,
-        engine: "codbdocs/browser"
-      },
-      outline,
-      pages,
-      chunks,
-      transcript,
-      ai_context: aiContext
-    };
-    if (includeForms) payload.forms = formFields;
-    if (pdf.isPureXfa) payload.xfa = { pure: true, enabled: options.enableXfa !== false, pages: numbers.length };
-    if (includeLayout) payload.layout = { pages: layoutPages };
-    if (includeOriginal && bytes) payload.original_pdf_base64 = bytesToBase643(bytes);
-    try {
-      await pdf.destroy();
-    } catch {
-    }
-    return payload;
-  }
-  async function packageDocumentFull(source, options = {}) {
-    const data = await documentData(source, {
-      ...options,
-      includeLayout: true,
-      includeVectors: options.includeVectors !== false,
-      includePageImages: options.pageBackgrounds !== false
-    });
-    const entries = [];
-    const pageFiles = [];
-    const vectorFiles = [];
-    const bytes = await sourceBytes3(source);
-    const originalPdfSrc = options.includeOriginal !== false && bytes ? `data:application/pdf;base64,${bytesToBase643(bytes)}` : void 0;
-    const html = options.html || buildFidelityHtml(dataToIR(data, options), {
-      title: data.document.title,
-      lang: data.document.language || "en",
-      rag: { chunks: data.chunks },
-      originalName: data.document.source,
-      originalPdfSrc,
-      formSubmitEndpoint: options.formSubmitEndpoint || null,
-      allowPdfSubmitActions: options.allowPdfSubmitActions === true,
-      formRules: options.formRules || null,
-      ...options.htmlOptions ?? {}
-    });
-    entries.push({ name: "index.html", data: html });
-    entries.push({ name: "transcript.txt", data: data.transcript });
-    entries.push({ name: "rag.json", data: JSON.stringify({ chunks: data.chunks }, null, 2) });
-    entries.push({ name: "outline.json", data: JSON.stringify(data.outline, null, 2) });
-    if (options.includePageImages !== false) {
-      const pdfjsLib2 = getPdfjs3();
-      const pdf = await pdfjsLib2.getDocument({ data: bytes.slice(0) }).promise;
-      for (const page of data.pages) {
-        const p = await pdf.getPage(page.page_number);
-        const rendered = await renderPageImage(p, { dpi: options.dpi ?? 150 });
-        const name = `pages/page-${String(page.page_number).padStart(4, "0")}.png`;
-        entries.push({ name, data: dataUriToBytes(rendered.dataUri) });
-        pageFiles.push(name);
-        try {
-          p.cleanup();
-        } catch {
-        }
-      }
-      await pdf.destroy();
-    }
-    for (const page of data.layout?.pages ?? []) {
-      if (!page.vector_svg) continue;
-      const name = `vectors/page-${String(page.page_number).padStart(4, "0")}.svg`;
-      entries.push({ name, data: page.vector_svg });
-      vectorFiles.push(name);
-    }
-    entries.push({ name: "data.json", data: JSON.stringify(data, null, 2) });
-    if (options.includeOriginal !== false && bytes) {
-      entries.push({ name: "original.pdf", data: bytes });
-    }
-    const manifest = {
-      generator: "codbdocs/serverless",
-      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      document: data.document,
-      metrics: data.metrics,
-      files: entries.map((e) => e.name).concat("manifest.json"),
-      pageImages: pageFiles,
-      vectors: vectorFiles
-    };
-    entries.push({ name: "manifest.json", data: JSON.stringify(manifest, null, 2) });
-    return { blob: createZip(entries), manifest, data };
-  }
-  function dataUriToBytes(dataUri) {
-    const b64 = dataUri.slice(dataUri.indexOf(",") + 1);
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-  function chunkText(text, pageNumber, size, overlap, title) {
-    const chunks = [];
-    if (!text) return chunks;
-    const words = text.split(/\s+/).filter(Boolean);
-    const step = Math.max(1, size - overlap);
-    for (let i = 0; i < words.length; i += step) {
-      const slice = words.slice(i, i + size);
-      if (!slice.length) break;
-      chunks.push({
-        id: `p${pageNumber}-c${chunks.length + 1}`,
-        page: pageNumber,
-        title,
-        text: slice.join(" "),
-        words: slice.length
-      });
-      if (i + size >= words.length) break;
-    }
-    return chunks;
-  }
-  function resolvePages(pages, total) {
-    if (!pages) return Array.from({ length: total }, (_, i) => i + 1);
-    if (Array.isArray(pages) && pages.length === 2 && pages.every((n) => typeof n === "number")) {
-      const out = [];
-      for (let n = Math.max(1, pages[0]); n <= Math.min(total, pages[1]); n += 1) out.push(n);
-      return out;
-    }
-    if (Array.isArray(pages)) return pages.filter((n) => n >= 1 && n <= total);
-    return Array.from({ length: total }, (_, i) => i + 1);
-  }
-  function flattenOutline2(items, depth = 0, out = []) {
-    for (const item of items || []) {
-      out.push({ title: item.title, level: depth, dest: item.dest ?? null });
-      if (item.items?.length) flattenOutline2(item.items, depth + 1, out);
-    }
-    return out;
-  }
-  async function sourceBytes3(source) {
-    if (source instanceof Uint8Array) return source;
-    if (source instanceof ArrayBuffer) return new Uint8Array(source);
-    if (source && typeof source.arrayBuffer === "function") {
-      return new Uint8Array(await source.arrayBuffer());
-    }
-    if (typeof source === "string") {
-      try {
-        const res = await fetch(source);
-        return new Uint8Array(await res.arrayBuffer());
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-  function dataToIR(data, options = {}) {
-    const objects = {};
-    const pages = {};
-    const pageIds = [];
-    const forms = { fields: [], byName: {} };
-    const layout = data.layout?.pages ?? [];
-    const byNumber = new Map(layout.map((p) => [p.page_number, p]));
-    for (const page of data.pages) {
-      const pid = `page-${page.page_number}`;
-      pageIds.push(pid);
-      const lay = byNumber.get(page.page_number);
-      const content = [];
-      (lay?.spans ?? []).forEach((run, i) => {
-        if (!run.text || !run.text.trim()) return;
-        const id = `${pid}-t${i}`;
-        const size = run.font_size || run.height || 11;
-        const height = run.height || size;
-        const bbox = [run.x, page.height - run.y - height, run.width, height];
-        objects[id] = {
-          id,
-          type: "text",
-          bbox,
-          raw: {
-            text: run.text,
-            font: run.font_family || "",
-            fontSize: size,
-            bbox
-          },
-          semantic: { text: run.text, role: "paragraph" }
-        };
-        content.push(id);
-      });
-      (lay?.images ?? []).forEach((img, i) => {
-        if (!img.data_uri) return;
-        const id = `${pid}-img${i}`;
-        objects[id] = {
-          id,
-          type: "image",
-          bbox: [img.x, page.height - img.y - img.height, img.width, img.height],
-          raw: { src: img.data_uri, bbox: [img.x, page.height - img.y - img.height, img.width, img.height] },
-          semantic: { role: "figure", caption: `Image on page ${page.page_number}` },
-          accessibility: { alt: `Image on page ${page.page_number}` }
-        };
-        content.push(id);
-      });
-      const pageForms = lay?.forms ?? (data.forms || []).filter((field) => field.page === page.page_number);
-      const formObjectIds = [];
-      pageForms.forEach((field, i) => {
-        const id = `${pid}-form${i}`;
-        const bbox = Array.isArray(field.bbox) ? field.bbox : Array.isArray(field.rect) && field.rect.length >= 4 ? [
-          Math.min(field.rect[0], field.rect[2]),
-          Math.min(field.rect[1], field.rect[3]),
-          Math.abs(field.rect[2] - field.rect[0]),
-          Math.abs(field.rect[3] - field.rect[1])
-        ] : null;
-        objects[id] = {
-          id,
-          type: "form_field",
-          bbox,
-          raw: { ...field, bbox },
-          semantic: {
-            role: "form_field",
-            fieldType: field.fieldType,
-            fieldName: field.name,
-            value: field.value,
-            defaultValue: field.defaultValue,
-            optionValue: field.optionValue,
-            checked: field.checked,
-            defaultChecked: field.defaultChecked,
-            options: field.options || [],
-            multiple: Boolean(field.multiple),
-            maxLength: field.maxLength ?? null
-          },
-          accessibility: {
-            role: "form",
-            label: field.label || field.name,
-            description: field.description || "",
-            required: Boolean(field.required),
-            readOnly: Boolean(field.readOnly)
-          },
-          provenance: { method: "annotation", confidence: 1 }
-        };
-        if (!field.xfa) content.push(id);
-        formObjectIds.push(id);
-        forms.fields.push({ ...field, objectId: id, pageId: pid });
-        if (!Array.isArray(forms.byName[field.name])) forms.byName[field.name] = [];
-        forms.byName[field.name].push(id);
-      });
-      pages[pid] = {
-        id: pid,
-        num: page.page_number,
-        width: page.width,
-        height: page.height,
-        background: lay?.page_image || "",
-        content,
-        forms: formObjectIds,
-        xfa: lay?.xfa || null
-      };
-    }
-    return {
-      document: {
-        title: options.title || data.document?.title || "Document",
-        pages: pageIds,
-        metadata: { ...data.document?.metadata ?? {}, title: data.document?.title, language: data.document?.language }
-      },
-      pages,
-      objects,
-      forms
-    };
-  }
-  async function buildAccessibleHtml(source, options = {}) {
-    const data = await documentData(source, {
-      ...options,
-      includeLayout: true,
-      includeImages: options.includeImages !== false,
-      includeForms: options.includeForms !== false,
-      includePageImages: options.pageBackgrounds !== false,
-      includeVectors: options.includeVectors === true,
-      dpi: options.dpi ?? 150
-    });
-    const ir = dataToIR(data, options);
-    const bytes = options.includeOriginal === false ? null : await sourceBytes3(source);
-    const html = buildFidelityHtml(ir, {
-      title: data.document.title,
-      lang: data.document.language || "en",
-      rag: { chunks: data.chunks },
-      originalName: data.document.source,
-      originalPdfSrc: bytes ? `data:application/pdf;base64,${bytesToBase643(bytes)}` : void 0,
-      formSubmitEndpoint: options.formSubmitEndpoint || null,
-      allowPdfSubmitActions: options.allowPdfSubmitActions === true,
-      formRules: options.formRules || null,
-      ...options.html ?? {}
-    });
-    return { html, data, ir };
-  }
-  function serverlessCapabilities() {
-    return {
-      text: true,
-      layout: true,
-      images: true,
-      vectors: true,
-      interactiveForms: true,
-      saveFilledPdf: true,
-      electronicSignatures: true,
-      xfa: true,
-      pageImages: true,
-      ocr: typeof document !== "undefined",
-      rag: true,
-      accessibleHtml: true,
-      zipPackage: true,
-      streamingLargeFiles: true,
-      aiQnA: false,
-      translation: false,
-      note: "AI Q&A and translation need a server-held key; everything else runs in the browser."
-    };
-  }
-
-  // packages/core/src/index.js
+  // src/index.js
   function trackImageBboxes(pageOps) {
     const imageBboxes = /* @__PURE__ */ new Map();
     const ctmStack = [];
@@ -16501,8 +16995,17 @@ ${p.text}`).join("\n\n")
     await page.render({ canvasContext: ctx, viewport }).promise;
     return canvas;
   }
-  var version = "0.1.1";
-  var CodbDocs = { version, load, configure, canUseWorkers };
+  var version = "0.1.2";
+  var CodbDocs = {
+    version,
+    load,
+    configure,
+    canUseWorkers,
+    BROWSER_ONLY_PROFILES,
+    browserOnlyCapabilities,
+    createBrowserOnlySDK,
+    recommendBrowserOnlyProfile
+  };
   var index_default = CodbDocs;
   function exportFidelityHTML(graph, options = {}) {
     const ir = typeof graph?.getIR === "function" ? graph.getIR() : graph;
@@ -16530,10 +17033,6 @@ ${p.text}`).join("\n\n")
       return packageDocument(source, { ...options, html, packagerFallbackError: String(err) });
     }
   }
-  var browserGlobal = __toCommonJS(index_exports);
-  CodbDocs.CodbDocs = CodbDocs;
-  CodbDocs.default = CodbDocs;
-  CodbDocs.__esModule = true;
-  __copyProps(CodbDocs, browserGlobal);
-  return CodbDocs;
+  return __toCommonJS(index_exports);
 })();
+CodbDocs={...CodbDocs};CodbDocs.CodbDocs=CodbDocs;CodbDocs.default=CodbDocs;

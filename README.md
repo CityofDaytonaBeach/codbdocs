@@ -15,7 +15,7 @@ Use `createBrowserOnlySDK()` when the application must never depend on a CodbDoc
 | `max` | Complete downloadable packages | Everything in `standard`, plus vectors, page images and embedded original PDF |
 
 ```javascript
-import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
+import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js';
 
 const sdk = CodbDocs.createBrowserOnlySDK({
   profile: 'standard',
@@ -37,7 +37,7 @@ Lead developer: **Daniel Gurczynski**.
 
 **jsDelivr module URL:**
 ```text
-https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
+https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js
 ```
 
 **GitHub source URL:**
@@ -46,6 +46,56 @@ https://github.com/CityofDaytonaBeach/codbdocs/blob/main/packages/core/src/index
 ```
 
 Load PDF.js first, then import the CodbDocs ES module from jsDelivr. OCR is optional and only runs when you also load Tesseract.js.
+
+### SDK-rendered accessible PDF HTML viewer
+
+`buildAccessibleHtml()` generates the full SDK accessible PDF HTML viewer, not a bare text export or an embedded browser PDF. The generated page includes a PDF-style canvas/raster layer, selectable and searchable text overlays, accessible reflow, and the same viewer chrome shown in [`examples/sdk-rendered-accessible-pdf.html`](examples/sdk-rendered-accessible-pdf.html).
+
+Viewer features in `0.1.2` include:
+
+- Original PDF toggle powered by PDF.js, when `includeOriginal` is enabled
+- PDF view and Reflow view
+- Page thumbnails, page navigation, fit-to-window, and zoom
+- Search with highlights and grounded result drawer
+- Accessibility panel, contrast, large text, screen-reader mode, readable spacing, dyslexia-friendly mode, and reduced motion
+- AI summary, Ask AI, and Improve Document hooks when endpoints are configured
+- Explore content drawer for extracted text, forms, figures, vectors, and tables
+- Interactive forms with reset, validation, submit, value sync, and completed-PDF save support
+- Translation, download, report, live-help, and original-document links when configured
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.worker.min.js';
+</script>
+<script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/tesseract.js/tesseract.min.js"></script>
+<script type="module">
+  import { buildAccessibleHtml } from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js';
+
+  const input = document.querySelector('input[type="file"]');
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    const { html } = await buildAccessibleHtml(file, {
+      includeOriginal: true,
+      includeForms: true,
+      dpi: 150,
+      html: {
+        title: file.name,
+        pdfJsUrl: 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.min.js',
+        feedbackEmail: 'accessibility@example.gov',
+        qaEndpoint: '/api/document-qa',
+        aiEndpoint: '/api/document-summary',
+        improveEndpoint: '/api/document-improve',
+      },
+    });
+
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    window.open(url, '_blank', 'noopener');
+  });
+</script>
+```
 
 ### Interactive PDF forms
 
@@ -349,12 +399,12 @@ But the point is: **you don't need them to get good results.** The model-free pi
   <input type="file" id="fileInput" accept=".pdf" />
   <div id="results"></div>
 
-  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.min.js"></script>
   <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.worker.min.js';
   </script>
 
-  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/dist/codbdocs.js"></script>
   <script>
     document.getElementById('fileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -1289,7 +1339,7 @@ Only exact URLs listed in `documents` are upgraded. Set `enabled` to `true` on a
 
 ```json
 {
-  "$schema": "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/schema/codbdocs-manifest.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/schema/codbdocs-manifest.schema.json",
   "version": 1,
   "site": {
     "baseUrl": "https://www.example.gov/",
@@ -1319,7 +1369,7 @@ Add the helper once in the website template. It watches for dynamically added li
   async
   data-codbdocs
   data-manifest="/codbdocs-manifest.json"
-  src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/embed.js">
+  src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/embed.js">
 </script>
 ```
 
@@ -1339,16 +1389,21 @@ Public AI or translation endpoints may be listed in the manifest. API keys and o
 
 ## Hosting
 
-The browser module entrypoint is committed under `packages/core/src/index.js`. Push to GitHub and jsDelivr serves that updated module directly from the `main` branch.
+The browser module entrypoint is committed under `packages/core/src/index.js`. For production, use a pinned jsDelivr version such as `@0.1.2`; use `@main` only when you intentionally want the latest unreleased GitHub state.
 
 **CDN URL:**
 ```
-https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
+https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js
+```
+
+**Browser global bundle:**
+```text
+https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/dist/codbdocs.js
 ```
 
 If jsDelivr serves a stale file after a GitHub update, purge the URL at:
 ```text
-https://purge.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js
+https://purge.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/packages/core/src/index.js
 ```
 
 ---

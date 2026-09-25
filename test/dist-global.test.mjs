@@ -23,7 +23,7 @@ test('dist browser global exposes the documented flat API', async () => {
 
     assert.equal(shape.load, 'function');
     assert.equal(shape.configure, 'function');
-    assert.equal(shape.version, '0.1.1');
+    assert.equal(shape.version, '0.1.2');
     assert.equal(shape.nestedIsCompatAlias, true);
     assert.equal(shape.defaultIsCompatAlias, true);
   } finally {

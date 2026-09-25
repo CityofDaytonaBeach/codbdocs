@@ -1,832 +1,9 @@
-const esc = (v) => String(v != null ? v : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-const num = (v, fallback = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
-function bytesToBase64(bytes) {
-  if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.slice(i, i + 0x8000));
-  if (typeof btoa === "function") return btoa(bin);
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let out = "";
-  for (let i = 0; i < bin.length; i += 3) {
-    const a = bin.charCodeAt(i), b = bin.charCodeAt(i + 1), c = bin.charCodeAt(i + 2);
-    out += alphabet[a >> 2] + alphabet[((a & 3) << 4) | (b >> 4)] + (Number.isNaN(b) ? "=" : alphabet[((b & 15) << 2) | (c >> 6)]) + (Number.isNaN(c) ? "=" : alphabet[c & 63]);
-  }
-  return out;
-}
-function textToBase64(text) {
-  if (typeof TextEncoder !== "undefined") return bytesToBase64(new TextEncoder().encode(String(text)));
-  const encoded = unescape(encodeURIComponent(String(text)));
-  const bytes = new Uint8Array(encoded.length);
-  for (let i = 0; i < encoded.length; i++) bytes[i] = encoded.charCodeAt(i);
-  return bytesToBase64(bytes);
-}
-function jsonScript(id, value) {
-  return `<script type="application/json" id="${esc(id)}">${JSON.stringify(value == null ? null : value).replace(/<\//g, "<\\/")}</script>`;
-}
-function embeddedImageSrc(src) {
-  src = String(src || "");
-  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(src) ? src : "";
-}
-function pageObjects(ir, page) {
-  const ids = Array.isArray(page == null ? void 0 : page.content) ? page.content : [];
-  return ids.map((id) => {
-    var _a;
-    return typeof id === "string" ? (_a = ir.objects) == null ? void 0 : _a[id] : id;
-  }).filter(Boolean).map((o) => o);
-}
-function objText(o) {
-  var _a, _b, _c, _d;
-  return String((_d = (_c = (_a = o == null ? void 0 : o.semantic) == null ? void 0 : _a.text) != null ? _c : (_b = o == null ? void 0 : o.raw) == null ? void 0 : _b.text) != null ? _d : "");
-}
-function cssTop(pageHeight, bbox, fontSize) {
-  const y = num(bbox == null ? void 0 : bbox[1]);
-  const h = num(bbox == null ? void 0 : bbox[3]) || fontSize;
-  return Math.max(0, pageHeight - y - h);
-}
-function fontFamily(o) {
-  var _a, _b;
-  const raw = String((_b = (_a = o == null ? void 0 : o.raw) == null ? void 0 : _a.font) != null ? _b : "");
-  const name = raw.replace(/^[A-Z]{6}\+/, "").replace(/[^A-Za-z0-9 -]/g, "");
-  const lower = name.toLowerCase();
-  if (/times|serif|georgia|garamond|book/.test(lower)) return "'Times New Roman', Times, serif";
-  if (/courier|mono/.test(lower)) return "'Courier New', Courier, monospace";
-  return "Helvetica, Arial, 'Segoe UI', system-ui, sans-serif";
-}
-function textTransformVars(o) {
-  const t = o && o.raw && Array.isArray(o.raw.transform) ? o.raw.transform : null;
-  if (!t || t.length < 4) return "";
-  const [a, b, c, d] = t.map(Number);
-  if (![a, b, c, d].every(Number.isFinite)) return "";
-  const rotate = Math.atan2(b, a || 1);
-  const skew = Math.atan2(c, d || 1);
-  let out = "";
-  if (Math.abs(rotate) > 0.001) out += `--fx-rotate:${-rotate}rad;`;
-  if (Math.abs(skew) > 0.001 && Math.abs(skew + rotate) > 0.001) out += `--fx-skew:${skew}rad;`;
-  return out;
-}
-function inferHeadingLevels(ir) {
-  var _a, _b, _c, _d, _e;
-  const sizes = [];
-  const candidates = [];
-  const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
-  for (const pid of pages) {
-    const page = (_c = ir.pages) == null ? void 0 : _c[pid];
-    if (!page) continue;
-    for (const o of pageObjects(ir, page)) {
-      if (o.type !== "text" && o.type !== void 0) continue;
-      if (((_d = o.semantic) == null ? void 0 : _d.role) && o.semantic.role !== "paragraph") continue;
-      const text = objText(o).trim();
-      if (!text) continue;
-      const size = num((_e = o.raw) == null ? void 0 : _e.fontSize, 0);
-      if (!size) continue;
-      sizes.push(size);
-      if (text.length <= 120 && !/[.;]$/.test(text)) candidates.push({ id: o.id, size, text });
-    }
-  }
-  const levels = /* @__PURE__ */ new Map();
-  if (!sizes.length) return levels;
-  const sorted = [...sizes].sort((a, b) => a - b);
-  const body = sorted[Math.floor(sorted.length / 2)];
-  const heads = candidates.filter((c) => c.size >= body * 1.25);
-  const scale = [...new Set(heads.map((h) => Math.round(h.size * 10) / 10))].sort((a, b) => b - a);
-  for (const h of heads) {
-    const rank = scale.indexOf(Math.round(h.size * 10) / 10);
-    levels.set(h.id, Math.min(6, Math.max(1, rank + 1)));
-  }
-  return levels;
-}
-function newDocCtx() {
-  return { outline: [], index: [], h: 0, inferred: /* @__PURE__ */ new Map(), figures: [], vectors: {}, elements: [] };
-}
-function tableParts(o) {
-  var _a, _b;
-  const raw = (_a = o.raw) != null ? _a : {};
-  const grid = Array.isArray(raw.rows) ? raw.rows.map((r) => Array.isArray(r) ? r : Array.isArray(r == null ? void 0 : r.cells) ? r.cells : [r]) : Array.isArray(raw.cells) ? [raw.cells] : [];
-  if (!grid.length) return { html: "", text: "", rows: 0, cols: 0 };
-  const cell = (c) => {
-    var _a2, _b2;
-    return String(c == null ? "" : typeof c === "object" ? (_b2 = (_a2 = c.text) != null ? _a2 : c.value) != null ? _b2 : "" : c);
-  };
-  const caption = String(((_b = o.semantic) == null ? void 0 : _b.caption) || raw.caption || "Table");
-  const [head, ...rest] = grid;
-  const cols = Math.max(...grid.map((r) => r.length));
-  const html = `<table class="fx-datatable"><caption>${esc(caption)}</caption><thead><tr>` + head.map((c) => `<th scope="col">${esc(cell(c))}</th>`).join("") + `</tr></thead><tbody>` + rest.map(
-    (r) => `<tr>${r.map((c, i) => i === 0 ? `<th scope="row">${esc(cell(c))}</th>` : `<td>${esc(cell(c))}</td>`).join("")}</tr>`
-  ).join("") + `</tbody></table>`;
-  const text = grid.map((r) => r.map(cell).join(" | ")).join("\n");
-  return { html, text, rows: grid.length, cols };
-}
-function vectorSummary(o) {
-  var _a, _b, _c, _d;
-  const raw = (_a = o.raw) != null ? _a : {};
-  const paths = Array.isArray(raw.paths) ? raw.paths.length : num(raw.pathCount, 0);
-  const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
-  const parts = [
-    ((_c = o.semantic) == null ? void 0 : _c.caption) || ((_d = o.accessibility) == null ? void 0 : _d.alt) || "Vector drawing",
-    paths ? `${paths} paths` : "",
-    w && h ? `${Math.round(num(w))}\xD7${Math.round(num(h))} pt` : "",
-    raw.fill ? `fill ${raw.fill}` : "",
-    raw.stroke ? `stroke ${raw.stroke}` : "",
-    `at x ${Math.round(num(x))}, y ${Math.round(num(y))}`
-  ].filter(Boolean);
-  return parts.join(", ");
-}
-function pushElement(ctx, el) {
-  const id = el.id && String(el.id).trim() ? String(el.id) : `el-${ctx.elements.length + 1}`;
-  ctx.elements.push({ ...el, id });
-  return id;
-}
-function formFieldData(o) {
-  return { ...(o && o.raw || {}), ...(o && o.semantic || {}) };
-}
-function renderFormControl(o, view, pageHeight) {
-  const field = formFieldData(o);
-  const type = String(field.fieldType || "text");
-  const name = String(field.fieldName || field.name || o.id || "field");
-  const label = String(o.accessibility && o.accessibility.label || field.label || name);
-  const description = String(o.accessibility && o.accessibility.description || field.description || "");
-  const value = field.value == null ? "" : field.value;
-  const values = Array.isArray(value) ? value.map(String) : [String(value)];
-  const id = `fx-form-${String(o.id || name).replace(/[^A-Za-z0-9_-]/g, "-")}-${view}`;
-  const required = Boolean(o.accessibility && o.accessibility.required || field.required);
-  const readOnly = Boolean(o.accessibility && o.accessibility.readOnly || field.readOnly);
-  const defaultData = encodeURIComponent(JSON.stringify(value));
-  const optionValue = String(field.optionValue || "On");
-  const attrs = ` id="${esc(id)}" name="${esc(name)}__${esc(view)}" class="fx-form-input"` +
-    ` data-form-name="${esc(name)}" data-form-type="${esc(type)}" data-form-view="${esc(view)}"` +
-    ` data-form-option="${esc(optionValue)}" data-form-default="${esc(defaultData)}" aria-label="${esc(label)}"` +
-    (required ? ` required aria-required="true"` : "") +
-    (readOnly && ["text", "password", "textarea"].includes(type) ? ` readonly aria-readonly="true"` : "") +
-    (readOnly && !["text", "password", "textarea"].includes(type) ? ` disabled aria-readonly="true"` : "");
-
-  if (field.hidden) return `<input type="hidden"${attrs} value="${esc(values[0])}">`;
-
-  let control = "";
-  if (type === "checkbox" || type === "radio") {
-    control = `<input type="${type}"${attrs} value="${esc(optionValue)}"${field.checked ? ' checked data-default-checked="true"' : ""}>`;
-  } else if (type === "dropdown" || type === "listbox") {
-    const choices = Array.isArray(field.options) ? field.options : [];
-    const options = choices.map((option) => {
-      const optionValue2 = String(option && typeof option === "object" ? option.value != null ? option.value : option.label || "" : option || "");
-      const optionLabel = String(option && typeof option === "object" ? option.label != null ? option.label : optionValue2 : optionValue2);
-      return `<option value="${esc(optionValue2)}"${values.includes(optionValue2) ? " selected" : ""}>${esc(optionLabel)}</option>`;
-    }).join("");
-    control = `<select${attrs}${field.multiple ? " multiple" : ""}${type === "listbox" ? ` size="${Math.min(8, Math.max(2, choices.length || 2))}"` : ""}>${options}</select>`;
-  } else if (type === "textarea") {
-    control = `<textarea${attrs}${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>${esc(values[0])}</textarea>`;
-  } else if (type === "button") {
-    const formAction = field.resetForm ? "reset" : field.url || String(field.action || "").toLowerCase().includes("submit") ? "submit" : "";
-    control = `<button type="button"${attrs}${formAction ? ` data-form-action="${formAction}"${field.url ? ` data-form-endpoint="${esc(field.url)}"` : ""}` : " disabled"}>${esc(label)}</button>`;
-  } else if (type === "signature") {
-    control = `<input type="hidden"${attrs} value="${esc(values[0])}"><button type="button" class="fx-signature-open" data-signature-name="${esc(name)}"${readOnly ? " disabled" : ""}>${esc(values[0] ? "Review signature" : "Add signature")}</button><output class="fx-form-signature-preview" data-signature-preview="${esc(name)}">${esc(values[0] || "Unsigned")}</output>`;
-  } else {
-    control = `<input type="${type === "password" ? "password" : "text"}"${attrs} value="${esc(values[0])}"${field.maxLength ? ` maxlength="${num(field.maxLength)}"` : ""}>`;
-  }
-
-  if (view === "pdf") {
-    const [x = 0, y = 0, w = 0, h = 0] = Array.isArray(o.bbox) ? o.bbox : [];
-    return `<div class="fx-pdf-field fx-pdf-field-${esc(type)}" data-form-container="${esc(name)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px"><label class="fx-status" for="${esc(id)}">${esc(label)}</label>${control}</div>`;
-  }
-  if (type === "checkbox" || type === "radio") {
-    return `<div class="fx-reflow-field fx-reflow-choice" data-form-container="${esc(name)}">${control}<label for="${esc(id)}">${esc(label)}</label>${description ? `<small>${esc(description)}</small>` : ""}</div>`;
-  }
-  return `<div class="fx-reflow-field" data-form-container="${esc(name)}"><label for="${esc(id)}">${esc(label)}${required ? ` <span aria-hidden="true">*</span>` : ""}</label>${control}${description ? `<small>${esc(description)}</small>` : ""}</div>`;
-}
-function renderTextLayer(ir, page, ctx, pageNum) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
-  const pageHeight = num(page.height, 792);
-  let html = "";
-  for (const o of pageObjects(ir, page)) {
-    if (o.type === "form_field") {
-      const field = formFieldData(o);
-      const label = String(o.accessibility && o.accessibility.label || field.label || field.fieldName || field.name || "Form field");
-      const elId = pushElement(ctx, {
-        id: String(o.id || ""),
-        page: pageNum,
-        kind: "form",
-        label,
-        text: `${label}: ${Array.isArray(field.value) ? field.value.join(", ") : field.value || ""}`,
-        detail: { fieldType: field.fieldType || "text", fieldName: field.fieldName || field.name || "", required: Boolean(field.required) }
-      });
-      ctx.index.push({ p: pageNum, role: "form", t: label });
-      html += renderFormControl(o, "pdf", pageHeight).replace("class=\"fx-pdf-field", `data-el="${esc(elId)}" class="fx-pdf-field`);
-      continue;
-    }
-    if (o.type === "image") {
-      const src = (_a = o.raw) == null ? void 0 : _a.src;
-      const [x = 0, y = 0, w = 0, h = 0] = (_b = o.bbox) != null ? _b : [];
-      const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
-      const long = String(
-        ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || ""
-      );
-      const kind = String(((_h = o.semantic) == null ? void 0 : _h.kind) || ((_i = o.raw) == null ? void 0 : _i.kind) || "image");
-      const fid = String((_j = o.id) != null ? _j : `fig-${ctx.figures.length + 1}`);
-      ctx.figures.push({ id: fid, page: pageNum, alt, long, kind });
-      pushElement(ctx, {
-        id: fid,
-        page: pageNum,
-        kind: kind === "chart" ? "chart" : "image",
-        label: alt,
-        text: [alt, long].filter(Boolean).join(" \u2014 "),
-        detail: { width: Math.round(num(w)), height: Math.round(num(h)), hasImage: Boolean(src), graphic: kind }
-      });
-      const embeddedSrc = embeddedImageSrc(src);
-      if (embeddedSrc && w && h) {
-        html += `<img class="fx-img" src="${esc(embeddedSrc)}" alt="${esc(alt)}" data-el="${esc(fid)}" style="left:${num(x)}px;top:${cssTop(pageHeight, o.bbox, num(h))}px;width:${num(w)}px;height:${num(h)}px">`;
-      }
-      continue;
-    }
-    if (o.type === "vector" || o.type === "path" || o.type === "shape") {
-      const summary = vectorSummary(o);
-      pushElement(ctx, {
-        id: String((_k = o.id) != null ? _k : ""),
-        page: pageNum,
-        kind: "vector",
-        label: ((_l = o.semantic) == null ? void 0 : _l.caption) || ((_m = o.accessibility) == null ? void 0 : _m.alt) || "Vector drawing",
-        text: summary,
-        detail: { bbox: (_n = o.bbox) != null ? _n : null, type: o.type }
-      });
-      continue;
-    }
-    if (o.type === "table" || Array.isArray((_o = o.raw) == null ? void 0 : _o.rows)) {
-      const t = tableParts(o);
-      if (t.rows) {
-        pushElement(ctx, {
-          id: String((_p = o.id) != null ? _p : ""),
-          page: pageNum,
-          kind: "table",
-          label: String(((_q = o.semantic) == null ? void 0 : _q.caption) || ((_r = o.raw) == null ? void 0 : _r.caption) || `Table with ${t.rows} rows`),
-          text: t.text,
-          detail: { rows: t.rows, columns: t.cols }
-        });
-        ctx.index.push({ p: pageNum, role: "table", t: t.text });
-        continue;
-      }
-    }
-    if (o.type === "link") {
-      const href = ((_s = o.raw) == null ? void 0 : _s.href) || ((_t = o.raw) == null ? void 0 : _t.url);
-      const rect = (_u = o.raw) == null ? void 0 : _u.rect;
-      pushElement(ctx, {
-        id: String((_v = o.id) != null ? _v : ""),
-        page: pageNum,
-        kind: "link",
-        label: objText(o) || String(href || "Link"),
-        text: `${objText(o) || ""} (${href || "no destination"})`,
-        detail: { href: href || null }
-      });
-      if (href && Array.isArray(rect) && rect.length >= 4) {
-        const x = Math.min(num(rect[0]), num(rect[2]));
-        const y = Math.min(num(rect[1]), num(rect[3]));
-        const w = Math.abs(num(rect[2]) - num(rect[0]));
-        const h = Math.abs(num(rect[3]) - num(rect[1]));
-        html += `<a class="fx-link" href="${esc(href)}" target="_blank" rel="noopener" style="left:${x}px;top:${Math.max(0, pageHeight - y - h)}px;width:${w}px;height:${h}px">${esc(objText(o) || href)}</a>`;
-      }
-      continue;
-    }
-    const text = objText(o);
-    if (!text.trim()) continue;
-    const bbox = Array.isArray(o.bbox) ? o.bbox : [];
-    const fontSize = num((_w = o.raw) == null ? void 0 : _w.fontSize, 12) || 12;
-    const left = num(bbox[0]);
-    const top = cssTop(pageHeight, bbox, fontSize);
-    const width = num(bbox[2]);
-    const inferredLevel = ctx.inferred.get(o.id);
-    const declared = (_x = o.semantic) == null ? void 0 : _x.role;
-    const role = inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
-    const level = Math.min(6, Math.max(1, num((_y = o.semantic) == null ? void 0 : _y.level, inferredLevel != null ? inferredLevel : 2)));
-    const tag = role === "heading" ? `h${level}` : "span";
-    const style = `left:${left}px;top:${top}px;font-size:${fontSize}px;font-family:${fontFamily(o)};${textTransformVars(o)}` + (width ? `--fx-w:${width}px;` : "");
-    let idAttr = "";
-    if (role === "heading") {
-      ctx.h += 1;
-      ctx.outline.push({ i: ctx.h, level, text, page: pageNum });
-      idAttr = ` id="fx-h-${ctx.h}"`;
-    }
-    ctx.index.push({ p: pageNum, role, t: text });
-    const elId = pushElement(ctx, {
-      id: String((_z = o.id) != null ? _z : ""),
-      page: pageNum,
-      kind: role === "heading" ? "heading" : role === "list-item" ? "list" : "text",
-      label: text.length > 90 ? `${text.slice(0, 90)}\u2026` : text,
-      text,
-      detail: { role, level: role === "heading" ? level : void 0, fontSize: Math.round(fontSize) }
-    });
-    html += `<${tag}${idAttr} class="fx-text" data-object="${esc((_A = o.id) != null ? _A : "")}" data-el="${esc(elId)}" data-role="${esc(role)}" style="${style}">${esc(text)}</${tag}>`;
-  }
-  return html;
-}
-function renderVectorLayer(ir, page) {
-  const ids = Array.isArray(page == null ? void 0 : page.vectors) ? page.vectors : [];
-  if (!ids.length) return "";
-  const w = num(page.width, 612);
-  const h = num(page.height, 792);
-  let body = "";
-  for (const id of ids) {
-    const v = typeof id === "string" ? ir.vectors && ir.vectors[id] : id;
-    if (!v) continue;
-    const stroke = esc(v.graphicsState && v.graphicsState.stroke || "#000");
-    const fill = esc(v.graphicsState && v.graphicsState.fill || "none");
-    const lineWidth = num(v.graphicsState && v.graphicsState.lineWidth, 1);
-    if (v.type === "rect" && Array.isArray(v.bbox)) {
-      const [x = 0, y = 0, rw = 0, rh = 0] = v.bbox;
-      body += `<rect x="${num(x)}" y="${num(y)}" width="${Math.abs(num(rw))}" height="${Math.abs(num(rh))}" fill="${fill}" stroke="${stroke}" stroke-width="${lineWidth}"/>`;
-    } else if (v.type === "path" && Array.isArray(v.points)) {
-      let d = "";
-      v.points.forEach((p) => {
-        if (p.op === "moveTo") d += `M${num(p.x)} ${num(p.y)} `;
-        else if (p.op === "lineTo") d += `L${num(p.x)} ${num(p.y)} `;
-        else if (p.op === "curveTo") d += `C${num(p.x1)} ${num(p.y1)} ${num(p.x2)} ${num(p.y2)} ${num(p.x3)} ${num(p.y3)} `;
-        else if (p.op === "closePath") d += "Z ";
-      });
-      if (d.trim()) body += `<path d="${esc(d.trim())}" fill="${fill}" stroke="${stroke}" stroke-width="${lineWidth}"/>`;
-    }
-  }
-  if (!body) return "";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g transform="matrix(1 0 0 -1 0 ${h})">${body}</g></svg>`;
-  return `<img class="fx-vector-layer" alt="" aria-hidden="true" src="data:image/svg+xml;base64,${textToBase64(svg)}">`;
-}
-function reflowPageObjects(ir, page, pageHeight) {
-  const objects = pageObjects(ir, page);
-  const fields = objects.filter((o) => o.type === "form_field").sort((a, b) => {
-    const topDiff = cssTop(pageHeight, a.bbox, num(a.bbox && a.bbox[3])) - cssTop(pageHeight, b.bbox, num(b.bbox && b.bbox[3]));
-    return Math.abs(topDiff) > 2 ? topDiff : num(a.bbox && a.bbox[0]) - num(b.bbox && b.bbox[0]);
-  });
-  if (!fields.length) return objects;
-  const ordered = objects.filter((o) => o.type !== "form_field");
-  fields.forEach((field) => {
-    const fieldTop = cssTop(pageHeight, field.bbox, num(field.bbox && field.bbox[3]));
-    const index = ordered.findIndex((o) => Array.isArray(o.bbox) && cssTop(pageHeight, o.bbox, num(o.bbox[3])) > fieldTop + 2);
-    ordered.splice(index < 0 ? ordered.length : index, 0, field);
-  });
-  return ordered;
-}
-function hasNativeText(page, ir) {
-  return pageObjects(ir, page).some((o) => {
-    if (!o || o.type !== "text" || !objText(o).trim()) return false;
-    const method = String((o.provenance && o.provenance.method) || (o.raw && (o.raw.source || o.raw.textSource)) || "native").toLowerCase();
-    return method !== "ocr" && method !== "fusion";
-  });
-}
-function renderReflow(ir, page, headingIds, ctx) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
-  const pageHeight = num(page == null ? void 0 : page.height, 792);
-  let html = "";
-  let openList = false;
-  let hCursor = 0;
-  let pending = [];
-  const joinRuns = (runs) => runs.reduce((out, run) => {
-    const clean = String(run.text || "").replace(/\s+/g, " ").trim();
-    if (!clean) return out;
-    if (!out) return clean;
-    return /[-\u2010-\u2015]$/.test(out) ? out.replace(/[-\u2010-\u2015]$/, "") + clean : `${out} ${clean}`;
-  }, "");
-  const flushParagraph = () => {
-    const text = joinRuns(pending);
-    if (text) html += `<p>${esc(text)}</p>`;
-    pending = [];
-  };
-  const pushParagraphRun = (o, text) => {
-    const bbox = Array.isArray(o.bbox) ? o.bbox : [];
-    const fontSize = num(o.raw == null ? void 0 : o.raw.fontSize, 12) || 12;
-    const top = cssTop(pageHeight, bbox, fontSize);
-    const left = num(bbox[0]);
-    const last = pending[pending.length - 1];
-    if (last) {
-      const gap = Math.abs(top - last.top);
-      const indentShift = Math.abs(left - last.left);
-      const startsSection = /^[A-Z][A-Z0-9 &/(),.'\u2019-]{8,}\s[-\u2013\u2014]/.test(String(text).trim());
-      if ((startsSection && gap > Math.max(14, fontSize * 1.2)) || gap > Math.max(18, fontSize * 1.85) || indentShift > 72) flushParagraph();
-    }
-    pending.push({ text, top, left, fontSize });
-  };
-  for (const o of reflowPageObjects(ir, page, pageHeight)) {
-    if (o.type === "form_field") {
-      flushParagraph();
-      if (openList) {
-        html += "</ul>";
-        openList = false;
-      }
-      html += renderFormControl(o, "reflow", pageHeight);
-      continue;
-    }
-    const inferredLevel = ctx.inferred.get(o.id);
-    const declared = (_a = o.semantic) == null ? void 0 : _a.role;
-    const role = o.type === "image" ? "image" : inferredLevel && (!declared || declared === "paragraph") ? "heading" : declared || "paragraph";
-    const text = objText(o);
-    if (role === "list-item") {
-      flushParagraph();
-      if (!openList) {
-        html += "<ul>";
-        openList = true;
-      }
-      html += `<li>${esc(text)}</li>`;
-      continue;
-    }
-    if (openList) {
-      html += "</ul>";
-      openList = false;
-    }
-    if (o.type === "image") {
-      flushParagraph();
-      const src = (_b = o.raw) == null ? void 0 : _b.src;
-      const alt = ((_c = o.accessibility) == null ? void 0 : _c.alt) || ((_d = o.semantic) == null ? void 0 : _d.caption) || "Image";
-      const long = ((_e = o.accessibility) == null ? void 0 : _e.longDescription) || ((_f = o.accessibility) == null ? void 0 : _f.summary) || ((_g = o.semantic) == null ? void 0 : _g.summary) || "";
-      const fid = esc((_h = o.id) != null ? _h : "");
-      const embeddedSrc = embeddedImageSrc(src);
-      html += `<figure data-fig="${fid}">${embeddedSrc ? `<img src="${esc(embeddedSrc)}" alt="${esc(alt)}" loading="lazy">` : ""}<figcaption>${esc(alt)}</figcaption>` + (long ? `<details class="fx-longdesc"><summary>Detailed description of this image</summary><p>${esc(long)}</p></details>` : `<button type="button" class="fx-desc-btn" data-fig="${fid}">Describe this image with AI</button><p class="fx-desc-out" data-fig="${fid}" role="status" aria-live="polite" hidden></p>`) + `</figure>`;
-      continue;
-    }
-    if (o.type === "table" || Array.isArray((_i = o.raw) == null ? void 0 : _i.rows)) {
-      const t = tableParts(o);
-      if (t.rows) {
-        flushParagraph();
-        const tid = esc((_j = o.id) != null ? _j : "");
-        html += `<div class="fx-tablewrap" data-el="${tid}" tabindex="0" role="group" aria-label="Data table">${t.html}<button type="button" class="fx-desc-btn" data-explain="${tid}">Explain this table with AI</button><p class="fx-desc-out" data-explain="${tid}" role="status" aria-live="polite" hidden></p></div>`;
-        continue;
-      }
-    }
-    if (o.type === "vector" || o.type === "path" || o.type === "shape") {
-      flushParagraph();
-      const vid = esc((_k = o.id) != null ? _k : "");
-      html += `<figure class="fx-vector" data-el="${vid}"><figcaption>${esc(
-        ((_l = o.semantic) == null ? void 0 : _l.caption) || ((_m = o.accessibility) == null ? void 0 : _m.alt) || "Vector drawing"
-      )}</figcaption><p class="fx-note">${esc(vectorSummary(o))}</p><button type="button" class="fx-desc-btn" data-explain="${vid}">Explain this drawing with AI</button><p class="fx-desc-out" data-explain="${vid}" role="status" aria-live="polite" hidden></p></figure>`;
-      continue;
-    }
-    if (!text.trim()) continue;
-    if (role === "heading") {
-      flushParagraph();
-      const level = Math.min(6, Math.max(1, num((_n = o.semantic) == null ? void 0 : _n.level, inferredLevel != null ? inferredLevel : 2)));
-      const hid = headingIds[hCursor++];
-      html += `<h${level}${hid ? ` id="fx-rh-${hid}"` : ""}>${esc(text)}</h${level}>`;
-    } else if (o.type === "link") {
-      flushParagraph();
-      html += `<p><a href="${esc(((_o = o.raw) == null ? void 0 : _o.href) || ((_p = o.raw) == null ? void 0 : _p.url) || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
-    } else {
-      pushParagraphRun(o, text);
-    }
-  }
-  flushParagraph();
-  if (openList) html += "</ul>";
-  return html || '<p class="fx-empty">No extractable text on this page.</p>';
-}
-function auditPanel(audit, remediations) {
-  var _a, _b;
-  if (!audit) return "";
-  const issues = Array.isArray(audit.issues) ? audit.issues : [];
-  const rows = issues.slice(0, 200).map(
-    (i) => `<tr><td>${esc(i.severity || "info")}</td><td>${esc(i.wcag || "")}</td><td>${esc(i.message || i.type || "")}</td></tr>`
-  ).join("");
-  const plan = Array.isArray(remediations) ? remediations.slice(0, 100).map((r) => `<li>${esc(r.description || r.action || JSON.stringify(r))}</li>`).join("") : "";
-  return `
-  <section id="fx-a11y" class="fx-panel" aria-labelledby="fx-a11y-h">
-    <h2 id="fx-a11y-h">Accessibility report</h2>
-    <p class="fx-score"><strong>Score:</strong> ${esc((_a = audit.score) != null ? _a : "\u2014")} \xB7 <strong>WCAG level:</strong> ${esc((_b = audit.level) != null ? _b : "\u2014")} \xB7 <strong>Minimum:</strong> WCAG/ADA AA \xB7 <strong>Issues:</strong> ${issues.length}</p>
-    <p class="fx-note">Automated checks target WCAG/ADA AA as the minimum and add AAA enhancements where possible. Final compliance still requires human review and assistive-technology testing.</p>
-    ${rows ? `<table class="fx-table"><caption>WCAG 2.2 AA findings and AAA advisories</caption><thead><tr><th scope="col">Severity</th><th scope="col">Criterion</th><th scope="col">Finding</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No WCAG issues detected by automated checks.</p>"}
-    ${plan ? `<h3>Remediation plan</h3><ol>${plan}</ol>` : ""}
-  </section>`;
-}
-function tagPanel(tags) {
-  if (!tags) return "";
-  return `
-  <section id="fx-tags" class="fx-panel" aria-labelledby="fx-tags-h">
-    <h2 id="fx-tags-h">Document tags</h2>
-    <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
-  </section>`;
-}
-const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.min.js";
-const CONFORMANCE = [
-  "WCAG 2.1 Level A",
-  "WCAG 2.1 Level AA",
-  "WCAG 2.2 Level AA minimum",
-  "WCAG 2.2 Level AAA enhancements",
-  "ADA Title II",
-  "Section 508",
-  "DOJ 28 CFR Part 35",
-  "EN 301 549",
-  "California AB 434",
-  "California Unruh Act",
-  "Colorado HB 21-1110"
-];
-const AT_TESTED = [
-  "JAWS",
-  "NVDA",
-  "VoiceOver (macOS)",
-  "VoiceOver (iOS)",
-  "TalkBack (Android)",
-  "Dragon NaturallySpeaking",
-  "Keyboard-only navigation"
-];
-
-function collectFidelityRisks(ir) {
-  const risks = [];
-  const add = (type, page, detail) => risks.push({ type, page: page || null, detail });
-  const fonts = new Set();
-  const pages = Array.isArray(ir?.document?.pages) ? ir.document.pages : Object.keys(ir?.pages || {});
-  for (const [idx, pageId] of pages.entries()) {
-    const page = ir.pages?.[pageId];
-    const pageNum = page?.num || idx + 1;
-    if (page?.xfa) add("xfa_form", pageNum, "XFA content can render differently outside Acrobat.");
-    if (Array.isArray(page?.graphicsStates)) {
-      for (const gs of page.graphicsStates) {
-        if (gs?.blendMode && gs.blendMode !== "Normal") add("blend_mode", pageNum, `Blend mode ${gs.blendMode} requires original-PDF visual fallback.`);
-        if (gs?.softMask) add("soft_mask", pageNum, "Soft masks/transparency groups require original-PDF visual fallback.");
-        if (gs?.overprint) add("overprint", pageNum, "Print overprint/knockout behavior is renderer-specific.");
-        if (gs?.fill?.colorSpace && !/^Device(RGB|Gray)$/i.test(gs.fill.colorSpace)) add("color_space", pageNum, `Fill color space ${gs.fill.colorSpace} may need ICC/spot-color handling.`);
-        if (gs?.stroke?.colorSpace && !/^Device(RGB|Gray)$/i.test(gs.stroke.colorSpace)) add("color_space", pageNum, `Stroke color space ${gs.stroke.colorSpace} may need ICC/spot-color handling.`);
-      }
-    }
-    for (const object of pageObjects(ir, page)) {
-      if (object?.raw?.font) fonts.add(object.raw.font);
-      if (object?.type === "image") add("raster_image", pageNum, "Raster image appearance depends on original sampling/compression; prefer original PDF layer.");
-      if (object?.type === "vector" || object?.type === "path" || object?.type === "shape") {
-        const raw = JSON.stringify(object.raw || object.graphicsState || {});
-        if (/pattern|shading|gradient|mesh/i.test(raw)) add("pattern_or_shading", pageNum, "Patterns, gradients and mesh shadings need original rendering or service-side repair.");
-        if (/clip|mask/i.test(raw)) add("clip_or_mask", pageNum, "Complex clipping paths and masks can affect visual parity.");
-      }
-    }
-  }
-  if (fonts.size) add("font_substitution", null, `Fonts detected: ${Array.from(fonts).slice(0, 20).join(", ")}${fonts.size > 20 ? "..." : ""}. Original rendering avoids browser substitution.`);
-  return risks;
-}
-
-function buildFidelityHtml(ir, options = {}) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
-  if (!ir || typeof ir !== "object") throw new Error("An IR object is required.");
-  const pages = Array.isArray((_a = ir.document) == null ? void 0 : _a.pages) ? ir.document.pages : Object.keys((_b = ir.pages) != null ? _b : {});
-  const lang = options.lang || ((_d = (_c = ir.document) == null ? void 0 : _c.metadata) == null ? void 0 : _d.language) || "en";
-  const title = options.title || ((_f = (_e = ir.document) == null ? void 0 : _e.metadata) == null ? void 0 : _f.title) || ((_g = ir.document) == null ? void 0 : _g.title) || "Document";
-  const showThumbs = options.thumbnails !== false;
-  const showDataControls = options.showDataControls === true;
-  const initialView = options.view === "reflow" ? "reflow" : "fidelity";
-  const fidelityRisks = collectFidelityRisks(ir);
-  const ctx = newDocCtx();
-  const formFields = pages.flatMap((pageId) => pageObjects(ir, ir.pages && ir.pages[pageId] || {})).filter((o) => o.type === "form_field");
-  const formDefinitions = [];
-  const formKeys = new Set();
-  const addFormDefinition = (field, object = null) => {
-    const name = String(field.fieldName || field.name || "");
-    const annotationId = field.annotationId || field.id || object?.raw?.id || null;
-    const key = `${annotationId || object?.id || name}:${field.optionValue || ""}:${field.page || ""}`;
-    if (!name || formKeys.has(key)) return;
-    formKeys.add(key);
-    formDefinitions.push({
-      id: object?.id || field.objectId || field.id || null,
-      annotationId,
-      dataId: field.dataId || null,
-      page: field.page || null,
-      name,
-      label: object?.accessibility?.label || field.label || name || "Form field",
-      type: field.fieldType || "text",
-      value: field.value ?? "",
-      defaultValue: field.defaultValue ?? "",
-      optionValue: field.optionValue || "On",
-      checked: Boolean(field.checked),
-      defaultChecked: Boolean(field.defaultChecked),
-      options: Array.isArray(field.options) ? field.options : [],
-      multiple: Boolean(field.multiple),
-      hidden: Boolean(field.hidden),
-      maxLength: field.maxLength ?? null,
-      description: field.description || "",
-      xfaOn: field.xfaOn || null,
-      xfaOff: field.xfaOff || null,
-      required: Boolean(object?.accessibility?.required || field.required),
-      readOnly: Boolean(object?.accessibility?.readOnly || field.readOnly),
-      xfa: Boolean(field.xfa),
-      actions: field.actions || null,
-      rules: parseAcrobatFormRules(field.actions),
-      url: field.url || null,
-      action: field.action || null,
-      resetForm: field.resetForm || null,
-    });
-  };
-  formFields.forEach((object) => addFormDefinition(formFieldData(object), object));
-  (ir.forms?.fields || []).forEach((field) => addFormDefinition(field));
-  const xfaPages = pages.map((pageId, index) => ({ page: index + 1, tree: ir.pages?.[pageId]?.xfa || null })).filter(item => item.tree);
-  const hasXfa = xfaPages.length > 0;
-  const hasForms = formDefinitions.length > 0 || hasXfa;
-  if (options.inferHeadings !== false) ctx.inferred = inferHeadingLevels(ir);
-  let thumbs = "";
-  let body = "";
-  let nav = "";
-  pages.forEach((pageId, index) => {
-    var _a2, _b2, _c2;
-    const page = (_a2 = ir.pages) == null ? void 0 : _a2[pageId];
-    if (!page) return;
-    const w = num(page.width, 612);
-    const h = num(page.height, 792);
-    const nativeText = hasNativeText(page, ir);
-    const pageBg = embeddedImageSrc(page.background);
-    const label = ((_b2 = page.labels) == null ? void 0 : _b2.print) || `Page ${(_c2 = page.num) != null ? _c2 : index + 1}`;
-    const xfaReflow = page.xfa ? formDefinitions.filter(field => field.xfa && Number(field.page || index + 1) === index + 1).map((field, fieldIndex) => renderFormControl({
-      id: field.id || `xfa-${index + 1}-${fieldIndex}`,
-      raw: { ...field, fieldName: field.name, fieldType: field.type },
-      semantic: { fieldName: field.name, fieldType: field.type, value: field.value },
-      accessibility: { label: field.label, required: field.required, readOnly: field.readOnly },
-    }, "reflow", h)).join("") : "";
-    const vectorCount = Array.isArray(page.vectors) ? page.vectors.length : pageObjects(ir, page).filter((o) => o.type === "vector" || o.type === "path" || o.type === "shape").length;
-    if (vectorCount) ctx.vectors[String(index + 1)] = vectorCount;
-    nav += `<option value="${index + 1}">${esc(label)}</option>`;
-    if (showThumbs) {
-      thumbs += `<li><button type="button" class="fx-thumb" data-goto="${index + 1}" aria-label="Go to ${esc(label)}">` + (pageBg ? `<img src="${esc(pageBg)}" alt="" loading="lazy">` : `<span class="fx-thumb-blank" aria-hidden="true"></span>`) + `<span class="fx-thumb-num">${index + 1}</span></button></li>`;
-    }
-    body += `
-    <section class="fx-page" id="fx-page-${index + 1}" role="region" aria-label="${esc(label)}"
-      data-page="${index + 1}" data-raster="${pageBg ? "1" : "0"}" data-native-text="${nativeText ? "1" : "0"}" style="--pw:${w}px;--ph:${h}px">
-      <div class="fx-canvas">
-        ${pageBg ? `<img class="fx-raster" src="${esc(pageBg)}" alt="" aria-hidden="true" width="${w}" height="${h}">` : ""}
-        ${renderVectorLayer(ir, page)}
-        <div class="fx-textlayer" aria-label="${esc(label)} text">${renderTextLayer(ir, page, ctx, index + 1)}</div>
-        ${page.xfa ? `<div class="fx-xfa-host" data-xfa-page="${index + 1}" aria-label="${esc(label)} XFA form"></div>` : ""}
-      </div>
-      <div class="fx-reflow">${renderReflow(
-      ir,
-      page,
-      ctx.outline.filter((e) => e.page === index + 1).map((e) => e.i),
-      ctx
-    )}${xfaReflow ? `<section class="fx-xfa-reflow" aria-label="XFA form fields"><h2>Form fields</h2>${xfaReflow}</section>` : ""}</div>
-    </section>`;
-  });
-  const rag = options.rag || null;
-  const translate = options.translate === true;
-  const priority = (_i = options.priorityLanguages) != null ? _i : [];
-  const featureDefinitions = [
-    { key: "original", label: "Original PDF", buttonId: "fx-pdf-toggle", description: "Toggle between the embedded original PDF canvas and the accessible HTML fidelity view." },
-    { key: "pageNavigation", label: "Page navigation", buttonIds: ["fx-prev", "fx-page-select", "fx-next"], description: "Move between pages and keep thumbnails/current page in sync." },
-    { key: "zoom", label: "Zoom", buttonIds: ["fx-zoom-out", "fx-zoom-in", "fx-fit"], description: "Zoom or fit the current PDF/HTML canvas." },
-    { key: "pdfView", label: "PDF view", buttonId: "fx-view-fidelity", description: "Show the PDF fidelity view." },
-    { key: "reflow", label: "Reflow", buttonId: "fx-view-reflow", description: "Show the reflowed accessible reading view." },
-    { key: "contrast", label: "Contrast", buttonId: "fx-contrast", description: "Toggle high-contrast view." },
-    { key: "outline", label: "Outline", buttonId: "fx-outline-open", description: "Open detected headings and page outline." },
-    { key: "accessibility", label: "Accessibility", buttonId: "fx-a11y-open", description: "Open accessibility settings for screen reader, spacing, dyslexia, and motion preferences." },
-    { key: "summary", label: "AI summary", buttonId: "fx-sum-open", description: "Summarize the document using local grounded passages or a configured endpoint." },
-    { key: "explore", label: "Explore content", buttonId: "fx-ex-open", description: "Inspect extracted elements such as text, forms, figures, vectors, and tables." },
-    { key: "readAloud", label: "Read aloud", buttonId: "fx-read", description: "Read current page text using browser speech synthesis." },
-    { key: "print", label: "Print", buttonId: "fx-print", description: "Print only the embedded original PDF when available." },
-    { key: "improve", label: "Improve Document", buttonId: "fx-improve", description: "Compare the original PDF rendering against the generated HTML and ask AI to return higher-fidelity HTML/CSS/IR improvements plus richer search context." },
-    { key: "forms", label: "Form actions", buttonIds: ["fx-form-reset", "fx-form-submit"], description: "Reset, validate, submit, and synchronize form fields." },
-    { key: "translate", label: "Translate", buttonId: "fx-lang-open", description: "Open translation controls when translation is enabled." },
-    { key: "download", label: "Download", buttonId: "fx-dl-open", description: "Download accessible HTML, text, JSON, knowledge pack, form data, or completed PDF." },
-    { key: "report", label: "Report", buttonId: "fx-fb-open", description: "Open feedback/reporting form." },
-    { key: "liveHelp", label: "Live help", buttonId: "fx-live-help", description: "Link to live assistance when configured." },
-    { key: "originalLink", label: "Original link", buttonId: "fx-original-link", description: "Open the configured original document URL." },
-    { key: "search", label: "Search this document", buttonId: "fx-search", description: "Search document text and highlight matches on the original PDF overlay." },
-    { key: "askAi", label: "Ask AI", buttonId: "fx-qa-open", description: "Ask grounded questions over the document retrieval index." }
-  ];
-  const featureInput = { ...(options.features || {}), ...(options.menuItems || {}) };
-  const disabledFeatureSet = new Set([...(options.disabledFeatures || []), ...(options.disabledMenuItems || [])].map(String));
-  const enabledFeatureList = Array.isArray(options.enabledFeatures || options.enabledMenuItems) ? (options.enabledFeatures || options.enabledMenuItems).map(String) : null;
-  const enabledFeatureSet = enabledFeatureList ? new Set(enabledFeatureList) : null;
-  function featureEnabled(key, available = true) {
-    if (!available) return false;
-    if (enabledFeatureSet && !enabledFeatureSet.has(key)) return false;
-    if (disabledFeatureSet.has(key)) return false;
-    if (Object.prototype.hasOwnProperty.call(featureInput, key)) return featureInput[key] !== false;
-    return true;
-  }
-  const featureAvailability = {
-    original: Boolean(options.originalPdfSrc),
-    forms: hasForms,
-    translate,
-    liveHelp: Boolean(options.airaUrl),
-    originalLink: Boolean(options.originalUrl)
-  };
-  const manifestFeatures = featureDefinitions.map((feature) => ({
-    ...feature,
-    available: featureAvailability[feature.key] !== false
-  }));
-  const menuFeatures = Object.fromEntries(manifestFeatures.map((feature) => [feature.key, featureEnabled(feature.key, feature.available)]));
-  const featureManifest = {
-    available: manifestFeatures,
-    enabled: manifestFeatures.filter((feature) => menuFeatures[feature.key]).map((feature) => feature.key),
-    disabled: manifestFeatures.filter((feature) => !menuFeatures[feature.key]).map((feature) => feature.key),
-    menu: menuFeatures
-  };
-  const showOriginalPdf = Boolean(options.originalPdfSrc && menuFeatures.original);
-  const outlineHtml = ctx.outline.length ? ctx.outline.map(
-    (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
-  ).join("") : `<li class="fx-ol-empty">No headings were detected in this document.</li>`;
-  const config = {
-    documentId: options.documentId || options.fingerprint || null,
-    title,
-    lang,
-    qaEndpoint: options.qaEndpoint || null,
-    aiEndpoint: options.aiEndpoint || null,
-    improveEndpoint: options.improveEndpoint || options.documentImproveEndpoint || null,
-    knowledge: options.knowledge || options.documentContext || options.siteContext || null,
-    feedbackEndpoint: options.feedbackEndpoint || null,
-    feedbackEmail: options.feedbackEmail || null,
-    formSubmitEndpoint: options.formSubmitEndpoint || null,
-    improveMaxPages: Number.isFinite(Number(options.improveMaxPages)) ? Math.max(1, Number(options.improveMaxPages)) : 20,
-    allowPdfSubmitActions: options.allowPdfSubmitActions === true,
-    formRules: options.formRules || null,
-    originalUrl: options.originalUrl || null,
-    originalName: options.originalName || null,
-    permalink: options.permalink || null,
-    fingerprint: options.fingerprint || null,
-    fidelityRisks,
-    features: featureManifest
-  };
-  const knowledgePack = {
-    title,
-    language: lang,
-    pageCount: pages.length,
-    documentId: options.documentId || options.fingerprint || null,
-    originalName: options.originalName || null,
-    sourceUrl: options.sourceUrl || null,
-    permalink: options.permalink || null,
-    fingerprint: options.fingerprint || null,
-    fidelityRisks,
-    outline: ctx.outline.map((e) => ({ level: e.level, text: e.text, page: e.page })),
-    headings: ctx.outline.length,
-    figures: ctx.figures,
-    vectors: ctx.vectors,
-    pages: pages.map((pageId, index) => {
-      var _a2, _b2;
-      const page = (_a2 = ir.pages) == null ? void 0 : _a2[pageId];
-      const pageText = ctx.index.filter((e) => e.p === index + 1).map((e) => e.t).join(" ");
-      return {
-        page: index + 1,
-        label: ((_b2 = page == null ? void 0 : page.labels) == null ? void 0 : _b2.print) || `Page ${index + 1}`,
-        width: num(page == null ? void 0 : page.width, 612),
-        height: num(page == null ? void 0 : page.height, 792),
-        hasRaster: Boolean(page == null ? void 0 : page.background),
-        summary: pageText.replace(/\s+/g, " ").trim().slice(0, 420),
-        accessibility: {
-          hasText: Boolean(pageText.trim()),
-          language: (page == null ? void 0 : page.language) || lang,
-          screenReaderText: pageText
-        }
-      };
-    }),
-    accessibility: options.audit ? {
-      score: (_j = options.audit.score) != null ? _j : null,
-      level: (_k = options.audit.level) != null ? _k : null,
-      minimumLevel: "AA",
-      targetLevel: "AA",
-      enhancedTargetLevel: "AAA",
-      complianceNote: options.audit.complianceNote || "Automated checks target WCAG/ADA AA as the minimum and add AAA enhancements where possible. Legal compliance still requires human review and assistive-technology testing.",
-      issues: Array.isArray(options.audit.issues) ? options.audit.issues.length : 0,
-      topIssues: (Array.isArray(options.audit.issues) ? options.audit.issues : []).slice(0, 12).map((i) => {
-        var _a2, _b2, _c2, _d2;
-        return { severity: (_a2 = i.severity) != null ? _a2 : "info", wcag: (_b2 = i.wcag) != null ? _b2 : "", message: (_d2 = (_c2 = i.message) != null ? _c2 : i.type) != null ? _d2 : "" };
-      })
-    } : null,
-    conformance: CONFORMANCE,
-    assistiveTechnology: AT_TESTED,
-    notes: options.knowledge || options.documentContext || options.siteContext || null,
-    features: featureManifest,
-    elementCounts: ctx.elements.reduce((acc, e) => {
-      var _a2;
-      acc[e.kind] = ((_a2 = acc[e.kind]) != null ? _a2 : 0) + 1;
-      return acc;
-    }, {}),
-    tables: ctx.elements.filter((e) => e.kind === "table").map((e) => {
-      var _a2;
-      return { id: e.id, page: e.page, label: e.label, ...(_a2 = e.detail) != null ? _a2 : {} };
-    }),
-    forms: formDefinitions,
-    capabilities: [
-      "ask",
-      "summarize",
-      "describe",
-      "alt",
-      "translate",
-      "retrieve",
-      "speak",
-      "forms",
-      "elements",
-      "explainElement",
-      "explainPage"
-    ],
-    aiContract: {
-      version: "1.0",
-      globalObject: "window.CodbDocsAI",
-      readyEvent: "codbdocs:ready",
-      methods: ["retrieve", "ask", "summarize", "describe", "altText", "translate", "speak", "elements", "explainElement", "explainPage"],
-      guidance: "Use retrieve() for grounded passages, then ask() or your own AI endpoint with returned page citations. Use pages[].accessibility.screenReaderText for ADA and screen-reader workflows."
-    }
-  };
-  const backendDataScripts = [
-    jsonScript("codbdocs-config", config),
-    jsonScript("codbdocs-index", ctx.index),
-    jsonScript("codbdocs-outline", ctx.outline),
-    jsonScript("codbdocs-rag", rag),
-    jsonScript("codbdocs-knowledge", knowledgePack),
-    jsonScript("codbdocs-elements", ctx.elements),
-    jsonScript("codbdocs-forms", knowledgePack.forms),
-    jsonScript("codbdocs-xfa", { pure: hasXfa, pages: xfaPages }),
-  ].join("\n");
-  return `<!DOCTYPE html>
-<html lang="${esc(lang)}" data-view="${initialView}">
+<!DOCTYPE html>
+<html lang="en" data-view="fidelity">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)}</title>
+<title>SDK Rendered Accessible PDF HTML</title>
 <style>
 :root{--chrome:#1f2124;--chrome-2:#2b2e33;--chrome-3:#383c42;--stage:#f2f3f5;--ink:#eceff3;
   --muted:#a7aeb8;--accent:#d0021b;--accent-2:#1473e6;--line:#3a3e45;--zoom:1;--radius:10px}
@@ -1127,50 +304,50 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
   <div class="fx-brand">
     <span class="fx-brand-mark" aria-hidden="true">CD</span>
     <div class="fx-title-row">
-      <h1>${esc(title)}</h1>
-      ${showOriginalPdf ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
+      <h1>SDK Rendered Accessible PDF HTML</h1>
+      <span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>
     </div>
   </div>
-  ${menuFeatures.pageNavigation ? `<nav class="fx-group" aria-label="Page navigation">
+  <nav class="fx-group" aria-label="Page navigation">
     <button type="button" id="fx-prev" aria-label="Previous page">&#8249;</button>
     <label class="fx-status" for="fx-page-select">Jump to page</label>
-    <select id="fx-page-select">${nav}</select>
+    <select id="fx-page-select"><option value="1">Page 1</option><option value="2">Page 2</option></select>
     <button type="button" id="fx-next" aria-label="Next page">&#8250;</button>
-  </nav>` : ""}
-  ${menuFeatures.zoom ? `<div class="fx-group">
+  </nav>
+  <div class="fx-group">
     <button type="button" id="fx-zoom-out" aria-label="Zoom out">&#8722;</button>
     <span id="fx-zoom-label" aria-live="polite">100%</span>
     <button type="button" id="fx-zoom-in" aria-label="Zoom in">+</button>
     <button type="button" id="fx-fit">Fit width</button>
-  </div>` : ""}
-  ${(menuFeatures.pdfView || menuFeatures.reflow || menuFeatures.contrast) ? `<div class="fx-group">
-    ${menuFeatures.pdfView ? `<button type="button" id="fx-view-fidelity" aria-pressed="${initialView === "fidelity"}">PDF view</button>` : ""}
-    ${menuFeatures.reflow ? `<button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow</button>` : ""}
-    ${menuFeatures.contrast ? `<button type="button" id="fx-contrast" aria-pressed="false">Contrast</button>` : ""}
-  </div>` : ""}
-  ${(menuFeatures.outline || menuFeatures.accessibility || menuFeatures.summary || menuFeatures.explore || menuFeatures.readAloud || menuFeatures.print || menuFeatures.improve || (hasForms && menuFeatures.forms) || (translate && menuFeatures.translate) || menuFeatures.download || menuFeatures.report || (options.airaUrl && menuFeatures.liveHelp) || (options.originalUrl && menuFeatures.originalLink)) ? `<div class="fx-group">
-    ${menuFeatures.outline ? `<button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>` : ""}
-    ${menuFeatures.accessibility ? `<button type="button" id="fx-a11y-open" aria-haspopup="dialog">Accessibility</button>` : ""}
-    ${menuFeatures.summary ? `<button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>` : ""}
-    ${menuFeatures.explore ? `<button type="button" id="fx-ex-open" aria-haspopup="dialog">Explore content</button>` : ""}
+  </div>
+  <div class="fx-group">
+    <button type="button" id="fx-view-fidelity" aria-pressed="true">PDF view</button>
+    <button type="button" id="fx-view-reflow" aria-pressed="false">Reflow</button>
+    <button type="button" id="fx-contrast" aria-pressed="false">Contrast</button>
+  </div>
+  <div class="fx-group">
+    <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
+    <button type="button" id="fx-a11y-open" aria-haspopup="dialog">Accessibility</button>
+    <button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>
+    <button type="button" id="fx-ex-open" aria-haspopup="dialog">Explore content</button>
 
-    ${menuFeatures.readAloud ? `<button type="button" id="fx-read" aria-pressed="false">Read aloud</button>` : ""}
-    ${menuFeatures.print ? `<button type="button" id="fx-print">Print</button>` : ""}
-    ${menuFeatures.improve ? `<button type="button" id="fx-improve">Improve Document</button>` : ""}
-    ${hasForms && menuFeatures.forms ? `<button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>` : ""}
-    ${translate && menuFeatures.translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
-    ${menuFeatures.download ? `<button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>` : ""}
-    ${menuFeatures.report ? `<button type="button" id="fx-fb-open" aria-haspopup="dialog">Report</button>` : ""}
-    ${options.airaUrl && menuFeatures.liveHelp ? `<a class="fx-bar-link" id="fx-live-help" href="${esc(options.airaUrl)}" target="_blank" rel="noopener"><button type="button">Live help</button></a>` : ""}
-    ${options.originalUrl && menuFeatures.originalLink ? `<a class="fx-bar-link" id="fx-original-link" href="${esc(options.originalUrl)}" target="_blank" rel="noopener"><button type="button">Original</button></a>` : ""}
-  </div>` : ""}
+    <button type="button" id="fx-read" aria-pressed="false">Read aloud</button>
+    <button type="button" id="fx-print">Print</button>
+    <button type="button" id="fx-improve">Improve Document</button>
+    <button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>
+    <button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>
+    <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
+    <button type="button" id="fx-fb-open" aria-haspopup="dialog">Report</button>
+    <a class="fx-bar-link" id="fx-live-help" href="https://aira.io/" target="_blank" rel="noopener"><button type="button">Live help</button></a>
+    <a class="fx-bar-link" id="fx-original-link" href="data:application/pdf;base64,JVBERi0xLjcKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCgoyIDAgb2JqCjw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbNCAwIFIgNiAwIFJdIC9Db3VudCAyID4+CmVuZG9iagoKMyAwIG9iago8PCAvVHlwZSAvTWV0YWRhdGEgL1N1YnR5cGUgL1hNTCA+PgpzdHJlYW0KPD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyI+CjxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyI+CjxkYzp0aXRsZT5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvZGM6dGl0bGU+CjwvcmRmOkRlc2NyaXB0aW9uPgo8L3JkZjpSREY+CjwveDp4bXBtZXRhPgplbmRzdHJlYW0KZW5kb2JqCgo0IDAgb2JqCjw8IC9UeXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL01lZGlhQm94IFswIDAgNjEyIDc5Ml0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvQXJpYWwgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgPj4gPj4gPj4gL0NvbnRlbnRzIFs1IDAgUl0gPj4KZW5kb2JqCgo1IDAgb2JqCjw8IC9MZW5ndGggNzYyID4+CnN0cmVhbQpxCkJUCi9GMCAxNSBUZgo5MiAzMjQuMiBUZAooTm8gc2VydmVyIG9yIGltcG9ydCBpcyBuZWVkZWQgdG8gdmlldyB0aGlzIGZpbGUuKSBUagpFVApRCnEKQlQKL0YwIDE1IFRmCjkyIDM1Ni4yIFRkCihUaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzODguMiBUZAooVXNlIHRoZSB0b29sYmFyOiBQREYgdmlldywgUmVmbG93LCBBY2Nlc3NpYmlsaXR5LCBTZWFyY2guKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDQ3NS45MiBUZAooMy4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDUwNy45MiBUZAooMi4gVGhlIHZpc3VhbCBQREYgbGF5ZXIgcmVtYWlucyB2aXNpYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MzkuOTIgVGQKKDEuIFRoaXMgcGFnZSB3YXMgcmVuZGVyZWQgYnkgdGhlIFNESyBhY2Nlc3NpYmxlIEhUTUwgdmlld2VyLikgVGoKRVQKUQpxCkJUCi9GMCAxOCBUZgo3MiA1ODEuMDQgVGQKKFdoYXQgeW91IGFyZSBzZWVpbmcpIFRqCkVUClEKcQpCVAovRjAgMTMgVGYKNzIgNjc5LjY0IFRkCihHZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWxcKFwpKSBUagpFVApRCnEKQlQKL0YwIDI3IFRmCjcyIDcxMS41NiBUZAooU0RLIFJlbmRlcmVkIEFjY2Vzc2libGUgUERGIEhUTUwpIFRqCkVUClEKZW5kc3RyZWFtCmVuZG9iagoKNiAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YwIDw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0FyaWFsIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nID4+ID4+ID4+IC9Db250ZW50cyBbNyAwIFJdID4+CmVuZG9iagoKNyAwIG9iago8PCAvTGVuZ3RoIDc2MiA+PgpzdHJlYW0KcQpCVAovRjAgMTUgVGYKOTIgMzI0LjIgVGQKKE5vIHNlcnZlciBvciBpbXBvcnQgaXMgbmVlZGVkIHRvIHZpZXcgdGhpcyBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzNTYuMiBUZAooVGhpcyBpcyB0aGUgU0RLIG91dHB1dCBIVE1MLCBzYXZlZCBhcyBhIHN0YW5kYWxvbmUgZmlsZS4pIFRqCkVUClEKcQpCVAovRjAgMTUgVGYKOTIgMzg4LjIgVGQKKFVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA0NzUuOTIgVGQKKDMuIFRoZSB0ZXh0IGxheWVyIGlzIHNlYXJjaGFibGUsIHNlbGVjdGFibGUsIGFuZCByZWZsb3dhYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MDcuOTIgVGQKKDIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS4pIFRqCkVUClEKcQpCVAovRjAgMTQgVGYKOTIgNTM5LjkyIFRkCigxLiBUaGlzIHBhZ2Ugd2FzIHJlbmRlcmVkIGJ5IHRoZSBTREsgYWNjZXNzaWJsZSBIVE1MIHZpZXdlci4pIFRqCkVUClEKcQpCVAovRjAgMTggVGYKNzIgNTgxLjA0IFRkCihXaGF0IHlvdSBhcmUgc2VlaW5nKSBUagpFVApRCnEKQlQKL0YwIDEzIFRmCjcyIDY3OS42NCBUZAooR2VuZXJhdGVkIGJ5IENvZGJEb2NzIGJ1aWxkRmlkZWxpdHlIdG1sXChcKSkgVGoKRVQKUQpxCkJUCi9GMCAyNyBUZgo3MiA3MTEuNTYgVGQKKFNESyBSZW5kZXJlZCBBY2Nlc3NpYmxlIFBERiBIVE1MKSBUagpFVApRCmVuZHN0cmVhbQplbmRvYmoKCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU5IDAwMDAwIG4gCjAwMDAwMDAxMjMgMDAwMDAgbiAKMDAwMDAwMDUwNiAwMDAwMCBuIAowMDAwMDAwNzA3IDAwMDAwIG4gCjAwMDAwMDE1MjEgMDAwMDAgbiAKMDAwMDAwMTcyMiAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjI1MzYKJSVFT0YK" target="_blank" rel="noopener"><button type="button">Original</button></a>
+  </div>
   <span class="fx-spacer"></span>
-  ${menuFeatures.search ? `<div class="fx-group">
+  <div class="fx-group">
     <label class="fx-status" for="fx-search">Search this document</label>
-    <input id="fx-search" type="search" placeholder="Search this document\u2026" aria-describedby="fx-search-count">
+    <input id="fx-search" type="search" placeholder="Search this document…" aria-describedby="fx-search-count">
     <span id="fx-search-count" aria-live="polite"></span>
-  </div>` : ""}
-  ${menuFeatures.askAi ? `<button type="button" class="fx-primary-btn" id="fx-qa-open" aria-haspopup="dialog">Ask AI</button>` : ""}
+  </div>
+  <button type="button" class="fx-primary-btn" id="fx-qa-open" aria-haspopup="dialog">Ask AI</button>
 
 </header>
 <aside class="fx-drawer" id="fx-drawer" data-open="false" aria-label="Search results">
@@ -1185,15 +362,35 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
 </aside>
 
 <div class="fx-shell">
-  ${showThumbs ? `<nav class="fx-rail" aria-label="Page thumbnails"><ul>${thumbs}</ul></nav>` : ""}
+  <nav class="fx-rail" aria-label="Page thumbnails"><ul><li><button type="button" class="fx-thumb" data-goto="1" aria-label="Go to Page 1"><img src="data:image/svg+xml;base64,CiAgICA8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIHZpZXdCb3g9IjAgMCA2MTIgNzkyIj4KICAgICAgPHJlY3Qgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIGZpbGw9IiNmZmYiLz4KICAgICAgPHJlY3QgeD0iNDgiIHk9IjQ2IiB3aWR0aD0iNTE2IiBoZWlnaHQ9IjkyIiByeD0iMTAiIGZpbGw9IiNlYWYyZmYiIHN0cm9rZT0iIzBmNWZjNCIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI5MiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjI3IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMTExODI3Ij5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvdGV4dD4KICAgICAgPHRleHQgeD0iNzIiIHk9IjEyMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMzc0MTUxIj5HZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWwoKTwvdGV4dD4KICAgICAgPGxpbmUgeDE9IjcyIiB5MT0iMTc2IiB4Mj0iNTQwIiB5Mj0iMTc2IiBzdHJva2U9IiNkMWQ1ZGIiIHN0cm9rZS13aWR0aD0iMiIvPgogICAgICA8dGV4dCB4PSI3MiIgeT0iMjIwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxMTE4MjciPldoYXQgeW91IGFyZSBzZWVpbmc8L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIyNjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+MS4gVGhpcyBwYWdlIHdhcyByZW5kZXJlZCBieSB0aGUgU0RLIGFjY2Vzc2libGUgSFRNTCB2aWV3ZXIuPC90ZXh0PgogICAgICA8dGV4dCB4PSI5MiIgeT0iMjkyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiMxMTE4MjciPjIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIzMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+My4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuPC90ZXh0PgogICAgICA8cmVjdCB4PSI3MiIgeT0iMzcyIiB3aWR0aD0iNDY4IiBoZWlnaHQ9IjEyNiIgcng9IjgiIGZpbGw9IiNmOWZhZmIiIHN0cm9rZT0iI2NiZDVlMSIvPgogICAgICA8dGV4dCB4PSI5MiIgeT0iNDEyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiMxMTE4MjciPlVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ0NCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5UaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ3NiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5ObyBzZXJ2ZXIgb3IgaW1wb3J0IGlzIG5lZWRlZCB0byB2aWV3IHRoaXMgZmlsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI3MjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZiNzI4MCI+U0RLIHJlbmRlcmVkIGFjY2Vzc2libGUgUERGIEhUTUwgLSBwYWdlIDE8L3RleHQ+CiAgICA8L3N2Zz4=" alt="" loading="lazy"><span class="fx-thumb-num">1</span></button></li><li><button type="button" class="fx-thumb" data-goto="2" aria-label="Go to Page 2"><img src="data:image/svg+xml;base64,CiAgICA8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIHZpZXdCb3g9IjAgMCA2MTIgNzkyIj4KICAgICAgPHJlY3Qgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIGZpbGw9IiNmZmYiLz4KICAgICAgPHJlY3QgeD0iNDgiIHk9IjQ2IiB3aWR0aD0iNTE2IiBoZWlnaHQ9IjkyIiByeD0iMTAiIGZpbGw9IiNlYWYyZmYiIHN0cm9rZT0iI2I0MjMxOCIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI5MiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjI3IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMTExODI3Ij5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvdGV4dD4KICAgICAgPHRleHQgeD0iNzIiIHk9IjEyMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMzc0MTUxIj5HZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWwoKTwvdGV4dD4KICAgICAgPGxpbmUgeDE9IjcyIiB5MT0iMTc2IiB4Mj0iNTQwIiB5Mj0iMTc2IiBzdHJva2U9IiNkMWQ1ZGIiIHN0cm9rZS13aWR0aD0iMiIvPgogICAgICA8dGV4dCB4PSI3MiIgeT0iMjIwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxMTE4MjciPldoYXQgeW91IGFyZSBzZWVpbmc8L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIyNjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+MS4gVGhpcyBwYWdlIHdhcyByZW5kZXJlZCBieSB0aGUgU0RLIGFjY2Vzc2libGUgSFRNTCB2aWV3ZXIuPC90ZXh0PgogICAgICA8dGV4dCB4PSI5MiIgeT0iMjkyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiMxMTE4MjciPjIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIzMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+My4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuPC90ZXh0PgogICAgICA8cmVjdCB4PSI3MiIgeT0iMzcyIiB3aWR0aD0iNDY4IiBoZWlnaHQ9IjEyNiIgcng9IjgiIGZpbGw9IiNmOWZhZmIiIHN0cm9rZT0iI2NiZDVlMSIvPgogICAgICA8dGV4dCB4PSI5MiIgeT0iNDEyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiMxMTE4MjciPlVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ0NCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5UaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ3NiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5ObyBzZXJ2ZXIgb3IgaW1wb3J0IGlzIG5lZWRlZCB0byB2aWV3IHRoaXMgZmlsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI3MjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZiNzI4MCI+U0RLIHJlbmRlcmVkIGFjY2Vzc2libGUgUERGIEhUTUwgLSBwYWdlIDI8L3RleHQ+CiAgICA8L3N2Zz4=" alt="" loading="lazy"><span class="fx-thumb-num">2</span></button></li></ul></nav>
   <main class="fx-stage" id="fx-content" role="main" tabindex="-1">
-    ${showOriginalPdf ? `<section id="fx-original" class="fx-original" aria-label="Original PDF">
+    <section id="fx-original" class="fx-original" aria-label="Original PDF">
       <p class="fx-status" id="fx-op-status" aria-live="polite">The original PDF is rendered here with pdf.js.</p>
       <div id="fx-op-pages" role="group" aria-label="Original PDF pages"></div>
       <p class="fx-note">This is the unmodified original PDF with CodbDocs search, readability, forms and WCAG support layered from the accessible document model.</p>
-    </section>` : ""}
-    <div id="fx-accessible" ${showOriginalPdf ? "hidden" : ""}>
-    ${body}
+    </section>
+    <div id="fx-accessible" hidden>
+    
+    <section class="fx-page" id="fx-page-1" role="region" aria-label="Page 1"
+      data-page="1" data-raster="1" data-native-text="1" style="--pw:612px;--ph:792px">
+      <div class="fx-canvas">
+        <img class="fx-raster" src="data:image/svg+xml;base64,CiAgICA8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIHZpZXdCb3g9IjAgMCA2MTIgNzkyIj4KICAgICAgPHJlY3Qgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIGZpbGw9IiNmZmYiLz4KICAgICAgPHJlY3QgeD0iNDgiIHk9IjQ2IiB3aWR0aD0iNTE2IiBoZWlnaHQ9IjkyIiByeD0iMTAiIGZpbGw9IiNlYWYyZmYiIHN0cm9rZT0iIzBmNWZjNCIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI5MiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjI3IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMTExODI3Ij5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvdGV4dD4KICAgICAgPHRleHQgeD0iNzIiIHk9IjEyMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMzc0MTUxIj5HZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWwoKTwvdGV4dD4KICAgICAgPGxpbmUgeDE9IjcyIiB5MT0iMTc2IiB4Mj0iNTQwIiB5Mj0iMTc2IiBzdHJva2U9IiNkMWQ1ZGIiIHN0cm9rZS13aWR0aD0iMiIvPgogICAgICA8dGV4dCB4PSI3MiIgeT0iMjIwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxMTE4MjciPldoYXQgeW91IGFyZSBzZWVpbmc8L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIyNjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+MS4gVGhpcyBwYWdlIHdhcyByZW5kZXJlZCBieSB0aGUgU0RLIGFjY2Vzc2libGUgSFRNTCB2aWV3ZXIuPC90ZXh0PgogICAgICA8dGV4dCB4PSI5MiIgeT0iMjkyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiMxMTE4MjciPjIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIzMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+My4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuPC90ZXh0PgogICAgICA8cmVjdCB4PSI3MiIgeT0iMzcyIiB3aWR0aD0iNDY4IiBoZWlnaHQ9IjEyNiIgcng9IjgiIGZpbGw9IiNmOWZhZmIiIHN0cm9rZT0iI2NiZDVlMSIvPgogICAgICA8dGV4dCB4PSI5MiIgeT0iNDEyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiMxMTE4MjciPlVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ0NCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5UaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ3NiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5ObyBzZXJ2ZXIgb3IgaW1wb3J0IGlzIG5lZWRlZCB0byB2aWV3IHRoaXMgZmlsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI3MjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZiNzI4MCI+U0RLIHJlbmRlcmVkIGFjY2Vzc2libGUgUERGIEhUTUwgLSBwYWdlIDE8L3RleHQ+CiAgICA8L3N2Zz4=" alt="" aria-hidden="true" width="612" height="792">
+        
+        <div class="fx-textlayer" aria-label="Page 1 text"><h2 id="fx-h-1" class="fx-text" data-object="page_1_title" data-el="page_1_title" data-role="heading" style="left:72px;top:61px;font-size:27px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:430px;">SDK Rendered Accessible PDF HTML</h2><span class="fx-text" data-object="page_1_sub" data-el="page_1_sub" data-role="paragraph" style="left:72px;top:103px;font-size:13px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:280px;">Generated by CodbDocs buildFidelityHtml()</span><h2 id="fx-h-2" class="fx-text" data-object="page_1_h" data-el="page_1_h" data-role="heading" style="left:72px;top:198px;font-size:18px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:200px;">What you are seeing</h2><span class="fx-text" data-object="page_1_a" data-el="page_1_a" data-role="paragraph" style="left:92px;top:242px;font-size:14px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:405px;">1. This page was rendered by the SDK accessible HTML viewer.</span><span class="fx-text" data-object="page_1_b" data-el="page_1_b" data-role="paragraph" style="left:92px;top:274px;font-size:14px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:275px;">2. The visual PDF layer remains visible.</span><span class="fx-text" data-object="page_1_c" data-el="page_1_c" data-role="paragraph" style="left:92px;top:306px;font-size:14px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:390px;">3. The text layer is searchable, selectable, and reflowable.</span><span class="fx-text" data-object="page_1_d" data-el="page_1_d" data-role="paragraph" style="left:92px;top:393px;font-size:15px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:395px;">Use the toolbar: PDF view, Reflow, Accessibility, Search.</span><span class="fx-text" data-object="page_1_e" data-el="page_1_e" data-role="paragraph" style="left:92px;top:425px;font-size:15px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:385px;">This is the SDK output HTML, saved as a standalone file.</span><span class="fx-text" data-object="page_1_f" data-el="page_1_f" data-role="paragraph" style="left:92px;top:457px;font-size:15px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:330px;">No server or import is needed to view this file.</span><div data-el="page_1_sample_field" class="fx-pdf-field fx-pdf-field-checkbox" data-form-container="sampleAcknowledgement" style="left:92px;top:546px;width:16px;height:16px"><label class="fx-status" for="fx-form-page_1_sample_field-pdf">Sample acknowledgement checkbox</label><input type="checkbox" id="fx-form-page_1_sample_field-pdf" name="sampleAcknowledgement__pdf" class="fx-form-input" data-form-name="sampleAcknowledgement" data-form-type="checkbox" data-form-view="pdf" data-form-option="Yes" data-form-default="%22%22" aria-label="Sample acknowledgement checkbox" value="Yes"></div></div>
+        
+      </div>
+      <div class="fx-reflow"><h2 id="fx-rh-1">SDK Rendered Accessible PDF HTML</h2><p>Generated by CodbDocs buildFidelityHtml()</p><h2 id="fx-rh-2">What you are seeing</h2><p>1. This page was rendered by the SDK accessible HTML viewer.</p><p>2. The visual PDF layer remains visible.</p><p>3. The text layer is searchable, selectable, and reflowable.</p><p>Use the toolbar: PDF view, Reflow, Accessibility, Search.</p><p>This is the SDK output HTML, saved as a standalone file.</p><p>No server or import is needed to view this file.</p><div class="fx-reflow-field fx-reflow-choice" data-form-container="sampleAcknowledgement"><input type="checkbox" id="fx-form-page_1_sample_field-reflow" name="sampleAcknowledgement__reflow" class="fx-form-input" data-form-name="sampleAcknowledgement" data-form-type="checkbox" data-form-view="reflow" data-form-option="Yes" data-form-default="%22%22" aria-label="Sample acknowledgement checkbox" value="Yes"><label for="fx-form-page_1_sample_field-reflow">Sample acknowledgement checkbox</label></div></div>
+    </section>
+    <section class="fx-page" id="fx-page-2" role="region" aria-label="Page 2"
+      data-page="2" data-raster="1" data-native-text="1" style="--pw:612px;--ph:792px">
+      <div class="fx-canvas">
+        <img class="fx-raster" src="data:image/svg+xml;base64,CiAgICA8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIHZpZXdCb3g9IjAgMCA2MTIgNzkyIj4KICAgICAgPHJlY3Qgd2lkdGg9IjYxMiIgaGVpZ2h0PSI3OTIiIGZpbGw9IiNmZmYiLz4KICAgICAgPHJlY3QgeD0iNDgiIHk9IjQ2IiB3aWR0aD0iNTE2IiBoZWlnaHQ9IjkyIiByeD0iMTAiIGZpbGw9IiNlYWYyZmYiIHN0cm9rZT0iI2I0MjMxOCIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI5MiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjI3IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMTExODI3Ij5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvdGV4dD4KICAgICAgPHRleHQgeD0iNzIiIHk9IjEyMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEzIiBmaWxsPSIjMzc0MTUxIj5HZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWwoKTwvdGV4dD4KICAgICAgPGxpbmUgeDE9IjcyIiB5MT0iMTc2IiB4Mj0iNTQwIiB5Mj0iMTc2IiBzdHJva2U9IiNkMWQ1ZGIiIHN0cm9rZS13aWR0aD0iMiIvPgogICAgICA8dGV4dCB4PSI3MiIgeT0iMjIwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxMTE4MjciPldoYXQgeW91IGFyZSBzZWVpbmc8L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIyNjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+MS4gVGhpcyBwYWdlIHdhcyByZW5kZXJlZCBieSB0aGUgU0RLIGFjY2Vzc2libGUgSFRNTCB2aWV3ZXIuPC90ZXh0PgogICAgICA8dGV4dCB4PSI5MiIgeT0iMjkyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiMxMTE4MjciPjIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjkyIiB5PSIzMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzExMTgyNyI+My4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuPC90ZXh0PgogICAgICA8cmVjdCB4PSI3MiIgeT0iMzcyIiB3aWR0aD0iNDY4IiBoZWlnaHQ9IjEyNiIgcng9IjgiIGZpbGw9IiNmOWZhZmIiIHN0cm9rZT0iI2NiZDVlMSIvPgogICAgICA8dGV4dCB4PSI5MiIgeT0iNDEyIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTUiIGZpbGw9IiMxMTE4MjciPlVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ0NCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5UaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLjwvdGV4dD4KICAgICAgPHRleHQgeD0iOTIiIHk9IjQ3NiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE1IiBmaWxsPSIjMTExODI3Ij5ObyBzZXJ2ZXIgb3IgaW1wb3J0IGlzIG5lZWRlZCB0byB2aWV3IHRoaXMgZmlsZS48L3RleHQ+CiAgICAgIDx0ZXh0IHg9IjcyIiB5PSI3MjAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZiNzI4MCI+U0RLIHJlbmRlcmVkIGFjY2Vzc2libGUgUERGIEhUTUwgLSBwYWdlIDI8L3RleHQ+CiAgICA8L3N2Zz4=" alt="" aria-hidden="true" width="612" height="792">
+        
+        <div class="fx-textlayer" aria-label="Page 2 text"><h2 id="fx-h-3" class="fx-text" data-object="page_2_title" data-el="page_2_title" data-role="heading" style="left:72px;top:61px;font-size:27px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:430px;">SDK Rendered Accessible PDF HTML</h2><span class="fx-text" data-object="page_2_sub" data-el="page_2_sub" data-role="paragraph" style="left:72px;top:103px;font-size:13px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:280px;">Generated by CodbDocs buildFidelityHtml()</span><h2 id="fx-h-4" class="fx-text" data-object="page_2_h" data-el="page_2_h" data-role="heading" style="left:72px;top:198px;font-size:18px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:200px;">What you are seeing</h2><span class="fx-text" data-object="page_2_a" data-el="page_2_a" data-role="paragraph" style="left:92px;top:242px;font-size:14px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:405px;">1. This page was rendered by the SDK accessible HTML viewer.</span><span class="fx-text" data-object="page_2_b" data-el="page_2_b" data-role="paragraph" style="left:92px;top:274px;font-size:14px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:275px;">2. The visual PDF layer remains visible.</span><span class="fx-text" data-object="page_2_c" data-el="page_2_c" data-role="paragraph" style="left:92px;top:306px;font-size:14px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:390px;">3. The text layer is searchable, selectable, and reflowable.</span><span class="fx-text" data-object="page_2_d" data-el="page_2_d" data-role="paragraph" style="left:92px;top:393px;font-size:15px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:395px;">Use the toolbar: PDF view, Reflow, Accessibility, Search.</span><span class="fx-text" data-object="page_2_e" data-el="page_2_e" data-role="paragraph" style="left:92px;top:425px;font-size:15px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:385px;">This is the SDK output HTML, saved as a standalone file.</span><span class="fx-text" data-object="page_2_f" data-el="page_2_f" data-role="paragraph" style="left:92px;top:457px;font-size:15px;font-family:Helvetica, Arial, 'Segoe UI', system-ui, sans-serif;--fx-w:330px;">No server or import is needed to view this file.</span></div>
+        
+      </div>
+      <div class="fx-reflow"><h2 id="fx-rh-3">SDK Rendered Accessible PDF HTML</h2><p>Generated by CodbDocs buildFidelityHtml()</p><h2 id="fx-rh-4">What you are seeing</h2><p>1. This page was rendered by the SDK accessible HTML viewer.</p><p>2. The visual PDF layer remains visible.</p><p>3. The text layer is searchable, selectable, and reflowable.</p><p>Use the toolbar: PDF view, Reflow, Accessibility, Search.</p><p>This is the SDK output HTML, saved as a standalone file.</p><p>No server or import is needed to view this file.</p></div>
+    </section>
     </div>
   </main>
 </div>
@@ -1204,7 +401,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
   <button type="button" class="fx-dialog-close" data-close aria-label="Close document outline">&#10005;</button>
   <h2 id="fx-outline-h">Document outline</h2>
   <p class="fx-lang-note">Select a section to jump straight to it. The section you are reading is highlighted.</p>
-  <nav aria-label="Document sections"><ul class="fx-outline" id="fx-outline-list">${outlineHtml}</ul></nav>
+  <nav aria-label="Document sections"><ul class="fx-outline" id="fx-outline-list"><li class="fx-ol-l2"><button type="button" class="fx-ol-item" data-h="1" data-page="1"><span class="fx-ol-t">SDK Rendered Accessible PDF HTML</span><span class="fx-ol-p">p.1</span></button></li><li class="fx-ol-l2"><button type="button" class="fx-ol-item" data-h="2" data-page="1"><span class="fx-ol-t">What you are seeing</span><span class="fx-ol-p">p.1</span></button></li><li class="fx-ol-l2"><button type="button" class="fx-ol-item" data-h="3" data-page="2"><span class="fx-ol-t">SDK Rendered Accessible PDF HTML</span><span class="fx-ol-p">p.2</span></button></li><li class="fx-ol-l2"><button type="button" class="fx-ol-item" data-h="4" data-page="2"><span class="fx-ol-t">What you are seeing</span><span class="fx-ol-p">p.2</span></button></li></ul></nav>
 </div>
 
 <div class="fx-dialog" id="fx-a11y-tools" role="dialog" aria-modal="true" aria-labelledby="fx-a11y-tools-h" data-open="false">
@@ -1231,7 +428,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
 <div class="fx-dialog" id="fx-qa" role="dialog" aria-modal="true" aria-labelledby="fx-qa-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close ask a question">&#10005;</button>
   <h2 id="fx-qa-h">Ask a question about this document</h2>
-  <p class="fx-lang-note">Ask in any language \u2014 answers come back in the language you use.</p>
+  <p class="fx-lang-note">Ask in any language — answers come back in the language you use.</p>
   <form id="fx-qa-form">
     <div class="fx-field">
       <label for="fx-qa-input">Your question</label>
@@ -1261,20 +458,18 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     <input id="fx-ex-filter" type="search" placeholder="e.g. budget table, logo, deadline">
   </div>
   <div class="fx-ex-tabs" role="group" aria-label="Filter by type" id="fx-ex-tabs">
-    ${["all", "heading", "text", "list", "form", "table", "image", "chart", "vector", "link"].map(
-    (k) => `<button type="button" data-kind="${k}" aria-pressed="${k === "all"}">${k === "all" ? "Everything" : k.charAt(0).toUpperCase() + k.slice(1) + "s"}</button>`
-  ).join("")}
+    <button type="button" data-kind="all" aria-pressed="true">Everything</button><button type="button" data-kind="heading" aria-pressed="false">Headings</button><button type="button" data-kind="text" aria-pressed="false">Texts</button><button type="button" data-kind="list" aria-pressed="false">Lists</button><button type="button" data-kind="form" aria-pressed="false">Forms</button><button type="button" data-kind="table" aria-pressed="false">Tables</button><button type="button" data-kind="image" aria-pressed="false">Images</button><button type="button" data-kind="chart" aria-pressed="false">Charts</button><button type="button" data-kind="vector" aria-pressed="false">Vectors</button><button type="button" data-kind="link" aria-pressed="false">Links</button>
   </div>
   <p class="fx-status" id="fx-ex-count" aria-live="polite"></p>
   <ul class="fx-ex-list" id="fx-ex-list"></ul>
 </div>
 
 
-${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="true" aria-labelledby="fx-lang-h" data-open="false">
+<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="true" aria-labelledby="fx-lang-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close translation">&#10005;</button>
   <h2 id="fx-lang-h">Translate this document</h2>
   <p class="fx-lang-note">Translation uses the configured AI endpoint; no third-party translation library is loaded by this SDK.</p>
-  ${priority.length ? `<h3>Languages spoken in our service area</h3><ul>${priority.map((l) => `<li>${esc(l.label)}${l.share ? ` \u2014 ${esc(l.share)}` : ""}</li>`).join("")}</ul>` : ""}
+  <h3>Languages spoken in our service area</h3><ul><li></li><li></li><li></li></ul>
   <div id="google_translate_element"></div>
   <h3>AI translation of the accessible transcript</h3>
   <p class="fx-lang-note">Keeps headings and reading order, so screen readers announce the translated document correctly.</p>
@@ -1282,30 +477,30 @@ ${translate ? `<div class="fx-dialog" id="fx-lang" role="dialog" aria-modal="tru
     <label for="fx-ai-lang">Translate into</label>
     <input id="fx-ai-lang" type="text" list="fx-lang-list" placeholder="e.g. Spanish, Haitian Creole, Vietnamese">
     <datalist id="fx-lang-list">
-      ${["Spanish", "Haitian Creole", "Portuguese", "French", "Vietnamese", "Arabic", "Chinese (Simplified)", "Russian", "Tagalog", "American Sign Language gloss"].map((l) => `<option value="${esc(l)}"></option>`).join("")}
+      <option value="Spanish"></option><option value="Haitian Creole"></option><option value="Portuguese"></option><option value="French"></option><option value="Vietnamese"></option><option value="Arabic"></option><option value="Chinese (Simplified)"></option><option value="Russian"></option><option value="Tagalog"></option><option value="American Sign Language gloss"></option>
     </datalist>
   </div>
   <button class="fx-primary" type="button" id="fx-ai-translate">Translate with AI</button>
   <div id="fx-ai-tr-out" class="fx-answer" hidden role="status" aria-live="polite"></div>
-</div>` : ""}
+</div>
 
 
 <div class="fx-dialog" id="fx-dl" role="dialog" aria-modal="true" aria-labelledby="fx-dl-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close downloads">&#10005;</button>
   <h2 id="fx-dl-h">Download this document</h2>
   <ul>
-    ${options.originalUrl ? `<li><a href="${esc(options.originalUrl)}" download target="_blank" rel="noopener">Original document${options.originalName ? ` (${esc(options.originalName)})` : ""}</a></li>` : ""}
+    <li><a href="data:application/pdf;base64,JVBERi0xLjcKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCgoyIDAgb2JqCjw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbNCAwIFIgNiAwIFJdIC9Db3VudCAyID4+CmVuZG9iagoKMyAwIG9iago8PCAvVHlwZSAvTWV0YWRhdGEgL1N1YnR5cGUgL1hNTCA+PgpzdHJlYW0KPD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyI+CjxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyI+CjxkYzp0aXRsZT5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvZGM6dGl0bGU+CjwvcmRmOkRlc2NyaXB0aW9uPgo8L3JkZjpSREY+CjwveDp4bXBtZXRhPgplbmRzdHJlYW0KZW5kb2JqCgo0IDAgb2JqCjw8IC9UeXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL01lZGlhQm94IFswIDAgNjEyIDc5Ml0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvQXJpYWwgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgPj4gPj4gPj4gL0NvbnRlbnRzIFs1IDAgUl0gPj4KZW5kb2JqCgo1IDAgb2JqCjw8IC9MZW5ndGggNzYyID4+CnN0cmVhbQpxCkJUCi9GMCAxNSBUZgo5MiAzMjQuMiBUZAooTm8gc2VydmVyIG9yIGltcG9ydCBpcyBuZWVkZWQgdG8gdmlldyB0aGlzIGZpbGUuKSBUagpFVApRCnEKQlQKL0YwIDE1IFRmCjkyIDM1Ni4yIFRkCihUaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzODguMiBUZAooVXNlIHRoZSB0b29sYmFyOiBQREYgdmlldywgUmVmbG93LCBBY2Nlc3NpYmlsaXR5LCBTZWFyY2guKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDQ3NS45MiBUZAooMy4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDUwNy45MiBUZAooMi4gVGhlIHZpc3VhbCBQREYgbGF5ZXIgcmVtYWlucyB2aXNpYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MzkuOTIgVGQKKDEuIFRoaXMgcGFnZSB3YXMgcmVuZGVyZWQgYnkgdGhlIFNESyBhY2Nlc3NpYmxlIEhUTUwgdmlld2VyLikgVGoKRVQKUQpxCkJUCi9GMCAxOCBUZgo3MiA1ODEuMDQgVGQKKFdoYXQgeW91IGFyZSBzZWVpbmcpIFRqCkVUClEKcQpCVAovRjAgMTMgVGYKNzIgNjc5LjY0IFRkCihHZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWxcKFwpKSBUagpFVApRCnEKQlQKL0YwIDI3IFRmCjcyIDcxMS41NiBUZAooU0RLIFJlbmRlcmVkIEFjY2Vzc2libGUgUERGIEhUTUwpIFRqCkVUClEKZW5kc3RyZWFtCmVuZG9iagoKNiAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YwIDw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0FyaWFsIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nID4+ID4+ID4+IC9Db250ZW50cyBbNyAwIFJdID4+CmVuZG9iagoKNyAwIG9iago8PCAvTGVuZ3RoIDc2MiA+PgpzdHJlYW0KcQpCVAovRjAgMTUgVGYKOTIgMzI0LjIgVGQKKE5vIHNlcnZlciBvciBpbXBvcnQgaXMgbmVlZGVkIHRvIHZpZXcgdGhpcyBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzNTYuMiBUZAooVGhpcyBpcyB0aGUgU0RLIG91dHB1dCBIVE1MLCBzYXZlZCBhcyBhIHN0YW5kYWxvbmUgZmlsZS4pIFRqCkVUClEKcQpCVAovRjAgMTUgVGYKOTIgMzg4LjIgVGQKKFVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA0NzUuOTIgVGQKKDMuIFRoZSB0ZXh0IGxheWVyIGlzIHNlYXJjaGFibGUsIHNlbGVjdGFibGUsIGFuZCByZWZsb3dhYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MDcuOTIgVGQKKDIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS4pIFRqCkVUClEKcQpCVAovRjAgMTQgVGYKOTIgNTM5LjkyIFRkCigxLiBUaGlzIHBhZ2Ugd2FzIHJlbmRlcmVkIGJ5IHRoZSBTREsgYWNjZXNzaWJsZSBIVE1MIHZpZXdlci4pIFRqCkVUClEKcQpCVAovRjAgMTggVGYKNzIgNTgxLjA0IFRkCihXaGF0IHlvdSBhcmUgc2VlaW5nKSBUagpFVApRCnEKQlQKL0YwIDEzIFRmCjcyIDY3OS42NCBUZAooR2VuZXJhdGVkIGJ5IENvZGJEb2NzIGJ1aWxkRmlkZWxpdHlIdG1sXChcKSkgVGoKRVQKUQpxCkJUCi9GMCAyNyBUZgo3MiA3MTEuNTYgVGQKKFNESyBSZW5kZXJlZCBBY2Nlc3NpYmxlIFBERiBIVE1MKSBUagpFVApRCmVuZHN0cmVhbQplbmRvYmoKCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU5IDAwMDAwIG4gCjAwMDAwMDAxMjMgMDAwMDAgbiAKMDAwMDAwMDUwNiAwMDAwMCBuIAowMDAwMDAwNzA3IDAwMDAwIG4gCjAwMDAwMDE1MjEgMDAwMDAgbiAKMDAwMDAwMTcyMiAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjI1MzYKJSVFT0YK" download target="_blank" rel="noopener">Original document (sdk-rendered-accessible-pdf.pdf)</a></li>
     <li><button type="button" class="fx-primary" id="fx-dl-html">Accessible HTML version</button></li>
     <li><button type="button" class="fx-primary" id="fx-dl-txt">Plain-text transcript</button></li>
-    ${hasForms ? `<li><button type="button" class="fx-primary" id="fx-dl-forms">Completed form data (JSON)</button></li>` : ""}
-    ${hasForms && options.originalPdfSrc ? `<li><button type="button" class="fx-primary" id="fx-dl-pdf">Completed PDF</button></li>` : ""}
-    ${showDataControls && rag ? `<li><button type="button" class="fx-primary" id="fx-dl-json">Structured data (JSON)</button></li>` : ""}
-    ${showDataControls ? `<li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>` : ""}
+    <li><button type="button" class="fx-primary" id="fx-dl-forms">Completed form data (JSON)</button></li>
+    <li><button type="button" class="fx-primary" id="fx-dl-pdf">Completed PDF</button></li>
+    
+    <li><button type="button" class="fx-primary" id="fx-dl-know">AI knowledge pack (JSON)</button></li>
 
   </ul>
 </div>
 
-${hasForms ? `<div class="fx-dialog" id="fx-signature" role="dialog" aria-modal="true" aria-labelledby="fx-signature-h" data-open="false">
+<div class="fx-dialog" id="fx-signature" role="dialog" aria-modal="true" aria-labelledby="fx-signature-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close signature dialog">&#10005;</button>
   <h2 id="fx-signature-h">Add an electronic signature</h2>
   <p class="fx-note">This captures an electronic signature in the HTML form. It is not a certificate-backed digital signature.</p>
@@ -1314,7 +509,7 @@ ${hasForms ? `<div class="fx-dialog" id="fx-signature" role="dialog" aria-modal=
   <div class="fx-field"><label for="fx-signature-file">Or use a signature image</label><input id="fx-signature-file" type="file" accept="image/png,image/jpeg,image/webp"></div>
   <div class="fx-signature-preview-large" id="fx-signature-preview-large" aria-live="polite">No signature selected</div>
   <div class="fx-form-actions"><button type="button" class="fx-primary" id="fx-signature-apply">Apply signature</button><button type="button" id="fx-signature-clear">Clear</button></div>
-</div>` : ""}
+</div>
 
 <div class="fx-dialog" id="fx-fb" role="dialog" aria-modal="true" aria-labelledby="fx-fb-h" data-open="false">
   <button type="button" class="fx-dialog-close" data-close aria-label="Close issue report">&#10005;</button>
@@ -1348,7 +543,14 @@ ${hasForms ? `<div class="fx-dialog" id="fx-signature" role="dialog" aria-modal=
 </div>
 
 <p class="fx-status" role="status" aria-live="polite" id="fx-live"></p>
-${backendDataScripts}
+<script type="application/json" id="codbdocs-config">{"documentId":null,"title":"SDK Rendered Accessible PDF HTML","lang":"en","qaEndpoint":"/example-ai-qa-endpoint","aiEndpoint":"/example-ai-summary-endpoint","improveEndpoint":"/example-improve-endpoint","knowledge":null,"feedbackEndpoint":null,"feedbackEmail":"accessibility@example.com","formSubmitEndpoint":"/example-form-submit-endpoint","improveMaxPages":20,"allowPdfSubmitActions":true,"formRules":null,"originalUrl":"data:application/pdf;base64,JVBERi0xLjcKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCgoyIDAgb2JqCjw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbNCAwIFIgNiAwIFJdIC9Db3VudCAyID4+CmVuZG9iagoKMyAwIG9iago8PCAvVHlwZSAvTWV0YWRhdGEgL1N1YnR5cGUgL1hNTCA+PgpzdHJlYW0KPD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyI+CjxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyI+CjxkYzp0aXRsZT5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvZGM6dGl0bGU+CjwvcmRmOkRlc2NyaXB0aW9uPgo8L3JkZjpSREY+CjwveDp4bXBtZXRhPgplbmRzdHJlYW0KZW5kb2JqCgo0IDAgb2JqCjw8IC9UeXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL01lZGlhQm94IFswIDAgNjEyIDc5Ml0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvQXJpYWwgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgPj4gPj4gPj4gL0NvbnRlbnRzIFs1IDAgUl0gPj4KZW5kb2JqCgo1IDAgb2JqCjw8IC9MZW5ndGggNzYyID4+CnN0cmVhbQpxCkJUCi9GMCAxNSBUZgo5MiAzMjQuMiBUZAooTm8gc2VydmVyIG9yIGltcG9ydCBpcyBuZWVkZWQgdG8gdmlldyB0aGlzIGZpbGUuKSBUagpFVApRCnEKQlQKL0YwIDE1IFRmCjkyIDM1Ni4yIFRkCihUaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzODguMiBUZAooVXNlIHRoZSB0b29sYmFyOiBQREYgdmlldywgUmVmbG93LCBBY2Nlc3NpYmlsaXR5LCBTZWFyY2guKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDQ3NS45MiBUZAooMy4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDUwNy45MiBUZAooMi4gVGhlIHZpc3VhbCBQREYgbGF5ZXIgcmVtYWlucyB2aXNpYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MzkuOTIgVGQKKDEuIFRoaXMgcGFnZSB3YXMgcmVuZGVyZWQgYnkgdGhlIFNESyBhY2Nlc3NpYmxlIEhUTUwgdmlld2VyLikgVGoKRVQKUQpxCkJUCi9GMCAxOCBUZgo3MiA1ODEuMDQgVGQKKFdoYXQgeW91IGFyZSBzZWVpbmcpIFRqCkVUClEKcQpCVAovRjAgMTMgVGYKNzIgNjc5LjY0IFRkCihHZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWxcKFwpKSBUagpFVApRCnEKQlQKL0YwIDI3IFRmCjcyIDcxMS41NiBUZAooU0RLIFJlbmRlcmVkIEFjY2Vzc2libGUgUERGIEhUTUwpIFRqCkVUClEKZW5kc3RyZWFtCmVuZG9iagoKNiAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YwIDw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0FyaWFsIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nID4+ID4+ID4+IC9Db250ZW50cyBbNyAwIFJdID4+CmVuZG9iagoKNyAwIG9iago8PCAvTGVuZ3RoIDc2MiA+PgpzdHJlYW0KcQpCVAovRjAgMTUgVGYKOTIgMzI0LjIgVGQKKE5vIHNlcnZlciBvciBpbXBvcnQgaXMgbmVlZGVkIHRvIHZpZXcgdGhpcyBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzNTYuMiBUZAooVGhpcyBpcyB0aGUgU0RLIG91dHB1dCBIVE1MLCBzYXZlZCBhcyBhIHN0YW5kYWxvbmUgZmlsZS4pIFRqCkVUClEKcQpCVAovRjAgMTUgVGYKOTIgMzg4LjIgVGQKKFVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA0NzUuOTIgVGQKKDMuIFRoZSB0ZXh0IGxheWVyIGlzIHNlYXJjaGFibGUsIHNlbGVjdGFibGUsIGFuZCByZWZsb3dhYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MDcuOTIgVGQKKDIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS4pIFRqCkVUClEKcQpCVAovRjAgMTQgVGYKOTIgNTM5LjkyIFRkCigxLiBUaGlzIHBhZ2Ugd2FzIHJlbmRlcmVkIGJ5IHRoZSBTREsgYWNjZXNzaWJsZSBIVE1MIHZpZXdlci4pIFRqCkVUClEKcQpCVAovRjAgMTggVGYKNzIgNTgxLjA0IFRkCihXaGF0IHlvdSBhcmUgc2VlaW5nKSBUagpFVApRCnEKQlQKL0YwIDEzIFRmCjcyIDY3OS42NCBUZAooR2VuZXJhdGVkIGJ5IENvZGJEb2NzIGJ1aWxkRmlkZWxpdHlIdG1sXChcKSkgVGoKRVQKUQpxCkJUCi9GMCAyNyBUZgo3MiA3MTEuNTYgVGQKKFNESyBSZW5kZXJlZCBBY2Nlc3NpYmxlIFBERiBIVE1MKSBUagpFVApRCmVuZHN0cmVhbQplbmRvYmoKCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU5IDAwMDAwIG4gCjAwMDAwMDAxMjMgMDAwMDAgbiAKMDAwMDAwMDUwNiAwMDAwMCBuIAowMDAwMDAwNzA3IDAwMDAwIG4gCjAwMDAwMDE1MjEgMDAwMDAgbiAKMDAwMDAwMTcyMiAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjI1MzYKJSVFT0YK","originalName":"sdk-rendered-accessible-pdf.pdf","permalink":"sdk-rendered-accessible-pdf.html","fingerprint":null,"fidelityRisks":[{"type":"font_substitution","page":null,"detail":"Fonts detected: Arial. Original rendering avoids browser substitution."}],"features":{"available":[{"key":"original","label":"Original PDF","buttonId":"fx-pdf-toggle","description":"Toggle between the embedded original PDF canvas and the accessible HTML fidelity view.","available":true},{"key":"pageNavigation","label":"Page navigation","buttonIds":["fx-prev","fx-page-select","fx-next"],"description":"Move between pages and keep thumbnails/current page in sync.","available":true},{"key":"zoom","label":"Zoom","buttonIds":["fx-zoom-out","fx-zoom-in","fx-fit"],"description":"Zoom or fit the current PDF/HTML canvas.","available":true},{"key":"pdfView","label":"PDF view","buttonId":"fx-view-fidelity","description":"Show the PDF fidelity view.","available":true},{"key":"reflow","label":"Reflow","buttonId":"fx-view-reflow","description":"Show the reflowed accessible reading view.","available":true},{"key":"contrast","label":"Contrast","buttonId":"fx-contrast","description":"Toggle high-contrast view.","available":true},{"key":"outline","label":"Outline","buttonId":"fx-outline-open","description":"Open detected headings and page outline.","available":true},{"key":"accessibility","label":"Accessibility","buttonId":"fx-a11y-open","description":"Open accessibility settings for screen reader, spacing, dyslexia, and motion preferences.","available":true},{"key":"summary","label":"AI summary","buttonId":"fx-sum-open","description":"Summarize the document using local grounded passages or a configured endpoint.","available":true},{"key":"explore","label":"Explore content","buttonId":"fx-ex-open","description":"Inspect extracted elements such as text, forms, figures, vectors, and tables.","available":true},{"key":"readAloud","label":"Read aloud","buttonId":"fx-read","description":"Read current page text using browser speech synthesis.","available":true},{"key":"print","label":"Print","buttonId":"fx-print","description":"Print only the embedded original PDF when available.","available":true},{"key":"improve","label":"Improve Document","buttonId":"fx-improve","description":"Compare the original PDF rendering against the generated HTML and ask AI to return higher-fidelity HTML/CSS/IR improvements plus richer search context.","available":true},{"key":"forms","label":"Form actions","buttonIds":["fx-form-reset","fx-form-submit"],"description":"Reset, validate, submit, and synchronize form fields.","available":true},{"key":"translate","label":"Translate","buttonId":"fx-lang-open","description":"Open translation controls when translation is enabled.","available":true},{"key":"download","label":"Download","buttonId":"fx-dl-open","description":"Download accessible HTML, text, JSON, knowledge pack, form data, or completed PDF.","available":true},{"key":"report","label":"Report","buttonId":"fx-fb-open","description":"Open feedback/reporting form.","available":true},{"key":"liveHelp","label":"Live help","buttonId":"fx-live-help","description":"Link to live assistance when configured.","available":true},{"key":"originalLink","label":"Original link","buttonId":"fx-original-link","description":"Open the configured original document URL.","available":true},{"key":"search","label":"Search this document","buttonId":"fx-search","description":"Search document text and highlight matches on the original PDF overlay.","available":true},{"key":"askAi","label":"Ask AI","buttonId":"fx-qa-open","description":"Ask grounded questions over the document retrieval index.","available":true}],"enabled":["original","pageNavigation","zoom","pdfView","reflow","contrast","outline","accessibility","summary","explore","readAloud","print","improve","forms","translate","download","report","liveHelp","originalLink","search","askAi"],"disabled":[],"menu":{"original":true,"pageNavigation":true,"zoom":true,"pdfView":true,"reflow":true,"contrast":true,"outline":true,"accessibility":true,"summary":true,"explore":true,"readAloud":true,"print":true,"improve":true,"forms":true,"translate":true,"download":true,"report":true,"liveHelp":true,"originalLink":true,"search":true,"askAi":true}}}</script>
+<script type="application/json" id="codbdocs-index">[{"p":1,"role":"heading","t":"SDK Rendered Accessible PDF HTML"},{"p":1,"role":"paragraph","t":"Generated by CodbDocs buildFidelityHtml()"},{"p":1,"role":"heading","t":"What you are seeing"},{"p":1,"role":"paragraph","t":"1. This page was rendered by the SDK accessible HTML viewer."},{"p":1,"role":"paragraph","t":"2. The visual PDF layer remains visible."},{"p":1,"role":"paragraph","t":"3. The text layer is searchable, selectable, and reflowable."},{"p":1,"role":"paragraph","t":"Use the toolbar: PDF view, Reflow, Accessibility, Search."},{"p":1,"role":"paragraph","t":"This is the SDK output HTML, saved as a standalone file."},{"p":1,"role":"paragraph","t":"No server or import is needed to view this file."},{"p":1,"role":"form","t":"Sample acknowledgement checkbox"},{"p":2,"role":"heading","t":"SDK Rendered Accessible PDF HTML"},{"p":2,"role":"paragraph","t":"Generated by CodbDocs buildFidelityHtml()"},{"p":2,"role":"heading","t":"What you are seeing"},{"p":2,"role":"paragraph","t":"1. This page was rendered by the SDK accessible HTML viewer."},{"p":2,"role":"paragraph","t":"2. The visual PDF layer remains visible."},{"p":2,"role":"paragraph","t":"3. The text layer is searchable, selectable, and reflowable."},{"p":2,"role":"paragraph","t":"Use the toolbar: PDF view, Reflow, Accessibility, Search."},{"p":2,"role":"paragraph","t":"This is the SDK output HTML, saved as a standalone file."},{"p":2,"role":"paragraph","t":"No server or import is needed to view this file."}]</script>
+<script type="application/json" id="codbdocs-outline">[{"i":1,"level":2,"text":"SDK Rendered Accessible PDF HTML","page":1},{"i":2,"level":2,"text":"What you are seeing","page":1},{"i":3,"level":2,"text":"SDK Rendered Accessible PDF HTML","page":2},{"i":4,"level":2,"text":"What you are seeing","page":2}]</script>
+<script type="application/json" id="codbdocs-rag">null</script>
+<script type="application/json" id="codbdocs-knowledge">{"title":"SDK Rendered Accessible PDF HTML","language":"en","pageCount":2,"documentId":null,"originalName":"sdk-rendered-accessible-pdf.pdf","sourceUrl":"sdk-rendered-accessible-pdf.pdf","permalink":"sdk-rendered-accessible-pdf.html","fingerprint":null,"fidelityRisks":[{"type":"font_substitution","page":null,"detail":"Fonts detected: Arial. Original rendering avoids browser substitution."}],"outline":[{"level":2,"text":"SDK Rendered Accessible PDF HTML","page":1},{"level":2,"text":"What you are seeing","page":1},{"level":2,"text":"SDK Rendered Accessible PDF HTML","page":2},{"level":2,"text":"What you are seeing","page":2}],"headings":4,"figures":[],"vectors":{},"pages":[{"page":1,"label":"Page 1","width":612,"height":792,"hasRaster":true,"summary":"SDK Rendered Accessible PDF HTML Generated by CodbDocs buildFidelityHtml() What you are seeing 1. This page was rendered by the SDK accessible HTML viewer. 2. The visual PDF layer remains visible. 3. The text layer is searchable, selectable, and reflowable. Use the toolbar: PDF view, Reflow, Accessibility, Search. This is the SDK output HTML, saved as a standalone file. No server or import is needed to view this file","accessibility":{"hasText":true,"language":"en","screenReaderText":"SDK Rendered Accessible PDF HTML Generated by CodbDocs buildFidelityHtml() What you are seeing 1. This page was rendered by the SDK accessible HTML viewer. 2. The visual PDF layer remains visible. 3. The text layer is searchable, selectable, and reflowable. Use the toolbar: PDF view, Reflow, Accessibility, Search. This is the SDK output HTML, saved as a standalone file. No server or import is needed to view this file. Sample acknowledgement checkbox"}},{"page":2,"label":"Page 2","width":612,"height":792,"hasRaster":true,"summary":"SDK Rendered Accessible PDF HTML Generated by CodbDocs buildFidelityHtml() What you are seeing 1. This page was rendered by the SDK accessible HTML viewer. 2. The visual PDF layer remains visible. 3. The text layer is searchable, selectable, and reflowable. Use the toolbar: PDF view, Reflow, Accessibility, Search. This is the SDK output HTML, saved as a standalone file. No server or import is needed to view this file","accessibility":{"hasText":true,"language":"en","screenReaderText":"SDK Rendered Accessible PDF HTML Generated by CodbDocs buildFidelityHtml() What you are seeing 1. This page was rendered by the SDK accessible HTML viewer. 2. The visual PDF layer remains visible. 3. The text layer is searchable, selectable, and reflowable. Use the toolbar: PDF view, Reflow, Accessibility, Search. This is the SDK output HTML, saved as a standalone file. No server or import is needed to view this file."}}],"accessibility":null,"conformance":["WCAG 2.1 Level A","WCAG 2.1 Level AA","WCAG 2.2 Level AA minimum","WCAG 2.2 Level AAA enhancements","ADA Title II","Section 508","DOJ 28 CFR Part 35","EN 301 549","California AB 434","California Unruh Act","Colorado HB 21-1110"],"assistiveTechnology":["JAWS","NVDA","VoiceOver (macOS)","VoiceOver (iOS)","TalkBack (Android)","Dragon NaturallySpeaking","Keyboard-only navigation"],"notes":null,"features":{"available":[{"key":"original","label":"Original PDF","buttonId":"fx-pdf-toggle","description":"Toggle between the embedded original PDF canvas and the accessible HTML fidelity view.","available":true},{"key":"pageNavigation","label":"Page navigation","buttonIds":["fx-prev","fx-page-select","fx-next"],"description":"Move between pages and keep thumbnails/current page in sync.","available":true},{"key":"zoom","label":"Zoom","buttonIds":["fx-zoom-out","fx-zoom-in","fx-fit"],"description":"Zoom or fit the current PDF/HTML canvas.","available":true},{"key":"pdfView","label":"PDF view","buttonId":"fx-view-fidelity","description":"Show the PDF fidelity view.","available":true},{"key":"reflow","label":"Reflow","buttonId":"fx-view-reflow","description":"Show the reflowed accessible reading view.","available":true},{"key":"contrast","label":"Contrast","buttonId":"fx-contrast","description":"Toggle high-contrast view.","available":true},{"key":"outline","label":"Outline","buttonId":"fx-outline-open","description":"Open detected headings and page outline.","available":true},{"key":"accessibility","label":"Accessibility","buttonId":"fx-a11y-open","description":"Open accessibility settings for screen reader, spacing, dyslexia, and motion preferences.","available":true},{"key":"summary","label":"AI summary","buttonId":"fx-sum-open","description":"Summarize the document using local grounded passages or a configured endpoint.","available":true},{"key":"explore","label":"Explore content","buttonId":"fx-ex-open","description":"Inspect extracted elements such as text, forms, figures, vectors, and tables.","available":true},{"key":"readAloud","label":"Read aloud","buttonId":"fx-read","description":"Read current page text using browser speech synthesis.","available":true},{"key":"print","label":"Print","buttonId":"fx-print","description":"Print only the embedded original PDF when available.","available":true},{"key":"improve","label":"Improve Document","buttonId":"fx-improve","description":"Compare the original PDF rendering against the generated HTML and ask AI to return higher-fidelity HTML/CSS/IR improvements plus richer search context.","available":true},{"key":"forms","label":"Form actions","buttonIds":["fx-form-reset","fx-form-submit"],"description":"Reset, validate, submit, and synchronize form fields.","available":true},{"key":"translate","label":"Translate","buttonId":"fx-lang-open","description":"Open translation controls when translation is enabled.","available":true},{"key":"download","label":"Download","buttonId":"fx-dl-open","description":"Download accessible HTML, text, JSON, knowledge pack, form data, or completed PDF.","available":true},{"key":"report","label":"Report","buttonId":"fx-fb-open","description":"Open feedback/reporting form.","available":true},{"key":"liveHelp","label":"Live help","buttonId":"fx-live-help","description":"Link to live assistance when configured.","available":true},{"key":"originalLink","label":"Original link","buttonId":"fx-original-link","description":"Open the configured original document URL.","available":true},{"key":"search","label":"Search this document","buttonId":"fx-search","description":"Search document text and highlight matches on the original PDF overlay.","available":true},{"key":"askAi","label":"Ask AI","buttonId":"fx-qa-open","description":"Ask grounded questions over the document retrieval index.","available":true}],"enabled":["original","pageNavigation","zoom","pdfView","reflow","contrast","outline","accessibility","summary","explore","readAloud","print","improve","forms","translate","download","report","liveHelp","originalLink","search","askAi"],"disabled":[],"menu":{"original":true,"pageNavigation":true,"zoom":true,"pdfView":true,"reflow":true,"contrast":true,"outline":true,"accessibility":true,"summary":true,"explore":true,"readAloud":true,"print":true,"improve":true,"forms":true,"translate":true,"download":true,"report":true,"liveHelp":true,"originalLink":true,"search":true,"askAi":true}},"elementCounts":{"heading":4,"text":14,"form":1},"tables":[],"forms":[{"id":"page_1_sample_field","annotationId":null,"dataId":null,"page":null,"name":"sampleAcknowledgement","label":"Sample acknowledgement checkbox","type":"checkbox","value":"","defaultValue":"","optionValue":"Yes","checked":false,"defaultChecked":false,"options":[],"multiple":false,"hidden":false,"maxLength":null,"description":"","xfaOn":null,"xfaOff":null,"required":false,"readOnly":false,"xfa":false,"actions":null,"rules":{"calculations":[],"formats":[],"validations":[],"unsupportedScripts":[]},"url":null,"action":null,"resetForm":null},{"id":"page_1_sample_field","annotationId":"page_1_sample_field","dataId":null,"page":1,"name":"sampleAcknowledgement","label":"Sample acknowledgement checkbox","type":"checkbox","value":"","defaultValue":"","optionValue":"Yes","checked":false,"defaultChecked":false,"options":[],"multiple":false,"hidden":false,"maxLength":null,"description":"","xfaOn":null,"xfaOff":null,"required":false,"readOnly":false,"xfa":false,"actions":null,"rules":{"calculations":[],"formats":[],"validations":[],"unsupportedScripts":[]},"url":null,"action":null,"resetForm":null}],"capabilities":["ask","summarize","describe","alt","translate","retrieve","speak","forms","elements","explainElement","explainPage"],"aiContract":{"version":"1.0","globalObject":"window.CodbDocsAI","readyEvent":"codbdocs:ready","methods":["retrieve","ask","summarize","describe","altText","translate","speak","elements","explainElement","explainPage"],"guidance":"Use retrieve() for grounded passages, then ask() or your own AI endpoint with returned page citations. Use pages[].accessibility.screenReaderText for ADA and screen-reader workflows."}}</script>
+<script type="application/json" id="codbdocs-elements">[{"id":"page_1_title","page":1,"kind":"heading","label":"SDK Rendered Accessible PDF HTML","text":"SDK Rendered Accessible PDF HTML","detail":{"role":"heading","level":2,"fontSize":27}},{"id":"page_1_sub","page":1,"kind":"text","label":"Generated by CodbDocs buildFidelityHtml()","text":"Generated by CodbDocs buildFidelityHtml()","detail":{"role":"paragraph","fontSize":13}},{"id":"page_1_h","page":1,"kind":"heading","label":"What you are seeing","text":"What you are seeing","detail":{"role":"heading","level":2,"fontSize":18}},{"id":"page_1_a","page":1,"kind":"text","label":"1. This page was rendered by the SDK accessible HTML viewer.","text":"1. This page was rendered by the SDK accessible HTML viewer.","detail":{"role":"paragraph","fontSize":14}},{"id":"page_1_b","page":1,"kind":"text","label":"2. The visual PDF layer remains visible.","text":"2. The visual PDF layer remains visible.","detail":{"role":"paragraph","fontSize":14}},{"id":"page_1_c","page":1,"kind":"text","label":"3. The text layer is searchable, selectable, and reflowable.","text":"3. The text layer is searchable, selectable, and reflowable.","detail":{"role":"paragraph","fontSize":14}},{"id":"page_1_d","page":1,"kind":"text","label":"Use the toolbar: PDF view, Reflow, Accessibility, Search.","text":"Use the toolbar: PDF view, Reflow, Accessibility, Search.","detail":{"role":"paragraph","fontSize":15}},{"id":"page_1_e","page":1,"kind":"text","label":"This is the SDK output HTML, saved as a standalone file.","text":"This is the SDK output HTML, saved as a standalone file.","detail":{"role":"paragraph","fontSize":15}},{"id":"page_1_f","page":1,"kind":"text","label":"No server or import is needed to view this file.","text":"No server or import is needed to view this file.","detail":{"role":"paragraph","fontSize":15}},{"id":"page_1_sample_field","page":1,"kind":"form","label":"Sample acknowledgement checkbox","text":"Sample acknowledgement checkbox: ","detail":{"fieldType":"checkbox","fieldName":"sampleAcknowledgement","required":false}},{"id":"page_2_title","page":2,"kind":"heading","label":"SDK Rendered Accessible PDF HTML","text":"SDK Rendered Accessible PDF HTML","detail":{"role":"heading","level":2,"fontSize":27}},{"id":"page_2_sub","page":2,"kind":"text","label":"Generated by CodbDocs buildFidelityHtml()","text":"Generated by CodbDocs buildFidelityHtml()","detail":{"role":"paragraph","fontSize":13}},{"id":"page_2_h","page":2,"kind":"heading","label":"What you are seeing","text":"What you are seeing","detail":{"role":"heading","level":2,"fontSize":18}},{"id":"page_2_a","page":2,"kind":"text","label":"1. This page was rendered by the SDK accessible HTML viewer.","text":"1. This page was rendered by the SDK accessible HTML viewer.","detail":{"role":"paragraph","fontSize":14}},{"id":"page_2_b","page":2,"kind":"text","label":"2. The visual PDF layer remains visible.","text":"2. The visual PDF layer remains visible.","detail":{"role":"paragraph","fontSize":14}},{"id":"page_2_c","page":2,"kind":"text","label":"3. The text layer is searchable, selectable, and reflowable.","text":"3. The text layer is searchable, selectable, and reflowable.","detail":{"role":"paragraph","fontSize":14}},{"id":"page_2_d","page":2,"kind":"text","label":"Use the toolbar: PDF view, Reflow, Accessibility, Search.","text":"Use the toolbar: PDF view, Reflow, Accessibility, Search.","detail":{"role":"paragraph","fontSize":15}},{"id":"page_2_e","page":2,"kind":"text","label":"This is the SDK output HTML, saved as a standalone file.","text":"This is the SDK output HTML, saved as a standalone file.","detail":{"role":"paragraph","fontSize":15}},{"id":"page_2_f","page":2,"kind":"text","label":"No server or import is needed to view this file.","text":"No server or import is needed to view this file.","detail":{"role":"paragraph","fontSize":15}}]</script>
+<script type="application/json" id="codbdocs-forms">[{"id":"page_1_sample_field","annotationId":null,"dataId":null,"page":null,"name":"sampleAcknowledgement","label":"Sample acknowledgement checkbox","type":"checkbox","value":"","defaultValue":"","optionValue":"Yes","checked":false,"defaultChecked":false,"options":[],"multiple":false,"hidden":false,"maxLength":null,"description":"","xfaOn":null,"xfaOff":null,"required":false,"readOnly":false,"xfa":false,"actions":null,"rules":{"calculations":[],"formats":[],"validations":[],"unsupportedScripts":[]},"url":null,"action":null,"resetForm":null},{"id":"page_1_sample_field","annotationId":"page_1_sample_field","dataId":null,"page":1,"name":"sampleAcknowledgement","label":"Sample acknowledgement checkbox","type":"checkbox","value":"","defaultValue":"","optionValue":"Yes","checked":false,"defaultChecked":false,"options":[],"multiple":false,"hidden":false,"maxLength":null,"description":"","xfaOn":null,"xfaOff":null,"required":false,"readOnly":false,"xfa":false,"actions":null,"rules":{"calculations":[],"formats":[],"validations":[],"unsupportedScripts":[]},"url":null,"action":null,"resetForm":null}]</script>
+<script type="application/json" id="codbdocs-xfa">{"pure":false,"pages":[]}</script>
 
 <script>
 (function(){
@@ -1445,7 +647,7 @@ ${backendDataScripts}
       if(!t||!String(t).trim()) return;
       var meta=(c&&c.metadata)||c||{};
       var pnum=Number(meta.page||meta.pageNumber||meta.pageIndex||0)||0;
-      if(!pnum){ var m=/page[_ -]?(\\d+)/i.exec(String((c&&c.id)||'')); if(m) pnum=Number(m[1]); }
+      if(!pnum){ var m=/page[_ -]?(\d+)/i.exec(String((c&&c.id)||'')); if(m) pnum=Number(m[1]); }
       out.push({id:'c'+i,p:pnum,t:String(t),src:'chunk'});
     });
     // Always add the finer-grained text index so results point at a paragraph,
@@ -1456,7 +658,7 @@ ${backendDataScripts}
     if(!out.length){
       [].forEach.call(document.querySelectorAll('.fx-page'),function(page,pi){
         [].forEach.call(page.querySelectorAll('.fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3'),function(el,ei){
-          var t=(el.textContent||'').replace(/\s+/g,' ').trim();
+          var t=(el.textContent||'').replace(/s+/g,' ').trim();
           if(t.length>=20) out.push({id:'d'+pi+'-'+ei,p:Number(page.dataset.page)||pi+1,t:t,src:'dom'});
         });
       });
@@ -1486,11 +688,11 @@ ${backendDataScripts}
     return scored;
   }
   function snippet(text,query){
-    var t=String(text).replace(/\\s+/g,' ').trim();
-    var i=t.toLowerCase().indexOf(String(query).toLowerCase().split(/\\s+/)[0]||'');
+    var t=String(text).replace(/\s+/g,' ').trim();
+    var i=t.toLowerCase().indexOf(String(query).toLowerCase().split(/\s+/)[0]||'');
     if(i<0) i=0;
     var start=Math.max(0,i-90);
-    return (start?'\u2026':'')+t.slice(start,start+260)+(t.length>start+260?'\u2026':'');
+    return (start?'…':'')+t.slice(start,start+260)+(t.length>start+260?'…':'');
   }
 
   // ---- search UI --------------------------------------------------------
@@ -1504,11 +706,11 @@ ${backendDataScripts}
   function openDrawer(){ syncBar(); if(drawer) drawer.setAttribute('data-open','true'); }
   function jumpToText(page,text){
     goto(page||1);
-    var needle=String(text||'').replace(/\\s+/g,' ').trim().slice(0,40).toLowerCase();
+    var needle=String(text||'').replace(/\s+/g,' ').trim().slice(0,40).toLowerCase();
     if(!needle) return;
     var sels='.fx-original-textlayer .fx-text, .fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3';
     var el=[].slice.call(document.querySelectorAll(sels)).filter(function(n){
-      return n.textContent.replace(/\\s+/g,' ').toLowerCase().indexOf(needle.slice(0,24))>=0; })[0];
+      return n.textContent.replace(/\s+/g,' ').toLowerCase().indexOf(needle.slice(0,24))>=0; })[0];
     if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
   }
   function renderResults(q,results){
@@ -1516,11 +718,11 @@ ${backendDataScripts}
     resList.innerHTML='';
     if(!results.length){
       var li=document.createElement('li'); li.className='fx-res-empty';
-      li.textContent='No passage in this document matched \u201C'+q+'\u201D.'; resList.appendChild(li); return; }
+      li.textContent='No passage in this document matched “'+q+'”.'; resList.appendChild(li); return; }
     results.forEach(function(r){
       var li=document.createElement('li'), b=document.createElement('button'); b.type='button';
       var meta=document.createElement('span'); meta.className='fx-res-meta';
-      meta.innerHTML='<span>Page '+(r.pg.p||'\u2014')+'</span><span>relevance '+r.s.toFixed(1)+'</span>';
+      meta.innerHTML='<span>Page '+(r.pg.p||'—')+'</span><span>relevance '+r.s.toFixed(1)+'</span>';
       var txt=document.createElement('span'); txt.className='fx-res-text'; txt.textContent=snippet(r.pg.t,q);
       b.appendChild(meta); b.appendChild(txt);
       b.onclick=function(){ jumpToText(r.pg.p,r.pg.t); };
@@ -1585,7 +787,7 @@ ${backendDataScripts}
   }
   requestAnimationFrame(function(){ fitTextRuns(); });
   // ---- original PDF switch -------------------------------------------
-  var pdfSrc=${JSON.stringify(options.originalPdfSrc || "")}, pdfJsUrl=${JSON.stringify(options.pdfJsUrl || PDFJS_URL)};
+  var pdfSrc="data:application/pdf;base64,JVBERi0xLjcKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCgoyIDAgb2JqCjw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbNCAwIFIgNiAwIFJdIC9Db3VudCAyID4+CmVuZG9iagoKMyAwIG9iago8PCAvVHlwZSAvTWV0YWRhdGEgL1N1YnR5cGUgL1hNTCA+PgpzdHJlYW0KPD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyI+CjxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CjxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyI+CjxkYzp0aXRsZT5TREsgUmVuZGVyZWQgQWNjZXNzaWJsZSBQREYgSFRNTDwvZGM6dGl0bGU+CjwvcmRmOkRlc2NyaXB0aW9uPgo8L3JkZjpSREY+CjwveDp4bXBtZXRhPgplbmRzdHJlYW0KZW5kb2JqCgo0IDAgb2JqCjw8IC9UeXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL01lZGlhQm94IFswIDAgNjEyIDc5Ml0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvQXJpYWwgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgPj4gPj4gPj4gL0NvbnRlbnRzIFs1IDAgUl0gPj4KZW5kb2JqCgo1IDAgb2JqCjw8IC9MZW5ndGggNzYyID4+CnN0cmVhbQpxCkJUCi9GMCAxNSBUZgo5MiAzMjQuMiBUZAooTm8gc2VydmVyIG9yIGltcG9ydCBpcyBuZWVkZWQgdG8gdmlldyB0aGlzIGZpbGUuKSBUagpFVApRCnEKQlQKL0YwIDE1IFRmCjkyIDM1Ni4yIFRkCihUaGlzIGlzIHRoZSBTREsgb3V0cHV0IEhUTUwsIHNhdmVkIGFzIGEgc3RhbmRhbG9uZSBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzODguMiBUZAooVXNlIHRoZSB0b29sYmFyOiBQREYgdmlldywgUmVmbG93LCBBY2Nlc3NpYmlsaXR5LCBTZWFyY2guKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDQ3NS45MiBUZAooMy4gVGhlIHRleHQgbGF5ZXIgaXMgc2VhcmNoYWJsZSwgc2VsZWN0YWJsZSwgYW5kIHJlZmxvd2FibGUuKSBUagpFVApRCnEKQlQKL0YwIDE0IFRmCjkyIDUwNy45MiBUZAooMi4gVGhlIHZpc3VhbCBQREYgbGF5ZXIgcmVtYWlucyB2aXNpYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MzkuOTIgVGQKKDEuIFRoaXMgcGFnZSB3YXMgcmVuZGVyZWQgYnkgdGhlIFNESyBhY2Nlc3NpYmxlIEhUTUwgdmlld2VyLikgVGoKRVQKUQpxCkJUCi9GMCAxOCBUZgo3MiA1ODEuMDQgVGQKKFdoYXQgeW91IGFyZSBzZWVpbmcpIFRqCkVUClEKcQpCVAovRjAgMTMgVGYKNzIgNjc5LjY0IFRkCihHZW5lcmF0ZWQgYnkgQ29kYkRvY3MgYnVpbGRGaWRlbGl0eUh0bWxcKFwpKSBUagpFVApRCnEKQlQKL0YwIDI3IFRmCjcyIDcxMS41NiBUZAooU0RLIFJlbmRlcmVkIEFjY2Vzc2libGUgUERGIEhUTUwpIFRqCkVUClEKZW5kc3RyZWFtCmVuZG9iagoKNiAwIG9iago8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbMCAwIDYxMiA3OTJdIC9SZXNvdXJjZXMgPDwgL0ZvbnQgPDwgL0YwIDw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0FyaWFsIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nID4+ID4+ID4+IC9Db250ZW50cyBbNyAwIFJdID4+CmVuZG9iagoKNyAwIG9iago8PCAvTGVuZ3RoIDc2MiA+PgpzdHJlYW0KcQpCVAovRjAgMTUgVGYKOTIgMzI0LjIgVGQKKE5vIHNlcnZlciBvciBpbXBvcnQgaXMgbmVlZGVkIHRvIHZpZXcgdGhpcyBmaWxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNSBUZgo5MiAzNTYuMiBUZAooVGhpcyBpcyB0aGUgU0RLIG91dHB1dCBIVE1MLCBzYXZlZCBhcyBhIHN0YW5kYWxvbmUgZmlsZS4pIFRqCkVUClEKcQpCVAovRjAgMTUgVGYKOTIgMzg4LjIgVGQKKFVzZSB0aGUgdG9vbGJhcjogUERGIHZpZXcsIFJlZmxvdywgQWNjZXNzaWJpbGl0eSwgU2VhcmNoLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA0NzUuOTIgVGQKKDMuIFRoZSB0ZXh0IGxheWVyIGlzIHNlYXJjaGFibGUsIHNlbGVjdGFibGUsIGFuZCByZWZsb3dhYmxlLikgVGoKRVQKUQpxCkJUCi9GMCAxNCBUZgo5MiA1MDcuOTIgVGQKKDIuIFRoZSB2aXN1YWwgUERGIGxheWVyIHJlbWFpbnMgdmlzaWJsZS4pIFRqCkVUClEKcQpCVAovRjAgMTQgVGYKOTIgNTM5LjkyIFRkCigxLiBUaGlzIHBhZ2Ugd2FzIHJlbmRlcmVkIGJ5IHRoZSBTREsgYWNjZXNzaWJsZSBIVE1MIHZpZXdlci4pIFRqCkVUClEKcQpCVAovRjAgMTggVGYKNzIgNTgxLjA0IFRkCihXaGF0IHlvdSBhcmUgc2VlaW5nKSBUagpFVApRCnEKQlQKL0YwIDEzIFRmCjcyIDY3OS42NCBUZAooR2VuZXJhdGVkIGJ5IENvZGJEb2NzIGJ1aWxkRmlkZWxpdHlIdG1sXChcKSkgVGoKRVQKUQpxCkJUCi9GMCAyNyBUZgo3MiA3MTEuNTYgVGQKKFNESyBSZW5kZXJlZCBBY2Nlc3NpYmxlIFBERiBIVE1MKSBUagpFVApRCmVuZHN0cmVhbQplbmRvYmoKCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU5IDAwMDAwIG4gCjAwMDAwMDAxMjMgMDAwMDAgbiAKMDAwMDAwMDUwNiAwMDAwMCBuIAowMDAwMDAwNzA3IDAwMDAwIG4gCjAwMDAwMDE1MjEgMDAwMDAgbiAKMDAwMDAwMTcyMiAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDggL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjI1MzYKJSVFT0YK", pdfJsUrl="../vendor/pdf.js/pdf.min.js";
   var pdfJsPromise=null, activePdfDocument=null;
   function toBytes(src){
     var i=String(src||'').indexOf('base64,');
@@ -1597,7 +799,7 @@ ${backendDataScripts}
   function configurePdfJs(lib){
     lib=lib&&lib.getDocument?lib:window.pdfjsLib;
     if(!lib||!lib.getDocument) throw new Error('PDF.js did not load.');
-    if(pdfJsUrl&&lib.GlobalWorkerOptions) lib.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\\.min)?\\.js(?:\\?.*)?$/,'pdf.worker$1.js');
+    if(pdfJsUrl&&lib.GlobalWorkerOptions) lib.GlobalWorkerOptions.workerSrc=pdfJsUrl.replace(/pdf(\.min)?\.js(?:\?.*)?$/,'pdf.worker$1.js');
     return lib;
   }
   function loadPdfJs(){
@@ -1662,7 +864,7 @@ ${backendDataScripts}
     function renderOriginal(){
       if(pdfLoaded||pdfLoading) return; pdfLoading=true;
       if(!pdfSrc){ pdfLoading=false; opStatus('No original PDF is embedded in this document.'); return; }
-      opStatus('Rendering the original PDF\u2026');
+      opStatus('Rendering the original PDF…');
       ensurePdfDocument().then(function(doc){
         var host=document.getElementById('fx-op-pages'); if(host) host.textContent='';
         var chain=Promise.resolve();
@@ -1701,7 +903,7 @@ ${backendDataScripts}
           });
         })(n);
         return chain.then(function(){ pdfLoaded=true; pdfLoading=false;
-          opStatus('Original PDF \u2014 '+doc.numPages+' page'+(doc.numPages===1?'':'s')+' rendered with pdf.js.'); });
+          opStatus('Original PDF — '+doc.numPages+' page'+(doc.numPages===1?'':'s')+' rendered with pdf.js.'); });
       }).catch(function(err){
         pdfLoading=false;
         opStatus('The original PDF could not be rendered here ('+(err&&err.message||err)+').');
@@ -1770,7 +972,7 @@ ${backendDataScripts}
         images:[].slice.call(page.querySelectorAll('.fx-img')).map(function(el){ return {alt:el.getAttribute('alt')||'',src:el.getAttribute('src')||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
         vectors:[].slice.call(page.querySelectorAll('.fx-vector-layer svg')).map(function(el){ return el.outerHTML; }),
         forms:[].slice.call(page.querySelectorAll('.fx-form-input')).map(function(el){ return {name:el.dataset.formName||'',type:el.dataset.formType||el.type||'',value:el.value||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
-        readableText:(page.innerText||'').replace(/\\s+/g,' ').trim()
+        readableText:(page.innerText||'').replace(/\s+/g,' ').trim()
       };
     });
   }
@@ -1786,7 +988,7 @@ ${backendDataScripts}
       'Preserve accessibility, searchable text, form semantics, ARIA labels, keyboard behavior, and WCAG/ADA overlays while improving visual fidelity.',
       'Use knowledge, elements, index, outline, forms, and rag to enrich search/retrieval context and produce better grounded results.',
       'Return structured JSON with: summary, visualFindings, searchContextFindings, htmlPatches, cssPatches, irPatches, replacementHtml if available, updatedKnowledge, and citations/page references for every change.'
-    ].join('\\n');
+    ].join('\n');
   }
   function improveDocument(){
     var detail={
@@ -2254,7 +1456,7 @@ ${backendDataScripts}
   function docLanguage(){ return document.documentElement.lang||'en'; }
   function endpointUrl(){ return cfg.qaEndpoint||cfg.aiEndpoint||null; }
   function transcriptText(limit){
-    var t=(index||[]).map(function(e){ return e.t; }).join('\\n');
+    var t=(index||[]).map(function(e){ return e.t; }).join('\n');
     return limit? t.slice(0,limit) : t;
   }
   function callAI(payload){
@@ -2281,7 +1483,7 @@ ${backendDataScripts}
   function localAnswer(q){
     var r=retrieve(q,4);
     if(!r.length) return null;
-    return r.map(function(x){ return 'Page '+(x.pg.p||'\u2014')+': '+snippet(x.pg.t,q); }).join('\\n\\n');
+    return r.map(function(x){ return 'Page '+(x.pg.p||'—')+': '+snippet(x.pg.t,q); }).join('\n\n');
   }
   function showSources(container,results){
     if(!results.length) return;
@@ -2290,7 +1492,7 @@ ${backendDataScripts}
     var seen={};
     results.filter(function(r){ var k=r.pg.p||0; if(seen[k]) return false; seen[k]=1; return true; }).forEach(function(r){
       var b=document.createElement('button'); b.type='button'; b.className='fx-chip';
-      b.textContent='Page '+(r.pg.p||'\u2014');
+      b.textContent='Page '+(r.pg.p||'—');
       b.onclick=function(){ jumpToText(r.pg.p,r.pg.t); closeDialog(); };
       p.appendChild(b); });
     container.appendChild(p);
@@ -2312,7 +1514,7 @@ ${backendDataScripts}
         .catch(function(err){
           var a=localAnswer(q);
           if(!a) throw err;
-          return {answer:'The AI assistant is unavailable, so here are the closest passages:\\n\\n'+a,
+          return {answer:'The AI assistant is unavailable, so here are the closest passages:\n\n'+a,
             citations:[],passages:top,offline:true}; });
     },
     summarize:function(){
@@ -2352,7 +1554,7 @@ ${backendDataScripts}
         .then(function(d){ return d.answer; })
         .catch(function(err){
           if(el.text) return 'The AI assistant is unavailable. Here is the content of this '+el.kind+
-            ' on page '+el.page+':\\n\\n'+el.text;
+            ' on page '+el.page+':\n\n'+el.text;
           throw err; });
     },
     explainPage:function(n){
@@ -2375,7 +1577,7 @@ ${backendDataScripts}
     e.preventDefault();
     var q=document.getElementById('fx-qa-input').value.trim(); if(!q) return;
     qaOut.hidden=false; qaOut.setAttribute('aria-busy','true');
-    qaOut.textContent='Reading this document\u2026'; say('Asking the document assistant.');
+    qaOut.textContent='Reading this document…'; say('Asking the document assistant.');
     AI.ask(q).then(function(res){
       qaOut.textContent=res.answer||'No answer was returned.';
       qaOut.removeAttribute('aria-busy');
@@ -2395,7 +1597,7 @@ ${backendDataScripts}
   var sumBtn=document.getElementById('fx-sum-run'), sumOut=document.getElementById('fx-sum-out');
   if(sumBtn) sumBtn.onclick=function(){
     sumOut.hidden=false; sumOut.setAttribute('aria-busy','true');
-    sumOut.textContent='Reading the whole document\u2026';
+    sumOut.textContent='Reading the whole document…';
     AI.summarize().then(function(a){ sumOut.removeAttribute('aria-busy');
       sumOut.textContent=a||'No summary was returned.';
       var play=document.createElement('button'); play.type='button'; play.className='fx-chip';
@@ -2409,7 +1611,7 @@ ${backendDataScripts}
   var sumPage=document.getElementById('fx-sum-page');
   if(sumPage) sumPage.onclick=function(){
     sumOut.hidden=false; sumOut.setAttribute('aria-busy','true');
-    sumOut.textContent='Reading page '+current+'\u2026';
+    sumOut.textContent='Reading page '+current+'…';
     AI.explainPage(current).then(function(a){ sumOut.removeAttribute('aria-busy');
       sumOut.textContent=a||'No summary was returned.'; say('Page summary ready.');
     }).catch(function(err){ sumOut.removeAttribute('aria-busy');
@@ -2435,13 +1637,13 @@ ${backendDataScripts}
       if(fid!==null&&fid!==undefined&&!eid){
         var out=document.querySelector('.fx-desc-out[data-fig="'+fid+'"]');
         var fig=(AI.figures().filter(function(f){ return f.id===fid; })[0])||{id:fid};
-        runExplain(btn,out,'Describing this image\u2026',function(a){
+        runExplain(btn,out,'Describing this image…',function(a){
           var host=btn.closest('figure'); var img=host&&host.querySelector('img');
           if(img&&a) img.setAttribute('alt',String(a).slice(0,150)); })(AI.describe(fig));
         return;
       }
       var eout=document.querySelector('.fx-desc-out[data-explain="'+eid+'"]');
-      runExplain(btn,eout,'Explaining this item\u2026')(AI.explainElement(eid));
+      runExplain(btn,eout,'Explaining this item…')(AI.explainElement(eid));
     };
   });
 
@@ -2482,10 +1684,10 @@ ${backendDataScripts}
       chip('Read aloud',function(){ AI.speak(el.text||el.label); });
       var out=document.createElement('p'); out.className='fx-desc-out'; out.hidden=true;
       out.setAttribute('role','status'); out.setAttribute('aria-live','polite');
-      var ex=chip('Explain with AI',function(){ runExplain(ex,out,'Explaining this '+el.kind+'\u2026')(AI.explainElement(el)); });
+      var ex=chip('Explain with AI',function(){ runExplain(ex,out,'Explaining this '+el.kind+'…')(AI.explainElement(el)); });
       if(el.kind==='image'||el.kind==='chart'){
         var alt=chip('Write alt text',function(){
-          runExplain(alt,out,'Writing alt text\u2026')(AI.altText(el)); });
+          runExplain(alt,out,'Writing alt text…')(AI.altText(el)); });
       }
       li.appendChild(actions); li.appendChild(out);
       if(el.kind==='table'&&el.text){
@@ -2512,7 +1714,7 @@ ${backendDataScripts}
   if(trBtn) trBtn.onclick=function(){
     var target=(document.getElementById('fx-ai-lang')||{}).value||'';
     if(!target.trim()){ if(trOut){ trOut.hidden=false; trOut.textContent='Type the language you need first.'; } return; }
-    trOut.hidden=false; trOut.setAttribute('aria-busy','true'); trOut.textContent='Translating this document\u2026';
+    trOut.hidden=false; trOut.setAttribute('aria-busy','true'); trOut.textContent='Translating this document…';
     AI.translate(target).then(function(a){ trOut.removeAttribute('aria-busy');
       trOut.textContent=a||'No translation was returned.';
       say('Translation into '+target+' is ready.');
@@ -2589,7 +1791,7 @@ ${backendDataScripts}
       page:current, documentId:cfg.documentId, title:cfg.title, url:location.href};
     fbOut.hidden=false;
     if(cfg.feedbackEndpoint){
-      fbOut.textContent='Sending your report\u2026';
+      fbOut.textContent='Sending your report…';
       fetch(cfg.feedbackEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload)})
         .then(function(r){ fbOut.textContent=r.ok
@@ -2598,7 +1800,7 @@ ${backendDataScripts}
         .catch(function(){ fbOut.textContent='The report could not be sent. Please try again later.'; });
     } else if(cfg.feedbackEmail){
       location.href='mailto:'+cfg.feedbackEmail+'?subject='+encodeURIComponent('Accessibility issue: '+cfg.title)
-        +'&body='+encodeURIComponent(payload.kind+'\\n\\n'+payload.detail+'\\n\\nPage '+payload.page+'\\n'+payload.url);
+        +'&body='+encodeURIComponent(payload.kind+'\n\n'+payload.detail+'\n\nPage '+payload.page+'\n'+payload.url);
       fbOut.textContent='Your email app has been opened with the report.';
     } else {
       fbOut.textContent='No reporting address is configured for this document.';
@@ -2608,12 +1810,6 @@ ${backendDataScripts}
   fitWidth();
   goto(1);
 })();
-<\/script>
+</script>
 </body>
-</html>`;
-}
-export {
-  buildFidelityHtml,
-  newDocCtx
-};
-import { parseAcrobatFormRules } from './formrules.js';
+</html>
