@@ -865,7 +865,7 @@ var CodbDocs = (() => {
       { key: "explore", label: "Explore content", buttonId: "fx-ex-open", description: "Inspect extracted elements such as text, forms, figures, vectors, and tables." },
       { key: "readAloud", label: "Read aloud", buttonId: "fx-read", description: "Read current page text using browser speech synthesis." },
       { key: "print", label: "Print", buttonId: "fx-print", description: "Print only the embedded original PDF when available." },
-      { key: "improve", label: "Improve Document", buttonId: "fx-improve", description: "Emit document improvement data or call a configured improvement endpoint." },
+      { key: "improve", label: "Improve Document", buttonId: "fx-improve", description: "Compare the original PDF rendering against the generated HTML and ask AI to return higher-fidelity HTML/CSS/IR improvements plus richer search context." },
       { key: "forms", label: "Form actions", buttonIds: ["fx-form-reset", "fx-form-submit"], description: "Reset, validate, submit, and synchronize form fields." },
       { key: "translate", label: "Translate", buttonId: "fx-lang-open", description: "Open translation controls when translation is enabled." },
       { key: "download", label: "Download", buttonId: "fx-dl-open", description: "Download accessible HTML, text, JSON, knowledge pack, form data, or completed PDF." },
@@ -896,6 +896,7 @@ var CodbDocs = (() => {
     const manifestFeatures = featureDefinitions.map((feature) => ({ ...feature, available: featureAvailability[feature.key] !== false }));
     const menuFeatures = Object.fromEntries(manifestFeatures.map((feature) => [feature.key, featureEnabled(feature.key, feature.available)]));
     const featureManifest = { available: manifestFeatures, enabled: manifestFeatures.filter((feature) => menuFeatures[feature.key]).map((feature) => feature.key), disabled: manifestFeatures.filter((feature) => !menuFeatures[feature.key]).map((feature) => feature.key), menu: menuFeatures };
+    const showOriginalPdf = Boolean(options.originalPdfSrc && menuFeatures.original);
     const outlineHtml = ctx.outline.length ? ctx.outline.map(
       (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
     ).join("") : `<li class="fx-ol-empty">No headings were detected in this document.</li>`;
@@ -910,6 +911,7 @@ var CodbDocs = (() => {
       feedbackEndpoint: options.feedbackEndpoint || null,
       feedbackEmail: options.feedbackEmail || null,
       formSubmitEndpoint: options.formSubmitEndpoint || null,
+      improveMaxPages: Number.isFinite(Number(options.improveMaxPages)) ? Math.max(1, Number(options.improveMaxPages)) : 20,
       allowPdfSubmitActions: options.allowPdfSubmitActions === true,
       formRules: options.formRules || null,
       originalUrl: options.originalUrl || null,
@@ -1317,7 +1319,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     <span class="fx-brand-mark" aria-hidden="true">CD</span>
     <div class="fx-title-row">
       <h1>${esc(title)}</h1>
-      ${options.originalPdfSrc && menuFeatures.original ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
+      ${showOriginalPdf ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
     </div>
   </div>
   ${menuFeatures.pageNavigation ? `<nav class="fx-group" aria-label="Page navigation">
@@ -1376,12 +1378,12 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
 <div class="fx-shell">
   ${showThumbs ? `<nav class="fx-rail" aria-label="Page thumbnails"><ul>${thumbs}</ul></nav>` : ""}
   <main class="fx-stage" id="fx-content" role="main" tabindex="-1">
-    ${options.originalPdfSrc ? `<section id="fx-original" class="fx-original" aria-label="Original PDF">
+    ${showOriginalPdf ? `<section id="fx-original" class="fx-original" aria-label="Original PDF">
       <p class="fx-status" id="fx-op-status" aria-live="polite">The original PDF is rendered here with pdf.js.</p>
       <div id="fx-op-pages" role="group" aria-label="Original PDF pages"></div>
       <p class="fx-note">This is the unmodified original PDF with CodbDocs search, readability, forms and WCAG support layered from the accessible document model.</p>
     </section>` : ""}
-    <div id="fx-accessible" ${options.originalPdfSrc ? "hidden" : ""}>
+    <div id="fx-accessible" ${showOriginalPdf ? "hidden" : ""}>
     ${body}
     </div>
   </main>
@@ -1899,8 +1901,71 @@ ${backendDataScripts}
   var elements=readJson('codbdocs-elements')||[];
   var formDefinitions=readJson('codbdocs-forms')||[];
   var xfaData=readJson('codbdocs-xfa')||{pages:[]};
+  function boxFor(el,relativeTo){
+    if(!el||!el.getBoundingClientRect) return null;
+    var rect=el.getBoundingClientRect(), base=relativeTo&&relativeTo.getBoundingClientRect?relativeTo.getBoundingClientRect():{left:0,top:0};
+    return {left:rect.left-base.left,top:rect.top-base.top,width:rect.width,height:rect.height,right:rect.right-base.left,bottom:rect.bottom-base.top};
+  }
+  function improvePageLimit(){ return Math.max(1, Number(cfg.improveMaxPages)||20); }
+  function canvasPreview(canvas){
+    if(!canvas) return null;
+    try{
+      var max=900, scale=Math.min(1,max/Math.max(canvas.width,canvas.height));
+      if(scale>=1) return canvas.toDataURL('image/png');
+      var out=document.createElement('canvas'); out.width=Math.max(1,Math.round(canvas.width*scale)); out.height=Math.max(1,Math.round(canvas.height*scale));
+      var ctx=out.getContext('2d'); ctx.drawImage(canvas,0,0,out.width,out.height);
+      return out.toDataURL('image/png');
+    }catch(e){ return null; }
+  }
+  function collectOriginalPageContext(){
+    var nodes=[].slice.call(document.querySelectorAll('#fx-op-pages [data-original-page]'));
+    return nodes.slice(0,improvePageLimit()).map(function(page){
+      var n=Number(page.dataset.originalPage)||0, wrap=page.querySelector('.fx-op-canvas-wrap'), canvas=page.querySelector('canvas');
+      return {
+        page:n,
+        size:{width:wrap?wrap.offsetWidth:0,height:wrap?wrap.offsetHeight:0,canvasWidth:canvas?canvas.width:0,canvasHeight:canvas?canvas.height:0},
+        box:boxFor(wrap),
+        renderedImage:canvasPreview(canvas),
+        textOverlay:[].slice.call(page.querySelectorAll('.fx-original-textlayer .fx-text')).map(function(el){ return {text:el.textContent||'',box:boxFor(el,wrap),style:el.getAttribute('style')||''}; }),
+        searchHitBoxes:[].slice.call(page.querySelectorAll('.fx-original-hitbox')).map(function(el){ return boxFor(el,wrap); })
+      };
+    });
+  }
+  function collectHtmlPageContext(){
+    return pages.slice(0,improvePageLimit()).map(function(page,n){
+      var canvas=page.querySelector('.fx-canvas');
+      return {
+        page:n+1,
+        size:{width:parseFloat(getComputedStyle(page).getPropertyValue('--pw'))||page.offsetWidth,height:parseFloat(getComputedStyle(page).getPropertyValue('--ph'))||page.offsetHeight,zoom:zoom},
+        pageBox:boxFor(page),
+        canvasBox:boxFor(canvas),
+        html:page.outerHTML,
+        text:[].slice.call(page.querySelectorAll('.fx-text')).map(function(el){ return {text:el.textContent||'',box:boxFor(el,canvas),style:el.getAttribute('style')||'',fontSize:getComputedStyle(el).fontSize,lineHeight:getComputedStyle(el).lineHeight}; }),
+        images:[].slice.call(page.querySelectorAll('.fx-img')).map(function(el){ return {alt:el.getAttribute('alt')||'',src:el.getAttribute('src')||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
+        vectors:[].slice.call(page.querySelectorAll('.fx-vector-layer svg')).map(function(el){ return el.outerHTML; }),
+        forms:[].slice.call(page.querySelectorAll('.fx-form-input')).map(function(el){ return {name:el.dataset.formName||'',type:el.dataset.formType||el.type||'',value:el.value||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
+        readableText:(page.innerText||'').replace(/\\s+/g,' ').trim()
+      };
+    });
+  }
+  function improveOmittedCounts(){
+    var rendered=document.querySelectorAll('#fx-op-pages [data-original-page]').length, limit=improvePageLimit();
+    return {pageLimit:limit,originalPagesOmitted:Math.max(0,rendered-limit),htmlPagesOmitted:Math.max(0,pages.length-limit)};
+  }
+  function buildImprovePrompt(){
+    return [
+      'You are improving a CodbDocs PDF-to-HTML conversion.',
+      'Compare originalPdf.pages[].renderedImage and originalPdf.pages[].textOverlay against convertedHtml.pages[].html/text/images/vectors/forms.',
+      'Update the generated HTML/CSS/IR so the accessible HTML fidelity view visually matches the original PDF as precisely as possible: page size, margins, text baselines, font sizing, line breaks, images, vectors, form positions, stacking order, and spacing.',
+      'Preserve accessibility, searchable text, form semantics, ARIA labels, keyboard behavior, and WCAG/ADA overlays while improving visual fidelity.',
+      'Use knowledge, elements, index, outline, forms, and rag to enrich search/retrieval context and produce better grounded results.',
+      'Return structured JSON with: summary, visualFindings, searchContextFindings, htmlPatches, cssPatches, irPatches, replacementHtml if available, updatedKnowledge, and citations/page references for every change.'
+    ].join('\\n');
+  }
   function improveDocument(){
     var detail={
+      action:'compare-original-pdf-and-update-html-fidelity',
+      prompt:buildImprovePrompt(),
       documentId:cfg.documentId||null,
       title:cfg.title||null,
       originalUrl:cfg.originalUrl||null,
@@ -1908,10 +1973,15 @@ ${backendDataScripts}
       fingerprint:cfg.fingerprint||null,
       fidelityRisks:cfg.fidelityRisks||[],
       accessibility:{overlay:true,wcag:'WCAG 2.2 AA minimum with AAA enhancements',ada:'ADA Title II support target',complianceNote:'Automated checks and overlays target AA minimum but cannot guarantee legal compliance without human review and assistive-technology testing.'},
-      comparison:{original:'embedded-pdf',converted:'accessible-html',goal:'visual parity plus WCAG/readability overlay'},
+      comparison:{original:'embedded-pdf-rendered-by-pdfjs',converted:'generated-accessible-html',goal:'update the HTML/CSS/IR conversion to look more like the original PDF while preserving accessibility and improving search/RAG context'},
+      originalPdf:{embedded:!!pdfSrc,sourceUrl:cfg.originalUrl||null,pages:collectOriginalPageContext()},
+      convertedHtml:{view:root.dataset.view||'fidelity',zoom:zoom,pageCount:pages.length,pages:collectHtmlPageContext(),documentSkeleton:{title:document.title,lang:document.documentElement.lang||'',features:cfg.features||null}},
+      omitted:improveOmittedCounts(),
       knowledge:knowledge,
       elements:elements,
       index:index,
+      outline:outline,
+      forms:formDefinitions,
       rag:ragData
     };
     var event=new CustomEvent('codbdocs:improve',{detail:detail,cancelable:true});

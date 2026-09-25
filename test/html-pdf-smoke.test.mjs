@@ -104,6 +104,50 @@ test('HTML PDF smoke page defaults to original canvas without text overflow', as
     assert.ok(Math.abs(initial.rasterTextOrigin.top - initial.textBoxes[0].top) <= 2, 'original raster text should align vertically with HTML overlay');
     assert.ok(Math.abs(initial.rasterTextOrigin.left - initial.textBoxes[0].left) <= 3, 'original raster text should align horizontally with HTML overlay');
 
+    const improvePayloadPromise = page.evaluate(() => new Promise((resolve) => {
+      document.addEventListener('codbdocs:improve', (event) => {
+        event.preventDefault();
+        const detail = event.detail;
+        resolve({
+          action: detail.action,
+          prompt: detail.prompt,
+          comparison: detail.comparison,
+          originalPages: detail.originalPdf.pages.length,
+          originalImage: detail.originalPdf.pages[0].renderedImage,
+          originalOverlayText: detail.originalPdf.pages[0].textOverlay.map((item) => item.text).join(' '),
+          convertedPages: detail.convertedHtml.pages.length,
+          convertedHtml: detail.convertedHtml.pages[0].html,
+          convertedTextCount: detail.convertedHtml.pages[0].text.length,
+          hasDocumentSkeleton: detail.convertedHtml.documentSkeleton.title === 'CodbDocs HTML PDF Smoke Test',
+          includesRawPdfSrc: Boolean(detail.originalPdf.src),
+          omitted: detail.omitted,
+          hasKnowledge: Boolean(detail.knowledge && detail.knowledge.features),
+          hasIndex: Array.isArray(detail.index) && detail.index.length > 0,
+          hasOutline: Array.isArray(detail.outline),
+          hasForms: Array.isArray(detail.forms),
+        });
+      }, { once: true });
+    }));
+    await page.click('#fx-improve');
+    const improvePayload = await improvePayloadPromise;
+    assert.equal(improvePayload.action, 'compare-original-pdf-and-update-html-fidelity');
+    assert.match(improvePayload.prompt, /Compare originalPdf\.pages\[\]\.renderedImage/);
+    assert.match(improvePayload.prompt, /Update the generated HTML\/CSS\/IR/);
+    assert.match(improvePayload.comparison.goal, /look more like the original PDF/);
+    assert.equal(improvePayload.originalPages, 1);
+    assert.match(improvePayload.originalImage, /^data:image\/png;base64,/);
+    assert.match(improvePayload.originalOverlayText, /CodbDocs HTML PDF Smoke Test/);
+    assert.equal(improvePayload.convertedPages, 1);
+    assert.match(improvePayload.convertedHtml, /fx-page-1/);
+    assert.ok(improvePayload.convertedTextCount >= 6);
+    assert.equal(improvePayload.hasDocumentSkeleton, true);
+    assert.equal(improvePayload.includesRawPdfSrc, false);
+    assert.equal(improvePayload.omitted.pageLimit, 20);
+    assert.equal(improvePayload.hasKnowledge, true);
+    assert.equal(improvePayload.hasIndex, true);
+    assert.equal(improvePayload.hasOutline, true);
+    assert.equal(improvePayload.hasForms, true);
+
     for (const box of initial.textBoxes) {
       assert.ok(box.left >= -1, `${box.text} overflows left`);
       assert.ok(box.top >= -1, `${box.text} overflows top`);
@@ -253,7 +297,7 @@ test('generated viewer can disable menu features and exposes feature manifest', 
 
     await page.goto(`file:///${examplePath.replace(/\\/g, '/')}`);
     await page.waitForFunction(() => window.CodbDocs && window.CodbDocs.buildFidelityHtml);
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const ir = {
         version: '1.0',
         document: { id: 'feature-menu-test', title: 'Feature Menu Test', metadata: { title: 'Feature Menu Test', language: 'en' }, pages: ['page_1'] },
@@ -276,9 +320,15 @@ test('generated viewer can disable menu features and exposes feature manifest', 
         vectors: {},
         forms: { fields: [], byName: {} },
       };
+      const pdfBytes = await window.CodbDocs.createPDF(ir, { level: 2 });
+      let binary = '';
+      for (let i = 0; i < pdfBytes.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, pdfBytes.slice(i, i + 0x8000));
+      }
       const html = window.CodbDocs.buildFidelityHtml(ir, {
         title: 'Feature Menu Test',
-        disabledFeatures: ['print', 'askAi', 'outline', 'search', 'zoom', 'pageNavigation', 'summary'],
+        originalPdfSrc: 'data:application/pdf;base64,' + btoa(binary),
+        disabledFeatures: ['print', 'askAi', 'outline', 'search', 'zoom', 'pageNavigation', 'summary', 'original'],
       });
       document.open();
       document.write(html);
@@ -298,6 +348,9 @@ test('generated viewer can disable menu features and exposes feature manifest', 
           zoomIn: Boolean(document.querySelector('#fx-zoom-in')),
           pageSelect: Boolean(document.querySelector('#fx-page-select')),
           summary: Boolean(document.querySelector('#fx-sum-open')),
+          originalToggle: Boolean(document.querySelector('#fx-pdf-toggle')),
+          originalPane: Boolean(document.querySelector('#fx-original')),
+          accessibleHidden: document.querySelector('#fx-accessible')?.hidden,
           accessibility: Boolean(document.querySelector('#fx-a11y-open')),
         },
         configFeatures: readJson('codbdocs-config').features,
@@ -314,9 +367,12 @@ test('generated viewer can disable menu features and exposes feature manifest', 
       zoomIn: false,
       pageSelect: false,
       summary: false,
+      originalToggle: false,
+      originalPane: false,
+      accessibleHidden: false,
       accessibility: true,
     });
-    for (const feature of ['print', 'askAi', 'outline', 'search', 'zoom', 'pageNavigation', 'summary']) {
+    for (const feature of ['print', 'askAi', 'outline', 'search', 'zoom', 'pageNavigation', 'summary', 'original']) {
       assert.equal(state.configFeatures.menu[feature], false, `${feature} should be disabled in config`);
       assert.ok(state.configFeatures.disabled.includes(feature), `${feature} should be listed as disabled`);
       assert.equal(state.knowledgeFeatures.menu[feature], false, `${feature} should be disabled in knowledge pack`);
