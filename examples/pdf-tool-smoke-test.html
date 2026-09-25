@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodbDocs HTML PDF Smoke Test</title>
+</head>
+<body>
+  <script src="../packages/core/dist/codbdocs.js"></script>
+  <script>
+    function createSmokeTestIR() {
+      const details = {
+        version: CodbDocs.version,
+        generatedAt: new Date().toLocaleString()
+      };
+
+      const lines = [
+        { text: 'CodbDocs HTML PDF Smoke Test', size: 22, x: 72, y: 720, width: 338, role: 'heading' },
+        { text: 'This page is rendered by the real SDK HTML PDF viewer.', size: 12, x: 72, y: 680, width: 314, role: 'paragraph' },
+        { text: 'The Original PDF toggle is on by default next to the file name.', size: 12, x: 72, y: 660, width: 348, role: 'paragraph' },
+        { text: 'Search, page navigation, zoom, accessibility tools, download,', size: 12, x: 72, y: 640, width: 372, role: 'paragraph' },
+        { text: 'and reflow controls stay available over the original canvas.', size: 12, x: 72, y: 620, width: 348, role: 'paragraph' },
+        { text: 'This line intentionally ends before the page margin.', size: 12, x: 72, y: 580, width: 294, role: 'paragraph' },
+        { text: 'Bundle version: ' + details.version, size: 12, x: 72, y: 540, width: 150, role: 'paragraph' },
+        { text: 'Generated at: ' + details.generatedAt, size: 12, x: 72, y: 520, width: 232, role: 'paragraph' }
+      ];
+
+      const ir = {
+        version: '1.0',
+        document: {
+          id: 'html-pdf-smoke-test',
+          title: 'CodbDocs HTML PDF Smoke Test',
+          metadata: { title: 'CodbDocs HTML PDF Smoke Test', language: 'en' },
+          pages: ['page_1']
+        },
+        pages: {
+          page_1: {
+            id: 'page_1',
+            num: 1,
+            width: 612,
+            height: 792,
+            rotation: 0,
+            mediaBox: [0, 0, 612, 792],
+            content: lines.map((_, index) => 'text_' + index),
+            vectors: [],
+            images: [],
+            annotations: []
+          }
+        },
+        objects: {},
+        structure: {},
+        annotations: {},
+        vectors: {},
+        forms: { fields: [], byName: {} }
+      };
+
+      lines.forEach((line, index) => {
+        ir.objects['text_' + index] = {
+          id: 'text_' + index,
+          type: 'text',
+          page: 'page_1',
+          raw: {
+            text: line.text,
+            font: 'Helvetica',
+            fontSize: line.size,
+            color: [0, 0, 0],
+            transform: [line.size, 0, 0, line.size, line.x, line.y]
+          },
+          semantic: { role: line.role, text: line.text },
+          accessibility: { role: line.role === 'heading' ? 'H1' : 'P' },
+          bbox: [line.x, line.y, line.width, line.size + 4]
+        };
+      });
+
+      return ir;
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, bytes.slice(i, i + 0x8000));
+      }
+      return btoa(binary);
+    }
+
+    (async function renderSmokeTest() {
+      try {
+        const ir = createSmokeTestIR();
+        const pdfBytes = await CodbDocs.createPDF(ir, { level: 2 });
+        const originalPdfSrc = 'data:application/pdf;base64,' + bytesToBase64(pdfBytes);
+        const html = CodbDocs.buildFidelityHtml(ir, {
+          title: 'CodbDocs HTML PDF Smoke Test',
+          originalPdfSrc,
+          pdfJsUrl: '../vendor/pdf.js/pdf.min.js',
+          thumbnails: true,
+          showDataControls: true
+        });
+
+        document.open();
+        document.write(html);
+        document.close();
+      } catch (error) {
+        document.body.innerHTML = '<pre>Failed to render HTML PDF viewer: ' + error.message + '</pre>';
+        throw error;
+      }
+    }());
+  </script>
+</body>
+</html>

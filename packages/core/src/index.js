@@ -1991,9 +1991,12 @@ async function renderPageToCanvas(page, scale) {
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
+export const version = '0.1.1';
+
 export { load, configure, canUseWorkers };
 export { extractXfaFormFields };
 export const CodbDocs = {
+  version,
   load,
   configure,
   canUseWorkers,

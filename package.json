@@ -1,12 +1,13 @@
 {
   "name": "codbdocs",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browser document-processing platform: PDF text extraction + OCR, framework-agnostic core with React bindings.",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "test:browser": "node --test test/browser-only.test.mjs",
     "test:visual": "node test/visual/compare-pdf-html.mjs"
   },

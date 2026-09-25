@@ -170,6 +170,7 @@ var CodbDocs = (() => {
     toRgb: () => toRgb,
     trackXObjectReuse: () => trackXObjectReuse,
     validateTags: () => validateTags,
+    version: () => version,
     wcagAudit: () => wcagAudit,
     wordNGrams: () => wordNGrams
   });
@@ -851,6 +852,50 @@ var CodbDocs = (() => {
     const rag = options.rag || null;
     const translate = options.translate === true;
     const priority = (_i = options.priorityLanguages) != null ? _i : [];
+    const featureDefinitions = [
+      { key: "original", label: "Original PDF", buttonId: "fx-pdf-toggle", description: "Toggle between the embedded original PDF canvas and the accessible HTML fidelity view." },
+      { key: "pageNavigation", label: "Page navigation", buttonIds: ["fx-prev", "fx-page-select", "fx-next"], description: "Move between pages and keep thumbnails/current page in sync." },
+      { key: "zoom", label: "Zoom", buttonIds: ["fx-zoom-out", "fx-zoom-in", "fx-fit"], description: "Zoom or fit the current PDF/HTML canvas." },
+      { key: "pdfView", label: "PDF view", buttonId: "fx-view-fidelity", description: "Show the PDF fidelity view." },
+      { key: "reflow", label: "Reflow", buttonId: "fx-view-reflow", description: "Show the reflowed accessible reading view." },
+      { key: "contrast", label: "Contrast", buttonId: "fx-contrast", description: "Toggle high-contrast view." },
+      { key: "outline", label: "Outline", buttonId: "fx-outline-open", description: "Open detected headings and page outline." },
+      { key: "accessibility", label: "Accessibility", buttonId: "fx-a11y-open", description: "Open accessibility settings for screen reader, spacing, dyslexia, and motion preferences." },
+      { key: "summary", label: "AI summary", buttonId: "fx-sum-open", description: "Summarize the document using local grounded passages or a configured endpoint." },
+      { key: "explore", label: "Explore content", buttonId: "fx-ex-open", description: "Inspect extracted elements such as text, forms, figures, vectors, and tables." },
+      { key: "readAloud", label: "Read aloud", buttonId: "fx-read", description: "Read current page text using browser speech synthesis." },
+      { key: "print", label: "Print", buttonId: "fx-print", description: "Print only the embedded original PDF when available." },
+      { key: "improve", label: "Improve Document", buttonId: "fx-improve", description: "Emit document improvement data or call a configured improvement endpoint." },
+      { key: "forms", label: "Form actions", buttonIds: ["fx-form-reset", "fx-form-submit"], description: "Reset, validate, submit, and synchronize form fields." },
+      { key: "translate", label: "Translate", buttonId: "fx-lang-open", description: "Open translation controls when translation is enabled." },
+      { key: "download", label: "Download", buttonId: "fx-dl-open", description: "Download accessible HTML, text, JSON, knowledge pack, form data, or completed PDF." },
+      { key: "report", label: "Report", buttonId: "fx-fb-open", description: "Open feedback/reporting form." },
+      { key: "liveHelp", label: "Live help", buttonId: "fx-live-help", description: "Link to live assistance when configured." },
+      { key: "originalLink", label: "Original link", buttonId: "fx-original-link", description: "Open the configured original document URL." },
+      { key: "search", label: "Search this document", buttonId: "fx-search", description: "Search document text and highlight matches on the original PDF overlay." },
+      { key: "askAi", label: "Ask AI", buttonId: "fx-qa-open", description: "Ask grounded questions over the document retrieval index." }
+    ];
+    const featureInput = { ...options.features || {}, ...options.menuItems || {} };
+    const disabledFeatureSet = new Set([...(options.disabledFeatures || []), ...(options.disabledMenuItems || [])].map(String));
+    const enabledFeatureList = Array.isArray(options.enabledFeatures || options.enabledMenuItems) ? (options.enabledFeatures || options.enabledMenuItems).map(String) : null;
+    const enabledFeatureSet = enabledFeatureList ? new Set(enabledFeatureList) : null;
+    function featureEnabled(key, available = true) {
+      if (!available) return false;
+      if (enabledFeatureSet && !enabledFeatureSet.has(key)) return false;
+      if (disabledFeatureSet.has(key)) return false;
+      if (Object.prototype.hasOwnProperty.call(featureInput, key)) return featureInput[key] !== false;
+      return true;
+    }
+    const featureAvailability = {
+      original: Boolean(options.originalPdfSrc),
+      forms: hasForms,
+      translate,
+      liveHelp: Boolean(options.airaUrl),
+      originalLink: Boolean(options.originalUrl)
+    };
+    const manifestFeatures = featureDefinitions.map((feature) => ({ ...feature, available: featureAvailability[feature.key] !== false }));
+    const menuFeatures = Object.fromEntries(manifestFeatures.map((feature) => [feature.key, featureEnabled(feature.key, feature.available)]));
+    const featureManifest = { available: manifestFeatures, enabled: manifestFeatures.filter((feature) => menuFeatures[feature.key]).map((feature) => feature.key), disabled: manifestFeatures.filter((feature) => !menuFeatures[feature.key]).map((feature) => feature.key), menu: menuFeatures };
     const outlineHtml = ctx.outline.length ? ctx.outline.map(
       (e) => `<li class="fx-ol-l${e.level}"><button type="button" class="fx-ol-item" data-h="${e.i}" data-page="${e.page}"><span class="fx-ol-t">${esc(e.text)}</span><span class="fx-ol-p">p.${e.page}</span></button></li>`
     ).join("") : `<li class="fx-ol-empty">No headings were detected in this document.</li>`;
@@ -871,7 +916,8 @@ var CodbDocs = (() => {
       originalName: options.originalName || null,
       permalink: options.permalink || null,
       fingerprint: options.fingerprint || null,
-      fidelityRisks
+      fidelityRisks,
+      features: featureManifest
     };
     const knowledgePack = {
       title,
@@ -921,6 +967,7 @@ var CodbDocs = (() => {
       conformance: CONFORMANCE,
       assistiveTechnology: AT_TESTED,
       notes: options.knowledge || options.documentContext || options.siteContext || null,
+      features: featureManifest,
       elementCounts: ctx.elements.reduce((acc, e) => {
         var _a2;
         acc[e.kind] = ((_a2 = acc[e.kind]) != null ? _a2 : 0) + 1;
@@ -990,7 +1037,7 @@ header.fx-bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:.
 .fx-bar button,.fx-bar select,.fx-bar input{background:transparent;color:var(--ink);border:0;
   border-radius:999px;padding:.34rem .7rem;font-size:.82rem;cursor:pointer;font:inherit;font-size:.82rem;line-height:1.2}
 .fx-bar select{background:var(--chrome-3);padding:.3rem .5rem;border-radius:8px}
-.fx-bar input{cursor:text;min-width:13rem;background:rgba(255,255,255,.08);border-radius:999px;padding:.4rem .85rem}
+.fx-bar input:not(#fx-pdf-toggle){cursor:text;min-width:13rem;background:rgba(255,255,255,.08);border-radius:999px;padding:.4rem .85rem}
 .fx-bar input::placeholder{color:var(--muted)}
 .fx-bar button:hover{background:rgba(255,255,255,.12)}
 .fx-bar button[aria-pressed=true]{background:var(--accent-2);color:#fff}
@@ -1002,11 +1049,12 @@ header.fx-bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:.
 #fx-search-count{font-size:.76rem;color:var(--muted);white-space:nowrap;padding:0 .55rem 0 .2rem}
 .fx-bar .fx-primary-btn{margin-left:.4rem}
 .fx-bar :focus-visible,.fx-thumb:focus-visible,.fx-textlayer :focus-visible{outline:3px solid #ffd400;outline-offset:2px}
-.fx-shell{display:flex;min-height:calc(100vh - 3.1rem)}
-.fx-rail{width:12rem;flex:none;background:#e7e9ec;border-right:1px solid #d3d7dc;overflow:auto;
-  max-height:calc(100vh - 3.1rem);position:sticky;top:3.1rem}
+.fx-shell{display:flex;min-height:calc(100vh - var(--barh,3.1rem))}
+.fx-rail{width:12rem;flex:none;background:#e7e9ec;border-right:1px solid #d3d7dc;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;
+  height:calc(100vh - var(--barh,3.1rem));max-height:calc(100vh - var(--barh,3.1rem));position:sticky;top:var(--barh,3.1rem);left:0;align-self:flex-start}
+.fx-rail::-webkit-scrollbar{display:none}
 .fx-rail ul{list-style:none;margin:0;padding:.85rem;display:grid;gap:.95rem}
-.fx-thumb{width:100%;background:none;border:0;padding:0;cursor:pointer;display:block}
+.fx-thumb{width:100%;background:none;border:0;padding:0;cursor:pointer;display:block;overflow:hidden}
 .fx-thumb img{width:100%;aspect-ratio:var(--pw,612)/var(--ph,792);object-fit:contain;display:block;background:#fff;border:1px solid #cfd4da;border-radius:6px;
   box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .fx-thumb-blank{display:block;width:100%;aspect-ratio:612/792;background:#fff;border:1px solid #cfd4da;border-radius:6px}
@@ -1014,7 +1062,7 @@ header.fx-bar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:.
 .fx-thumb[aria-current=true] img,.fx-thumb[aria-current=true] .fx-thumb-blank{border-color:var(--accent-2);
   box-shadow:0 0 0 2px rgba(20,115,230,.35)}
 main.fx-stage{flex:1;padding:2.25rem 2rem;display:grid;justify-items:center;gap:3.5rem;background:var(--stage)}
-.fx-page{width:calc(var(--pw) * var(--zoom));}
+.fx-page{width:calc(var(--pw) * var(--zoom));scroll-margin-top:calc(var(--barh,3.1rem) + 1rem)}
 .fx-canvas{position:relative;width:var(--pw);height:var(--ph);background:#fff;border-radius:2px;
   box-shadow:0 0 0 1px rgba(0,0,0,.08),0 12px 28px rgba(15,20,30,.16);
   transform:scale(var(--zoom));transform-origin:top left;overflow:hidden}
@@ -1153,25 +1201,27 @@ mark.fx-hit{background:#ffd400;color:#000;border-radius:2px}
 .fx-signature-canvas{width:100%;height:12rem;border:1px solid #9ba3ad;border-radius:6px;background:#fff;touch-action:none}
 .fx-signature-preview-large{min-height:4rem;display:flex;align-items:center;justify-content:center;border:1px dashed #9ba3ad;padding:.75rem;overflow:hidden}
 .fx-signature-preview-large img{max-width:100%;max-height:9rem}.fx-signature-typed{font-family:cursive;font-size:2rem}
-.fx-title-row{display:flex;align-items:center;gap:.6rem;min-width:0}
-.fx-switch{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:0 .25rem}
+.fx-title-row{display:flex;align-items:center;gap:.55rem;min-width:0}
+.fx-switch{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;margin-left:.25rem;padding:0 .1rem}
 .fx-switch input{appearance:none;-webkit-appearance:none;width:28px;height:15px;border-radius:999px;
-  background:#4b5563;position:relative;cursor:pointer;transition:background .15s;margin:0;flex:0 0 28px}
+  min-width:0;background:#4b5563;position:relative;cursor:pointer;transition:background .15s;margin:0;flex:0 0 28px;padding:0}
 .fx-switch input::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
   background:#fff;transition:transform .15s}
 .fx-switch input:checked{background:var(--accent-2)}
 .fx-switch input:checked::after{transform:translateX(13px)}
-.fx-switch label{cursor:pointer;font-size:.76rem;white-space:nowrap}
-.fx-original{width:100%;max-width:1100px;margin:0 auto 24px;padding:16px}
+.fx-switch label{cursor:pointer;font-size:.72rem;line-height:1;white-space:nowrap}
+.fx-original{width:100%;max-width:1100px;margin:0 auto 24px;padding:16px;scroll-margin-top:calc(var(--barh,3.1rem) + 1rem)}
 .fx-original iframe{width:100%;height:82vh;border:0;background:#fff;border-radius:10px;
   box-shadow:0 0 0 1px rgba(0,0,0,.08),0 10px 30px rgba(15,20,30,.14)}
-.fx-op-page{display:grid;justify-items:center;margin:0 auto 1.25rem;overflow:auto;position:relative}
-.fx-op-canvas-wrap{position:relative;display:block;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 8px 22px rgba(15,20,30,.12);background:#fff}
+.fx-op-page{display:grid;justify-items:start;width:calc(var(--opw,612px) * var(--zoom));min-height:calc(var(--oph,792px) * var(--zoom));margin:0 auto 3.5rem;position:relative;scroll-margin-top:calc(var(--barh,3.1rem) + 1rem);overflow:auto;scrollbar-width:none;-ms-overflow-style:none}
+.fx-op-page::-webkit-scrollbar{display:none}
+.fx-op-canvas-wrap{position:relative;display:block;transform:scale(var(--zoom));transform-origin:top left;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 8px 22px rgba(15,20,30,.12);background:#fff}
 .fx-op-page canvas{display:block;max-width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 8px 22px rgba(15,20,30,.12)}
 .fx-op-canvas-wrap canvas{box-shadow:none}
 .fx-original-textlayer{position:absolute;inset:0;z-index:3;pointer-events:auto;color:transparent;overflow:hidden}
 .fx-original-textlayer .fx-text{color:transparent!important;text-shadow:none!important}
 .fx-original-textlayer mark.fx-hit,.fx-original-textlayer .fx-text mark.fx-hit{color:#000!important;background:rgba(255,213,79,.9);border-radius:2px}
+.fx-original-hitbox{position:absolute;z-index:2;background:rgba(255,213,79,.46);border:1px solid rgba(245,158,11,.9);border-radius:2px;pointer-events:none;box-shadow:0 0 0 1px rgba(255,255,255,.28) inset}
 .fx-op-num{font-size:.78rem;color:#5a6068;margin:.25rem 0 .4rem}
 .fx-outline{list-style:none;margin:0;padding:0}
 .fx-outline li{margin:0}
@@ -1245,7 +1295,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
   header.fx-bar{position:static;gap:.45rem;padding:.65rem;align-items:stretch}
   .fx-brand{width:100%;margin-right:0}.fx-brand h1{max-width:none}
   .fx-group{max-width:100%;overflow-x:auto;justify-content:flex-start}.fx-spacer{display:none}
-  .fx-bar input{min-width:12rem;width:100%}.fx-bar .fx-primary-btn{margin-left:0}
+  .fx-bar input:not(#fx-pdf-toggle){min-width:12rem;width:100%}.fx-bar .fx-primary-btn{margin-left:0}
   .fx-shell{display:block;min-height:auto}.fx-rail{display:none}
   main.fx-stage{padding:1rem;gap:2rem;overflow-x:hidden}
   .fx-page{max-width:100%;overflow:visible}
@@ -1253,7 +1303,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
   .fx-drawer{top:0;width:100%;max-width:none}.fx-dialog{width:calc(100vw - 1rem);max-height:92vh;padding:1.25rem}
 }
 @media (max-width:520px){
-  header.fx-bar{font-size:.9rem}.fx-bar button,.fx-bar select,.fx-bar input{font-size:.78rem;padding:.38rem .58rem}
+  header.fx-bar{font-size:.9rem}.fx-bar button,.fx-bar select,.fx-bar input:not(#fx-pdf-toggle){font-size:.78rem;padding:.38rem .58rem}
   main.fx-stage{padding:.75rem;gap:1.5rem}.fx-dialog{border-radius:10px}
 }
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
@@ -1267,49 +1317,49 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     <span class="fx-brand-mark" aria-hidden="true">CD</span>
     <div class="fx-title-row">
       <h1>${esc(title)}</h1>
-      ${options.originalPdfSrc ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked><label for="fx-pdf-toggle">Original PDF</label></span>` : ""}
+      ${options.originalPdfSrc && menuFeatures.original ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
     </div>
   </div>
-  <nav class="fx-group" aria-label="Page navigation">
+  ${menuFeatures.pageNavigation ? `<nav class="fx-group" aria-label="Page navigation">
     <button type="button" id="fx-prev" aria-label="Previous page">&#8249;</button>
     <label class="fx-status" for="fx-page-select">Jump to page</label>
     <select id="fx-page-select">${nav}</select>
     <button type="button" id="fx-next" aria-label="Next page">&#8250;</button>
-  </nav>
-  <div class="fx-group">
+  </nav>` : ""}
+  ${menuFeatures.zoom ? `<div class="fx-group">
     <button type="button" id="fx-zoom-out" aria-label="Zoom out">&#8722;</button>
     <span id="fx-zoom-label" aria-live="polite">100%</span>
     <button type="button" id="fx-zoom-in" aria-label="Zoom in">+</button>
     <button type="button" id="fx-fit">Fit width</button>
-  </div>
-  <div class="fx-group">
-    <button type="button" id="fx-view-fidelity" aria-pressed="${initialView === "fidelity"}">PDF view</button>
-    <button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow</button>
-    <button type="button" id="fx-contrast" aria-pressed="false">Contrast</button>
-  </div>
-  <div class="fx-group">
-    <button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>
-    <button type="button" id="fx-a11y-open" aria-haspopup="dialog">Accessibility</button>
-    <button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>
-    <button type="button" id="fx-ex-open" aria-haspopup="dialog">Explore content</button>
+  </div>` : ""}
+  ${(menuFeatures.pdfView || menuFeatures.reflow || menuFeatures.contrast) ? `<div class="fx-group">
+    ${menuFeatures.pdfView ? `<button type="button" id="fx-view-fidelity" aria-pressed="${initialView === "fidelity"}">PDF view</button>` : ""}
+    ${menuFeatures.reflow ? `<button type="button" id="fx-view-reflow" aria-pressed="${initialView === "reflow"}">Reflow</button>` : ""}
+    ${menuFeatures.contrast ? `<button type="button" id="fx-contrast" aria-pressed="false">Contrast</button>` : ""}
+  </div>` : ""}
+  ${(menuFeatures.outline || menuFeatures.accessibility || menuFeatures.summary || menuFeatures.explore || menuFeatures.readAloud || menuFeatures.print || menuFeatures.improve || (hasForms && menuFeatures.forms) || (translate && menuFeatures.translate) || menuFeatures.download || menuFeatures.report || (options.airaUrl && menuFeatures.liveHelp) || (options.originalUrl && menuFeatures.originalLink)) ? `<div class="fx-group">
+    ${menuFeatures.outline ? `<button type="button" id="fx-outline-open" aria-haspopup="dialog">Outline</button>` : ""}
+    ${menuFeatures.accessibility ? `<button type="button" id="fx-a11y-open" aria-haspopup="dialog">Accessibility</button>` : ""}
+    ${menuFeatures.summary ? `<button type="button" id="fx-sum-open" aria-haspopup="dialog">AI summary</button>` : ""}
+    ${menuFeatures.explore ? `<button type="button" id="fx-ex-open" aria-haspopup="dialog">Explore content</button>` : ""}
 
-    <button type="button" id="fx-read" aria-pressed="false">Read aloud</button>
-    <button type="button" id="fx-print">Print</button>
-    <button type="button" id="fx-improve">Improve Document</button>
-    ${hasForms ? `<button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>` : ""}
-    ${translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
-    <button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>
-    <button type="button" id="fx-fb-open" aria-haspopup="dialog">Report</button>
-    ${options.airaUrl ? `<a class="fx-bar-link" href="${esc(options.airaUrl)}" target="_blank" rel="noopener"><button type="button">Live help</button></a>` : ""}
-    ${options.originalUrl ? `<a class="fx-bar-link" href="${esc(options.originalUrl)}" target="_blank" rel="noopener"><button type="button">Original</button></a>` : ""}
-  </div>
+    ${menuFeatures.readAloud ? `<button type="button" id="fx-read" aria-pressed="false">Read aloud</button>` : ""}
+    ${menuFeatures.print ? `<button type="button" id="fx-print">Print</button>` : ""}
+    ${menuFeatures.improve ? `<button type="button" id="fx-improve">Improve Document</button>` : ""}
+    ${hasForms && menuFeatures.forms ? `<button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>` : ""}
+    ${translate && menuFeatures.translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
+    ${menuFeatures.download ? `<button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>` : ""}
+    ${menuFeatures.report ? `<button type="button" id="fx-fb-open" aria-haspopup="dialog">Report</button>` : ""}
+    ${options.airaUrl && menuFeatures.liveHelp ? `<a class="fx-bar-link" id="fx-live-help" href="${esc(options.airaUrl)}" target="_blank" rel="noopener"><button type="button">Live help</button></a>` : ""}
+    ${options.originalUrl && menuFeatures.originalLink ? `<a class="fx-bar-link" id="fx-original-link" href="${esc(options.originalUrl)}" target="_blank" rel="noopener"><button type="button">Original</button></a>` : ""}
+  </div>` : ""}
   <span class="fx-spacer"></span>
-  <div class="fx-group">
+  ${menuFeatures.search ? `<div class="fx-group">
     <label class="fx-status" for="fx-search">Search this document</label>
     <input id="fx-search" type="search" placeholder="Search this document\u2026" aria-describedby="fx-search-count">
     <span id="fx-search-count" aria-live="polite"></span>
-  </div>
-  <button type="button" class="fx-primary-btn" id="fx-qa-open" aria-haspopup="dialog">Ask AI</button>
+  </div>` : ""}
+  ${menuFeatures.askAi ? `<button type="button" class="fx-primary-btn" id="fx-qa-open" aria-haspopup="dialog">Ask AI</button>` : ""}
 
 </header>
 <aside class="fx-drawer" id="fx-drawer" data-open="false" aria-label="Search results">
@@ -1494,9 +1544,11 @@ ${backendDataScripts}
   var root=document.documentElement, pages=[].slice.call(document.querySelectorAll('.fx-page'));
   var live=document.getElementById('fx-live'), sel=document.getElementById('fx-page-select');
   var zoom=1, current=1;
+  function byId(id){ return document.getElementById(id); }
+  function onClick(id,fn){ var el=byId(id); if(el) el.onclick=fn; }
   function say(m){ if(live) live.textContent=m; }
   function setZoom(z){ zoom=Math.min(4,Math.max(.25,z)); root.style.setProperty('--zoom',String(zoom));
-    document.getElementById('fx-zoom-label').textContent=Math.round(zoom*100)+'%'; }
+    var label=byId('fx-zoom-label'); if(label) label.textContent=Math.round(zoom*100)+'%'; }
   function isOriginalView(){ var t=document.getElementById('fx-pdf-toggle'); return !!(t&&t.checked); }
   function gotoOriginalPage(n){ var p=document.querySelector('#fx-op-pages [data-original-page="'+n+'"]'); if(!p) return false;
     p.scrollIntoView({behavior:'smooth',block:'start'}); return true; }
@@ -1506,31 +1558,46 @@ ${backendDataScripts}
     [].forEach.call(document.querySelectorAll('.fx-thumb'),function(t){
       t.setAttribute('aria-current', t.dataset.goto===String(n)?'true':'false'); });
     say('Page '+n+' of '+pages.length); }
-  document.getElementById('fx-prev').onclick=function(){ goto(Math.max(1,current-1)); };
-  document.getElementById('fx-next').onclick=function(){ goto(Math.min(pages.length,current+1)); };
+  onClick('fx-prev',function(){ goto(Math.max(1,current-1)); });
+  onClick('fx-next',function(){ goto(Math.min(pages.length,current+1)); });
   if(sel) sel.onchange=function(){ goto(Number(sel.value)); };
-  document.getElementById('fx-zoom-in').onclick=function(){ setZoom(zoom+.15); };
-  document.getElementById('fx-zoom-out').onclick=function(){ setZoom(zoom-.15); };
+  onClick('fx-zoom-in',function(){ setZoom(zoom+.15); });
+  onClick('fx-zoom-out',function(){ setZoom(zoom-.15); });
   function fitWidth(){
     var p=pages[current-1]; if(!p) return;
     var w=parseFloat(getComputedStyle(p).getPropertyValue('--pw'))||612;
     var avail=document.querySelector('.fx-stage').clientWidth-48; setZoom(avail/w); }
-  document.getElementById('fx-fit').onclick=fitWidth;
-  document.getElementById('fx-print').onclick=function(){ printOriginalPdf(); };
+  onClick('fx-fit',fitWidth);
+  onClick('fx-print',function(){ printOriginalPdf(); });
+  function setOriginal(on){ var t=document.getElementById('fx-pdf-toggle');
+    if(t&&t.checked!==on){ t.checked=on; t.dispatchEvent(new Event('change')); } }
   function setView(v){ root.dataset.view=v;
-    document.getElementById('fx-view-fidelity').setAttribute('aria-pressed', String(v==='fidelity'));
-    document.getElementById('fx-view-reflow').setAttribute('aria-pressed', String(v==='reflow'));
+    var fidelityBtn=byId('fx-view-fidelity'), reflowBtn=byId('fx-view-reflow');
+    if(fidelityBtn) fidelityBtn.setAttribute('aria-pressed', String(v==='fidelity'));
+    if(reflowBtn) reflowBtn.setAttribute('aria-pressed', String(v==='reflow'));
     say(v==='reflow'?'Reflow reading view':'PDF fidelity view'); }
-  document.getElementById('fx-view-fidelity').onclick=function(){ setView('fidelity'); };
-  document.getElementById('fx-view-reflow').onclick=function(){ setView('reflow'); };
+  onClick('fx-view-fidelity',function(){ setView('fidelity'); if(pdfSrc) setOriginal(true); });
+  onClick('fx-view-reflow',function(){ setOriginal(false); setView('reflow'); });
   var cbtn=document.getElementById('fx-contrast');
-  cbtn.onclick=function(){ var on=!root.classList.contains('fx-contrast');
+  if(cbtn) cbtn.onclick=function(){ var on=!root.classList.contains('fx-contrast');
     root.classList.toggle('fx-contrast',on); cbtn.setAttribute('aria-pressed',String(on));
     say(on?'High contrast on':'High contrast off'); };
   [].forEach.call(document.querySelectorAll('.fx-thumb'),function(t){
     t.onclick=function(){ goto(Number(t.dataset.goto)); }; });
+  function shouldRespectNativeKey(e){
+    if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey||e.shiftKey) return true;
+    if(root.classList.contains('fx-screen-reader')) return true;
+    var t=e.target, tag=(t&&t.tagName)||'';
+    return /input|select|textarea|button/i.test(tag)||!!(t&&(t.isContentEditable||t.closest&&t.closest('[role="textbox"],[role="application"]')));
+  }
+  function scrollCanvas(delta){
+    var scroller=document.scrollingElement||document.documentElement;
+    scroller.scrollBy({top:delta,behavior:'smooth'});
+  }
   document.addEventListener('keydown',function(e){
-    if(/input|select|textarea/i.test((e.target&&e.target.tagName)||'')) return;
+    if(shouldRespectNativeKey(e)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); scrollCanvas(90); return; }
+    if(e.key==='ArrowUp'){ e.preventDefault(); scrollCanvas(-90); return; }
     if(e.key==='PageDown'||e.key==='ArrowRight'){ e.preventDefault(); goto(Math.min(pages.length,current+1)); }
     if(e.key==='PageUp'||e.key==='ArrowLeft'){ e.preventDefault(); goto(Math.max(1,current-1)); }
     if(e.key==='Home'){ e.preventDefault(); goto(1); }
@@ -1633,14 +1700,28 @@ ${backendDataScripts}
       li.appendChild(b); resList.appendChild(li); });
   }
   if(search) search.addEventListener('input',function(){ clearTimeout(timer); timer=setTimeout(run,220); });
-  function run(){
-    var raw=search.value.trim(), q=raw.toLowerCase();
+  function clearHighlights(){
     [].forEach.call(document.querySelectorAll('mark.fx-hit'),function(m){
       var p=m.parentNode; p.replaceChild(document.createTextNode(m.textContent),m); p.normalize(); });
+    [].forEach.call(document.querySelectorAll('.fx-original-hitbox'),function(n){ n.parentNode.removeChild(n); });
+  }
+  function addOriginalHighlight(el){
+    var layer=el.closest&&el.closest('.fx-original-textlayer'); if(!layer) return;
+    var er=el.getBoundingClientRect(), lr=layer.getBoundingClientRect();
+    var baseW=parseFloat(layer.style.width)||lr.width, scale=lr.width&&baseW?lr.width/baseW:1;
+    var box=document.createElement('span'); box.className='fx-original-hitbox';
+    box.style.left=((er.left-lr.left)/scale)+'px'; box.style.top=((er.top-lr.top)/scale)+'px';
+    box.style.width=(er.width/scale)+'px'; box.style.height=(er.height/scale)+'px';
+    box.setAttribute('aria-hidden','true'); layer.appendChild(box);
+  }
+  function run(){
+    var raw=search.value.trim(), q=raw.toLowerCase();
+    clearHighlights();
     if(!q){ count.textContent=''; if(drawer) drawer.setAttribute('data-open','false'); return; }
     var hits=0, first=null;
-    [].forEach.call(document.querySelectorAll('.fx-original-textlayer .fx-text, .fx-text, .fx-reflow p, .fx-reflow li, .fx-reflow h1, .fx-reflow h2, .fx-reflow h3'),function(el){
+    [].forEach.call(document.querySelectorAll('.fx-original-textlayer .fx-text, #fx-accessible .fx-text, #fx-accessible .fx-reflow p, #fx-accessible .fx-reflow li, #fx-accessible .fx-reflow h1, #fx-accessible .fx-reflow h2, #fx-accessible .fx-reflow h3'),function(el){
       var t=el.textContent; var i=t.toLowerCase().indexOf(q); if(i<0) return; hits++;
+      if(el.closest&&el.closest('.fx-original-textlayer')){ addOriginalHighlight(el); if(!first) first=el; return; }
       var mark=document.createElement('mark'); mark.className='fx-hit'; mark.textContent=t.substr(i,q.length);
       el.textContent=''; el.appendChild(document.createTextNode(t.slice(0,i))); el.appendChild(mark);
       el.appendChild(document.createTextNode(t.slice(i+q.length)));
@@ -1663,16 +1744,19 @@ ${backendDataScripts}
   }
   // Fit each positioned text run to its measured PDF width so selection and
   // screen-reader order line up with the rasterised page.
-  requestAnimationFrame(function(){
+  function fitTextRuns(scope){
     [].forEach.call(document.querySelectorAll('.fx-text'),function(el){
+      if(scope&&!(scope===el||scope.contains(el))) return;
       var target=parseFloat(getComputedStyle(el).getPropertyValue('--fx-w'));
       if(!target||!isFinite(target)) return;
+      el.style.transform='';
       var actual=el.getBoundingClientRect().width; if(!actual) return;
       var rotate=getComputedStyle(el).getPropertyValue('--fx-rotate').trim()||'0rad';
       var skew=getComputedStyle(el).getPropertyValue('--fx-skew').trim()||'0rad';
       el.style.transform='rotate('+rotate+') skewX('+skew+') scaleX('+(target/actual).toFixed(4)+')';
     });
-  });
+  }
+  requestAnimationFrame(function(){ fitTextRuns(); });
   // ---- original PDF switch -------------------------------------------
   var pdfSrc=${JSON.stringify(options.originalPdfSrc || "")}, pdfJsUrl=${JSON.stringify(options.pdfJsUrl || PDFJS_URL)};
   var pdfJsPromise=null, activePdfDocument=null;
@@ -1726,6 +1810,14 @@ ${backendDataScripts}
     layer.style.transform='scale('+scale+')'; layer.style.transformOrigin='top left';
     return layer;
   }
+  function updateThumbPreview(pageNumber,canvas){
+    var thumb=document.querySelector('.fx-thumb[data-goto="'+pageNumber+'"]'); if(!thumb||!canvas) return;
+    try{
+      var img=thumb.querySelector('img');
+      if(!img){ img=document.createElement('img'); img.alt=''; img.loading='lazy'; var blank=thumb.querySelector('.fx-thumb-blank'); if(blank) thumb.replaceChild(img,blank); else thumb.insertBefore(img,thumb.firstChild); }
+      img.src=canvas.toDataURL('image/png');
+    }catch(e){}
+  }
   function addSafeLinkAttributes(el,url,newWindow){
     if(!url) return;
     try{
@@ -1754,29 +1846,30 @@ ${backendDataScripts}
             if(doc.isPureXfa){
               return page.getXfa().then(function(tree){
                 var wrap=document.createElement('div'); wrap.className='fx-op-page'; wrap.dataset.originalPage=String(n);
-                var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
                 var xfa=document.createElement('div'); xfa.style.width=base.width+'px'; xfa.style.height=base.height+'px';
-                xfa.style.position='relative'; xfa.style.transform='scale('+scale+')'; xfa.style.transformOrigin='top left';
-                wrap.style.width=(base.width*scale)+'px'; wrap.style.minHeight=(base.height*scale)+'px';
-                wrap.appendChild(lab); wrap.appendChild(xfa); if(host) host.appendChild(wrap);
+                xfa.style.position='relative'; xfa.style.transform='scale(var(--zoom))'; xfa.style.transformOrigin='top left';
+                wrap.style.setProperty('--opw',base.width+'px'); wrap.style.setProperty('--oph',base.height+'px');
+                if(n===1) setZoom(scale);
+                wrap.appendChild(xfa); if(host) host.appendChild(wrap);
                 return loadPdfJs().then(function(pdfjs){ pdfjs.XfaLayer.render({
                   div:xfa,xfaHtml:tree,annotationStorage:doc.annotationStorage,intent:'display',
                   linkService:{addLinkAttributes:addSafeLinkAttributes}
                 }); });
               });
             }
-            var cssVp=page.getViewport({scale:scale});
-            var vp=page.getViewport({scale:scale*(window.devicePixelRatio||1)});
+            var cssVp=page.getViewport({scale:1});
+            var vp=page.getViewport({scale:(window.devicePixelRatio||1)});
+            if(n===1) setZoom(scale);
             var wrap=document.createElement('div'); wrap.className='fx-op-page'; wrap.dataset.originalPage=String(n);
-            var lab=document.createElement('p'); lab.className='fx-op-num'; lab.textContent='Page '+n+' of '+doc.numPages;
             var cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height;
             cv.style.width=cssVp.width+'px'; cv.style.height=cssVp.height+'px';
             cv.setAttribute('role','img'); cv.setAttribute('aria-label','Original PDF page '+n);
             var box=document.createElement('div'); box.className='fx-op-canvas-wrap'; box.style.width=cssVp.width+'px'; box.style.height=cssVp.height+'px';
             box.appendChild(cv);
-            var overlay=cloneAccessibleOverlay(n,base.width,base.height,scale); if(overlay) box.appendChild(overlay);
-            wrap.appendChild(lab); wrap.appendChild(box); if(host) host.appendChild(wrap);
-            return page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+            var overlay=cloneAccessibleOverlay(n,base.width,base.height,1); if(overlay) box.appendChild(overlay);
+            wrap.style.setProperty('--opw',base.width+'px'); wrap.style.setProperty('--oph',base.height+'px');
+            wrap.appendChild(box); if(host) host.appendChild(wrap);
+            return page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise.then(function(){ updateThumbPreview(n,cv); });
           });
         })(n);
         return chain.then(function(){ pdfLoaded=true; pdfLoading=false;
@@ -1791,6 +1884,7 @@ ${backendDataScripts}
       if(origPane) origPane.hidden=!on;
       if(accPane) accPane.hidden=on;
       if(on) renderOriginal();
+      else requestAnimationFrame(function(){ fitTextRuns(accPane); });
       say(on?'Showing the original PDF':'Showing the accessible version');
     });
     if(pdfToggle.checked){ if(origPane) origPane.hidden=false; if(accPane) accPane.hidden=true; renderOriginal(); }
@@ -7625,9 +7719,11 @@ ${p.text}`).join("\n\n")
           const text = obj.raw.text;
           const fontSize = obj.raw.fontSize || 12;
           const x = obj.bbox?.[0] || 0;
-          const y = obj.bbox?.[1] || 0;
+          const bboxHeight = obj.bbox?.[3] || fontSize;
+          const y = (obj.bbox?.[1] || 0) + bboxHeight - fontSize * 0.72;
           const fontRef = this.findFontRef(obj.raw.font, pageData, ir);
           commands.push(`q`);
+          commands.push("BT");
           if (level >= 3 && obj.raw.transform) {
             const t = obj.raw.transform;
             commands.push(`${t[0]} ${t[1]} ${t[2]} ${t[3]} ${t[4]} ${t[5]} cm`);
@@ -7639,6 +7735,7 @@ ${p.text}`).join("\n\n")
           }
           commands.push(`${x} ${y} Td`);
           commands.push(`(${this.escapePDFString(text)}) Tj`);
+          commands.push("ET");
           commands.push(`Q`);
         } else if (obj.type === "image" && obj.raw?.src && level >= 3) {
           this.addImageCommands(commands, obj);
@@ -7964,22 +8061,30 @@ ${p.text}`).join("\n\n")
     serializePDF(pdf) {
       const encoder = new TextEncoder();
       const parts = [];
-      parts.push(encoder.encode(pdf.header + "\n"));
+      const offsets = /* @__PURE__ */ new Map();
+      let byteOffset = 0;
+      const header = encoder.encode(pdf.header + "\n");
+      parts.push(header);
+      byteOffset += header.length;
       for (const [id, obj] of Object.entries(pdf.body)) {
+        offsets.set(Number(id), byteOffset);
         const objStr = this.serializeObject(parseInt(id), obj);
-        parts.push(encoder.encode(objStr));
+        const objBytes = encoder.encode(objStr);
+        parts.push(objBytes);
+        byteOffset += objBytes.length;
       }
-      const xrefOffset = parts.reduce((sum, p) => sum + p.length, 0);
+      const xrefOffset = byteOffset;
       parts.push(encoder.encode("xref\n"));
       parts.push(encoder.encode(`0 ${this.currentObject}
 `));
       parts.push(encoder.encode("0000000000 65535 f \n"));
       for (let i = 1; i < this.currentObject; i++) {
-        parts.push(encoder.encode(`${String(xrefOffset).padStart(10, "0")} 00000 n 
+        const offset = offsets.get(i) || 0;
+        parts.push(encoder.encode(`${String(offset).padStart(10, "0")} 00000 n 
 `));
       }
       parts.push(encoder.encode("trailer\n"));
-      parts.push(encoder.encode(`<< /Size ${this.currentObject} /Root ${pdf.trailer.root} >>
+      parts.push(encoder.encode(`<< /Size ${this.currentObject} /Root ${pdf.trailer.root} 0 R >>
 `));
       parts.push(encoder.encode("startxref\n"));
       parts.push(encoder.encode(`${xrefOffset}
@@ -8012,6 +8117,7 @@ ${p.text}`).join("\n\n")
         case "page":
           str += `<< /Type /Page /Parent ${obj.parent} 0 R`;
           str += ` /MediaBox [${(obj.mediaBox || [0, 0, 612, 792]).join(" ")}]`;
+          str += ` /Resources ${this.serializeResources(obj.resources)}`;
           if (obj.rotate) str += ` /Rotate ${obj.rotate}`;
           if (obj.contents?.length) {
             str += ` /Contents [${obj.contents.map((c) => `${c} 0 R`).join(" ")}]`;
@@ -8058,6 +8164,18 @@ ${p.text}`).join("\n\n")
       }
       str += "endobj\n\n";
       return str;
+    }
+    serializeResources(resources = {}) {
+      const fonts = resources.font || {};
+      const fontEntries = Object.entries(fonts).map(([name, font]) => {
+        const baseFont = String(font.baseFont || "Helvetica").replace(/[^A-Za-z0-9+\-]/g, "");
+        const encoding = String(font.encoding || "WinAnsiEncoding").replace(/[^A-Za-z0-9+\-]/g, "");
+        return `/${name} << /Type /Font /Subtype /Type1 /BaseFont /${baseFont || "Helvetica"} /Encoding /${encoding || "WinAnsiEncoding"} >>`;
+      });
+      if (!fontEntries.length) {
+        fontEntries.push("/F0 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+      }
+      return `<< /Font << ${fontEntries.join(" ")} >> >>`;
     }
   };
   async function createPDF(ir, options = {}) {
@@ -16313,7 +16431,8 @@ ${p.text}`).join("\n\n")
     await page.render({ canvasContext: ctx, viewport }).promise;
     return canvas;
   }
-  var CodbDocs = { load, configure, canUseWorkers };
+  var version = "0.1.1";
+  var CodbDocs = { version, load, configure, canUseWorkers };
   var index_default = CodbDocs;
   function exportFidelityHTML(graph, options = {}) {
     const ir = typeof graph?.getIR === "function" ? graph.getIR() : graph;
@@ -16341,5 +16460,10 @@ ${p.text}`).join("\n\n")
       return packageDocument(source, { ...options, html, packagerFallbackError: String(err) });
     }
   }
-  return __toCommonJS(index_exports);
+  var browserGlobal = __toCommonJS(index_exports);
+  CodbDocs.CodbDocs = CodbDocs;
+  CodbDocs.default = CodbDocs;
+  CodbDocs.__esModule = true;
+  __copyProps(CodbDocs, browserGlobal);
+  return CodbDocs;
 })();

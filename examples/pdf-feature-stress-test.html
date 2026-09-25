@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodbDocs Feature Stress PDF</title>
+</head>
+<body>
+  <script src="../packages/core/dist/codbdocs.js"></script>
+  <script>
+    const PAGE_W = 612;
+    const PAGE_H = 792;
+
+    function svgData(svg) {
+      return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, bytes.slice(i, i + 0x8000));
+      }
+      return btoa(binary);
+    }
+
+    function createFeatureIR() {
+      const ir = {
+        version: '1.0',
+        document: {
+          id: 'feature-stress-pdf',
+          title: 'CodbDocs Feature Stress PDF',
+          metadata: { title: 'CodbDocs Feature Stress PDF', language: 'en' },
+          pages: []
+        },
+        pages: {},
+        objects: {},
+        vectors: {},
+        structure: {},
+        annotations: {},
+        forms: { fields: [], byName: {} }
+      };
+
+      function addPage(num) {
+        const pageId = 'page_' + num;
+        ir.document.pages.push(pageId);
+        ir.pages[pageId] = {
+          id: pageId,
+          num,
+          width: PAGE_W,
+          height: PAGE_H,
+          rotation: 0,
+          mediaBox: [0, 0, PAGE_W, PAGE_H],
+          content: [],
+          vectors: [],
+          images: [],
+          annotations: []
+        };
+        return pageId;
+      }
+
+      function text(pageId, textValue, x, y, size, width, role = 'paragraph') {
+        const id = 'text_' + pageId + '_' + ir.pages[pageId].content.length;
+        ir.objects[id] = {
+          id,
+          type: 'text',
+          page: pageId,
+          raw: { text: textValue, font: 'Helvetica', fontSize: size, color: [0, 0, 0], transform: [size, 0, 0, size, x, y] },
+          semantic: { role, text: textValue },
+          accessibility: { role: role === 'heading' ? 'H1' : 'P' },
+          bbox: [x, y, width, size + 4]
+        };
+        ir.pages[pageId].content.push(id);
+      }
+
+      function field(pageId, name, label, type, x, y, w, h, value, extra = {}) {
+        const id = 'field_' + name;
+        ir.objects[id] = {
+          id,
+          type: 'form_field',
+          page: pageId,
+          raw: { fieldName: name, fieldType: type, value, ...extra },
+          semantic: { fieldName: name, fieldType: type, value, label, ...extra },
+          accessibility: { label, required: Boolean(extra.required) },
+          bbox: [x, y, w, h]
+        };
+        ir.pages[pageId].content.push(id);
+        ir.forms.fields.push({ name, label, type, value, page: Number(pageId.replace('page_', '')), ...extra });
+      }
+
+      function vector(pageId, id, bbox, fill, stroke) {
+        ir.vectors[id] = {
+          id,
+          type: 'rect',
+          page: pageId,
+          bbox,
+          points: [],
+          graphicsState: { fill, stroke, lineWidth: 2, opacity: 1 },
+          semantic: { caption: 'Vector rectangle for zoning and utility review' },
+          accessibility: { alt: 'Colored vector rectangle' }
+        };
+        ir.pages[pageId].vectors.push(id);
+      }
+
+      function image(pageId, id, x, y, w, h, caption, src) {
+        ir.objects[id] = {
+          id,
+          type: 'image',
+          page: pageId,
+          raw: { src },
+          semantic: { caption, kind: 'diagram' },
+          accessibility: { alt: caption },
+          bbox: [x, y, w, h]
+        };
+        ir.pages[pageId].content.push(id);
+        ir.pages[pageId].images.push(id);
+      }
+
+      function table(pageId, id, x, y, w, h, caption, rows) {
+        ir.objects[id] = {
+          id,
+          type: 'table',
+          page: pageId,
+          raw: { caption, rows },
+          semantic: { caption },
+          accessibility: { label: caption },
+          bbox: [x, y, w, h]
+        };
+        ir.pages[pageId].content.push(id);
+      }
+
+      function paragraphPage(num, title, lines) {
+        const pageId = addPage(num);
+        text(pageId, title, 72, 720, 20, 360, 'heading');
+        lines.forEach((line, i) => text(pageId, line, 72, 680 - i * 24, 11, 468));
+        return pageId;
+      }
+
+      const sealSvg = svgData('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 110"><rect width="180" height="110" rx="18" fill="#e8f1ff" stroke="#1455d9" stroke-width="5"/><circle cx="55" cy="55" r="28" fill="#d0021b"/><path d="M95 32h56v12H95zm0 24h56v12H95zm0 24h38v12H95z" fill="#1455d9"/></svg>');
+      const chartSvg = svgData('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 130"><rect width="220" height="130" fill="#fff8e1"/><polyline points="18,104 70,75 120,84 170,42 205,30" fill="none" stroke="#0f766e" stroke-width="8"/><circle cx="170" cy="42" r="10" fill="#f59e0b"/></svg>');
+
+      const p1 = addPage(1);
+      text(p1, 'Feature Stress PDF: Agenda Packet', 72, 720, 22, 330, 'heading');
+      text(p1, 'Search target: stormwater resilience overlay with vector zoning review.', 72, 680, 12, 300);
+      text(p1, 'This document includes text, forms, vectors, SVG graphics, image diagrams, tables, and signature controls.', 72, 656, 12, 300);
+      image(p1, 'seal_svg', 405, 612, 132, 82, 'City seal SVG diagram', sealSvg);
+      vector(p1, 'vec_cover_rule', [72, 580, 320, 16], '#dbeafe', '#1455d9');
+
+      const p2 = addPage(2);
+      text(p2, 'Interactive Form Fields', 72, 720, 20, 250, 'heading');
+      text(p2, 'Applicant Name', 72, 680, 11, 100);
+      field(p2, 'applicantName', 'Applicant Name', 'text', 190, 672, 240, 24, 'Jane Citizen', { required: true });
+      text(p2, 'Permit Type', 72, 640, 11, 100);
+      field(p2, 'permitType', 'Permit Type', 'dropdown', 190, 632, 190, 24, 'Stormwater', { options: [{ value: 'Stormwater', label: 'Stormwater' }, { value: 'Building', label: 'Building' }, { value: 'Utility', label: 'Utility' }] });
+      field(p2, 'publicNotice', 'Public notice acknowledged', 'checkbox', 190, 592, 18, 18, 'On', { checked: true, optionValue: 'On' });
+      text(p2, 'Public notice acknowledged', 218, 594, 11, 170);
+      field(p2, 'comments', 'Comments', 'textarea', 190, 500, 300, 68, 'Please review drainage calculations and ADA access routes.');
+      field(p2, 'signature', 'Electronic Signature', 'signature', 190, 450, 220, 32, '');
+      text(p2, 'Search target: applicantName permitType publicNotice signature comments.', 72, 390, 12, 420);
+
+      const p3 = addPage(3);
+      text(p3, 'Vectors and SVG Graphics', 72, 720, 20, 260, 'heading');
+      text(p3, 'The zoning map below contains vector rectangles and a trend SVG for utility workload.', 72, 690, 12, 430);
+      vector(p3, 'vec_zone_a', [80, 530, 130, 90], '#bfdbfe', '#1d4ed8');
+      vector(p3, 'vec_zone_b', [230, 530, 160, 90], '#fecaca', '#b91c1c');
+      vector(p3, 'vec_zone_c', [410, 530, 90, 90], '#bbf7d0', '#15803d');
+      image(p3, 'chart_svg', 92, 330, 260, 150, 'Utility workload SVG chart', chartSvg);
+      text(p3, 'Search target: vector zoning utility workload SVG chart.', 72, 280, 12, 360);
+
+      const p4 = addPage(4);
+      text(p4, 'Tables and Structured Data', 72, 720, 20, 300, 'heading');
+      table(p4, 'fee_table', 72, 520, 420, 150, 'Fee schedule table', [
+        ['Item', 'Quantity', 'Cost'],
+        ['Stormwater review', '1', '$425.00'],
+        ['Vector map sheet', '3', '$180.00'],
+        ['Public notice', '1', '$75.00']
+      ]);
+      text(p4, 'Search target: fee schedule table stormwater review public notice.', 72, 460, 12, 380);
+
+      const p5 = addPage(5);
+      text(p5, 'Long-Form Search Page', 72, 720, 20, 260, 'heading');
+      ['Stormwater resilience review requires evidence citations.', 'The document search should find this paragraph and highlight it on the original canvas.', 'RAG retrieval should return the correct page for stormwater and accessibility questions.', 'The left thumbnails should navigate to page five without losing search state.'].forEach((line, i) => text(p5, line, 72, 680 - i * 28, 12, 470));
+
+      const p6 = addPage(6);
+      text(p6, 'Final Checklist', 72, 720, 20, 230, 'heading');
+      ['Original PDF canvas rendering', 'HTML fidelity view', 'Reflow view', 'Form field synchronization', 'Search this document', 'Download dialog', 'Print original PDF only'].forEach((line, i) => text(p6, '✓ ' + line, 90, 680 - i * 32, 13, 280));
+      text(p6, 'Search target: final checklist print original PDF only.', 72, 400, 12, 350);
+
+      paragraphPage(7, 'Dense Text Page One', [
+        'Stormwater staff reviewed drainage calculations for the Atlantic Avenue corridor.',
+        'The accessible HTML view should preserve every line without overlap or clipping.',
+        'Original PDF rendering should stay centered at the same canvas size as HTML fidelity.',
+        'The search drawer should retrieve this dense paragraph and show page evidence.',
+        'Council agenda packets often include repeated sections, attachments, and exhibits.',
+        'This stress page intentionally includes many bounded lines of readable text.',
+        'Every text object has its own bounding box and stable vertical rhythm.',
+        'The left thumbnail preview should show a miniature of this page after rendering.',
+        'Search target: dense stormwater paragraph Atlantic Avenue corridor.',
+        'End of dense page one.'
+      ]);
+
+      paragraphPage(8, 'Dense Text Page Two', [
+        'Accessibility review includes keyboard focus, reflow, contrast, and readable spacing.',
+        'The HTML PDF viewer must avoid placing text beneath the top toolbar.',
+        'The side menu must remain flush left and use real page thumbnails.',
+        'Forms and annotations should stay synchronized between PDF and reflow views.',
+        'Vector graphics are summarized for screen readers and visual inspection.',
+        'SVG diagrams should appear as image objects with useful alternative text.',
+        'Tables should reflow as semantic HTML tables with captions and headers.',
+        'Search target: accessibility keyboard focus readable spacing toolbar.',
+        'This line confirms the second dense page is indexed.',
+        'End of dense page two.'
+      ]);
+
+      paragraphPage(9, 'Dense Text Page Three', [
+        'Financial exhibits can include fees, deposits, and review schedules.',
+        'Document search should locate fee schedule, public notice, and vector map sheet.',
+        'The RAG index should include both chunks and fine-grained text elements.',
+        'Search results should jump to the original canvas when Original is enabled.',
+        'Highlights on the original PDF are rectangle overlays and do not alter text metrics.',
+        'The same search query should also work after switching to the HTML version.',
+        'Page navigation should update thumbnail current state and page select state.',
+        'Search target: fee schedule vector map sheet public notice.',
+        'This line confirms the third dense page is indexed.',
+        'End of dense page three.'
+      ]);
+
+      paragraphPage(10, 'Dense Text Page Four', [
+        'Final quality review checks print, download, form reset, report, and dialogs.',
+        'Print should target only the embedded original PDF data stream.',
+        'Download dialog should expose accessible HTML and data outputs.',
+        'Ask AI should remain grounded in document passages and citations.',
+        'Explore content should list forms, images, vectors, and text elements.',
+        'The original and HTML canvases should transition without a size jump.',
+        'Search target: print embedded original PDF data stream download dialog.',
+        'This line confirms the fourth dense page is indexed.',
+        'The feature stress PDF ends after this final dense text page.',
+        'End of feature stress document.'
+      ]);
+
+      return ir;
+    }
+
+    (async function renderFeatureStressTest() {
+      try {
+        const ir = createFeatureIR();
+        const pdfBytes = await CodbDocs.createPDF(ir, { level: 3 });
+        const html = CodbDocs.buildFidelityHtml(ir, {
+          title: 'CodbDocs Feature Stress PDF',
+          originalPdfSrc: 'data:application/pdf;base64,' + bytesToBase64(pdfBytes),
+          pdfJsUrl: '../vendor/pdf.js/pdf.min.js',
+          thumbnails: true,
+          showDataControls: true
+        });
+        document.open();
+        document.write(html);
+        document.close();
+      } catch (error) {
+        document.body.innerHTML = '<pre>Failed to render feature stress test: ' + error.message + '</pre>';
+        throw error;
+      }
+    }());
+  </script>
+</body>
+</html>

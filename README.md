@@ -354,9 +354,8 @@ But the point is: **you don't need them to get good results.** The model-free pi
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/vendor/pdf.js/pdf.worker.min.js';
   </script>
 
-  <script type="module">
-    import CodbDocs from 'https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/src/index.js';
-
+  <script src="https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@main/packages/core/dist/codbdocs.js"></script>
+  <script>
     document.getElementById('fileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;

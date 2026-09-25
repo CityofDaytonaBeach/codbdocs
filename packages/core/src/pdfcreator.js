@@ -193,12 +193,14 @@ export class PDFCreator {
         const text = obj.raw.text;
         const fontSize = obj.raw.fontSize || 12;
         const x = obj.bbox?.[0] || 0;
-        const y = obj.bbox?.[1] || 0;
+        const bboxHeight = obj.bbox?.[3] || fontSize;
+        const y = (obj.bbox?.[1] || 0) + bboxHeight - (fontSize * 0.72);
 
         // Find font reference
         const fontRef = this.findFontRef(obj.raw.font, pageData, ir);
 
         commands.push(`q`); // Save graphics state
+        commands.push('BT');
 
         // Apply transform if level 3
         if (level >= 3 && obj.raw.transform) {
@@ -219,6 +221,7 @@ export class PDFCreator {
         commands.push(`${x} ${y} Td`);
         commands.push(`(${this.escapePDFString(text)}) Tj`);
 
+        commands.push('ET');
         commands.push(`Q`); // Restore graphics state
       } else if (obj.type === 'image' && obj.raw?.src && level >= 3) {
         this.addImageCommands(commands, obj);
@@ -634,30 +637,37 @@ export class PDFCreator {
   serializePDF(pdf) {
     const encoder = new TextEncoder();
     const parts = [];
+    const offsets = new Map();
+    let byteOffset = 0;
 
     // Header
-    parts.push(encoder.encode(pdf.header + '\n'));
+    const header = encoder.encode(pdf.header + '\n');
+    parts.push(header);
+    byteOffset += header.length;
 
     // Body
     for (const [id, obj] of Object.entries(pdf.body)) {
+      offsets.set(Number(id), byteOffset);
       const objStr = this.serializeObject(parseInt(id), obj);
-      parts.push(encoder.encode(objStr));
+      const objBytes = encoder.encode(objStr);
+      parts.push(objBytes);
+      byteOffset += objBytes.length;
     }
 
     // Cross-reference table
-    const xrefOffset = parts.reduce((sum, p) => sum + p.length, 0);
+    const xrefOffset = byteOffset;
     parts.push(encoder.encode('xref\n'));
     parts.push(encoder.encode(`0 ${this.currentObject}\n`));
     parts.push(encoder.encode('0000000000 65535 f \n'));
 
-    // Object offsets (simplified - would need to track in real implementation)
     for (let i = 1; i < this.currentObject; i++) {
-      parts.push(encoder.encode(`${String(xrefOffset).padStart(10, '0')} 00000 n \n`));
+      const offset = offsets.get(i) || 0;
+      parts.push(encoder.encode(`${String(offset).padStart(10, '0')} 00000 n \n`));
     }
 
     // Trailer
     parts.push(encoder.encode('trailer\n'));
-    parts.push(encoder.encode(`<< /Size ${this.currentObject} /Root ${pdf.trailer.root} >>\n`));
+    parts.push(encoder.encode(`<< /Size ${this.currentObject} /Root ${pdf.trailer.root} 0 R >>\n`));
     parts.push(encoder.encode('startxref\n'));
     parts.push(encoder.encode(`${xrefOffset}\n`));
     parts.push(encoder.encode('%%EOF\n'));
@@ -692,6 +702,7 @@ export class PDFCreator {
       case 'page':
         str += `<< /Type /Page /Parent ${obj.parent} 0 R`;
         str += ` /MediaBox [${(obj.mediaBox || [0, 0, 612, 792]).join(' ')}]`;
+        str += ` /Resources ${this.serializeResources(obj.resources)}`;
         if (obj.rotate) str += ` /Rotate ${obj.rotate}`;
         if (obj.contents?.length) {
           str += ` /Contents [${obj.contents.map(c => `${c} 0 R`).join(' ')}]`;
@@ -739,6 +750,19 @@ export class PDFCreator {
 
     str += 'endobj\n\n';
     return str;
+  }
+
+  serializeResources(resources = {}) {
+    const fonts = resources.font || {};
+    const fontEntries = Object.entries(fonts).map(([name, font]) => {
+      const baseFont = String(font.baseFont || 'Helvetica').replace(/[^A-Za-z0-9+\-]/g, '');
+      const encoding = String(font.encoding || 'WinAnsiEncoding').replace(/[^A-Za-z0-9+\-]/g, '');
+      return `/${name} << /Type /Font /Subtype /Type1 /BaseFont /${baseFont || 'Helvetica'} /Encoding /${encoding || 'WinAnsiEncoding'} >>`;
+    });
+    if (!fontEntries.length) {
+      fontEntries.push('/F0 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    }
+    return `<< /Font << ${fontEntries.join(' ')} >> >>`;
   }
 }
 

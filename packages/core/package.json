@@ -1,6 +1,6 @@
 {
   "name": "@codbdocs/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-agnostic browser engine: PDF.js text extraction + Tesseract.js OCR fallback, in one document graph.",
   "main": "dist/codbdocs.js",
   "module": "src/index.js",
