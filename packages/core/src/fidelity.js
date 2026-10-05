@@ -498,7 +498,7 @@ function tagPanel(tags) {
     <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
   </section>`;
 }
-const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.min.js";
+const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.3/vendor/pdf.js/pdf.min.js";
 const CONFORMANCE = [
   "WCAG 2.1 Level A",
   "WCAG 2.1 Level AA",
@@ -1128,7 +1128,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     <span class="fx-brand-mark" aria-hidden="true">CD</span>
     <div class="fx-title-row">
       <h1>${esc(title)}</h1>
-      ${showOriginalPdf ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
+      ${showOriginalPdf ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
     </div>
   </div>
   ${menuFeatures.pageNavigation ? `<nav class="fx-group" aria-label="Page navigation">
@@ -1187,12 +1187,12 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
 <div class="fx-shell">
   ${showThumbs ? `<nav class="fx-rail" aria-label="Page thumbnails"><ul>${thumbs}</ul></nav>` : ""}
   <main class="fx-stage" id="fx-content" role="main" tabindex="-1">
-    ${showOriginalPdf ? `<section id="fx-original" class="fx-original" aria-label="Original PDF">
+    ${showOriginalPdf ? `<section id="fx-original" class="fx-original" aria-label="Original PDF" hidden>
       <p class="fx-status" id="fx-op-status" aria-live="polite">The original PDF is rendered here with pdf.js.</p>
       <div id="fx-op-pages" role="group" aria-label="Original PDF pages"></div>
       <p class="fx-note">This is the unmodified original PDF with CodbDocs search, readability, forms and WCAG support layered from the accessible document model.</p>
     </section>` : ""}
-    <div id="fx-accessible" ${showOriginalPdf ? "hidden" : ""}>
+    <div id="fx-accessible">
     ${body}
     </div>
   </main>

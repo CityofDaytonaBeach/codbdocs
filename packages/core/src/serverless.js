@@ -284,6 +284,19 @@ let ocrWorkerPromise = null;
 async function loadTesseract(provided) {
   if (provided) return provided;
   if (typeof window !== 'undefined' && window.Tesseract) return window.Tesseract;
+  // Load Tesseract on demand so scanned pages become real text instead of flat images.
+  if (typeof document !== 'undefined') {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      s.async = true; s.onload = resolve;
+      s.onerror = () => reject(new Error('[codbdocs] Could not load Tesseract for OCR.'));
+      document.head.appendChild(s);
+    });
+    if (window.Tesseract) return window.Tesseract;
+  } else {
+    try { const m = await import('tesseract.js'); return m.default || m; } catch (e) { /* not installed */ }
+  }
   throw new Error('[codbdocs] Tesseract not found. Load or pass Tesseract before using OCR.');
 }
 
