@@ -498,7 +498,7 @@ function tagPanel(tags) {
     <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
   </section>`;
 }
-const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.3/vendor/pdf.js/pdf.min.js";
+const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.4/vendor/pdf.js/pdf.min.js";
 const CONFORMANCE = [
   "WCAG 2.1 Level A",
   "WCAG 2.1 Level AA",
@@ -667,6 +667,7 @@ function buildFidelityHtml(ir, options = {}) {
     { key: "explore", label: "Explore content", buttonId: "fx-ex-open", description: "Inspect extracted elements such as text, forms, figures, vectors, and tables." },
     { key: "readAloud", label: "Read aloud", buttonId: "fx-read", description: "Read current page text using browser speech synthesis." },
     { key: "print", label: "Print", buttonId: "fx-print", description: "Print only the embedded original PDF when available." },
+    { key: "reprocess", label: "Reprocess", buttonIds: ["fx-reprocess", "fx-reprocess-ai"], description: "Re-run the SDK conversion from the original PDF; 'Reprocess + AI' adds an AI fidelity pass. Hidden unless the host enables it for editors." },
     { key: "improve", label: "Improve Document", buttonId: "fx-improve", description: "Compare the original PDF rendering against the generated HTML and ask AI to return higher-fidelity HTML/CSS/IR improvements plus richer search context." },
     { key: "forms", label: "Form actions", buttonIds: ["fx-form-reset", "fx-form-submit"], description: "Reset, validate, submit, and synchronize form fields." },
     { key: "translate", label: "Translate", buttonId: "fx-lang-open", description: "Open translation controls when translation is enabled." },
@@ -717,6 +718,8 @@ function buildFidelityHtml(ir, options = {}) {
     qaEndpoint: options.qaEndpoint || null,
     aiEndpoint: options.aiEndpoint || null,
     improveEndpoint: options.improveEndpoint || options.documentImproveEndpoint || null,
+    reprocessEndpoint: options.reprocessEndpoint || null,
+    showReprocess: Boolean(options.showReprocess),
     knowledge: options.knowledge || options.documentContext || options.siteContext || null,
     feedbackEndpoint: options.feedbackEndpoint || null,
     feedbackEmail: options.feedbackEmail || null,
@@ -1157,6 +1160,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     ${menuFeatures.readAloud ? `<button type="button" id="fx-read" aria-pressed="false">Read aloud</button>` : ""}
     ${menuFeatures.print ? `<button type="button" id="fx-print">Print</button>` : ""}
     ${menuFeatures.improve ? `<button type="button" id="fx-improve">Improve Document</button>` : ""}
+    ${menuFeatures.reprocess ? `<button type="button" id="fx-reprocess" hidden>Reprocess</button><button type="button" id="fx-reprocess-ai" hidden>Reprocess + AI</button>` : ""}
     ${hasForms && menuFeatures.forms ? `<button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>` : ""}
     ${translate && menuFeatures.translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
     ${menuFeatures.download ? `<button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>` : ""}
@@ -1825,6 +1829,28 @@ ${backendDataScripts}
   }
   var improveBtn=document.getElementById('fx-improve');
   if(improveBtn) improveBtn.onclick=improveDocument;
+
+  // ---- Reprocess / Reprocess + AI --------------------------------------
+  // Hidden unless the host shows them (cfg.showReprocess or a host app un-hiding them for admins).
+  // Fires 'codbdocs:reprocess' {ai} so the host can re-run the SDK conversion from the original PDF,
+  // optionally followed by an AI fidelity pass; posts to cfg.reprocessEndpoint when no host handles it.
+  function reprocessDocument(ai){
+    var detail={ai:!!ai,documentId:cfg.documentId||null,title:cfg.title||null,sourceUrl:cfg.sourceUrl||null,version:cfg.version||null};
+    var event=new CustomEvent('codbdocs:reprocess',{detail:detail,cancelable:true});
+    var unhandled=document.dispatchEvent(event);
+    if(!unhandled) return;
+    var url=safeEndpoint(cfg.reprocessEndpoint);
+    if(!url){ say('Reprocess request is ready for the host application.'); return; }
+    say(ai?'Reprocessing with AI\u2026':'Reprocessing\u2026');
+    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(detail)}).then(function(r){
+      if(!r.ok) throw new Error('The reprocess service returned '+r.status+'.'); return r.json().catch(function(){ return {}; });
+    }).then(function(res){ say(res&&res.message?String(res.message):'Reprocess started.');
+      document.dispatchEvent(new CustomEvent('codbdocs:reprocess-result',{detail:res||{}}));
+    }).catch(function(err){ say('Reprocess failed: '+(err&&err.message||err)); });
+  }
+  ['fx-reprocess','fx-reprocess-ai'].forEach(function(id){ var b=document.getElementById(id); if(!b) return;
+    if(cfg.showReprocess) b.hidden=false;
+    b.onclick=function(){ reprocessDocument(id==='fx-reprocess-ai'); }; });
 
   // ---- interactive PDF forms -------------------------------------------
   var formInputs=[], formState={}, calculating=false;
