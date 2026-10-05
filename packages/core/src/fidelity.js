@@ -498,7 +498,7 @@ function tagPanel(tags) {
     <pre class="fx-pre">${esc(JSON.stringify(tags, null, 2))}</pre>
   </section>`;
 }
-const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.4/vendor/pdf.js/pdf.min.js";
+const PDFJS_URL = "https://cdn.jsdelivr.net/gh/CityofDaytonaBeach/codbdocs@0.1.2/vendor/pdf.js/pdf.min.js";
 const CONFORMANCE = [
   "WCAG 2.1 Level A",
   "WCAG 2.1 Level AA",
@@ -667,7 +667,6 @@ function buildFidelityHtml(ir, options = {}) {
     { key: "explore", label: "Explore content", buttonId: "fx-ex-open", description: "Inspect extracted elements such as text, forms, figures, vectors, and tables." },
     { key: "readAloud", label: "Read aloud", buttonId: "fx-read", description: "Read current page text using browser speech synthesis." },
     { key: "print", label: "Print", buttonId: "fx-print", description: "Print only the embedded original PDF when available." },
-    { key: "reprocess", label: "Reprocess", buttonIds: ["fx-reprocess", "fx-reprocess-ai"], description: "Re-run the SDK conversion from the original PDF; 'Reprocess + AI' adds an AI fidelity pass. Hidden unless the host enables it for editors." },
     { key: "improve", label: "Improve Document", buttonId: "fx-improve", description: "Compare the original PDF rendering against the generated HTML and ask AI to return higher-fidelity HTML/CSS/IR improvements plus richer search context." },
     { key: "forms", label: "Form actions", buttonIds: ["fx-form-reset", "fx-form-submit"], description: "Reset, validate, submit, and synchronize form fields." },
     { key: "translate", label: "Translate", buttonId: "fx-lang-open", description: "Open translation controls when translation is enabled." },
@@ -718,8 +717,6 @@ function buildFidelityHtml(ir, options = {}) {
     qaEndpoint: options.qaEndpoint || null,
     aiEndpoint: options.aiEndpoint || null,
     improveEndpoint: options.improveEndpoint || options.documentImproveEndpoint || null,
-    reprocessEndpoint: options.reprocessEndpoint || null,
-    showReprocess: Boolean(options.showReprocess),
     knowledge: options.knowledge || options.documentContext || options.siteContext || null,
     feedbackEndpoint: options.feedbackEndpoint || null,
     feedbackEmail: options.feedbackEmail || null,
@@ -952,6 +949,7 @@ html[data-view=reflow] .fx-reflow img{max-width:100%;height:auto}
 .fx-reflow-field :disabled,.fx-reflow-field [readonly]{background:#f0f2f4;color:#4b5563}
 html.fx-contrast body,html.fx-contrast .fx-reflow,html.fx-contrast main.fx-stage{background:#000;color:#fff}
 html.fx-contrast .fx-raster{filter:invert(1) hue-rotate(180deg)}
+.fx-page[data-rebuilt="1"]{height:auto!important;min-height:0!important}.fx-page[data-rebuilt="1"]>.fx-canvas{display:none!important}.fx-rebuilt{background:#fff;color:#1a1a1a;padding:3rem 3.5rem;font:1rem/1.6 system-ui,sans-serif;box-sizing:border-box}.fx-rebuilt h1,.fx-rebuilt h2,.fx-rebuilt h3,.fx-rebuilt h4,.fx-rebuilt h5,.fx-rebuilt h6{line-height:1.25;margin:1.2em 0 .5em}.fx-rebuilt p{margin:0 0 .75em}.fx-rebuilt ul,.fx-rebuilt ol{margin:0 0 .9em;padding-left:1.75em}.fx-rebuilt ul{list-style:disc}.fx-rebuilt ol{list-style:decimal}.fx-rebuilt table{border-collapse:collapse;width:100%;margin:0 0 1em}.fx-rebuilt th,.fx-rebuilt td{border:1px solid #9aa3ad;padding:.35em .5em;text-align:left;vertical-align:top}.fx-rebuilt th{background:#f1f2f2}html.fx-contrast .fx-rebuilt{background:#000;color:#fff}
 html.fx-contrast .fx-reflow a{color:#ffd400}
 .fx-panel{background:#fff;border-radius:12px;padding:1.4rem 1.6rem;width:min(60rem,100%);color:#16181a;
   box-shadow:0 0 0 1px rgba(0,0,0,.06),0 6px 18px rgba(15,20,30,.08)}
@@ -1131,7 +1129,7 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     <span class="fx-brand-mark" aria-hidden="true">CD</span>
     <div class="fx-title-row">
       <h1>${esc(title)}</h1>
-      ${showOriginalPdf ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
+      ${showOriginalPdf ? `<span class="fx-switch"><input type="checkbox" id="fx-pdf-toggle" checked title="Show original PDF"><label for="fx-pdf-toggle" title="Show original PDF">Original</label></span>` : ""}
     </div>
   </div>
   ${menuFeatures.pageNavigation ? `<nav class="fx-group" aria-label="Page navigation">
@@ -1160,7 +1158,6 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
     ${menuFeatures.readAloud ? `<button type="button" id="fx-read" aria-pressed="false">Read aloud</button>` : ""}
     ${menuFeatures.print ? `<button type="button" id="fx-print">Print</button>` : ""}
     ${menuFeatures.improve ? `<button type="button" id="fx-improve">Improve Document</button>` : ""}
-    ${menuFeatures.reprocess ? `<button type="button" id="fx-reprocess" hidden>Reprocess</button><button type="button" id="fx-reprocess-ai" hidden>Reprocess + AI</button>` : ""}
     ${hasForms && menuFeatures.forms ? `<button type="button" id="fx-form-reset">Reset form</button><button type="button" id="fx-form-submit">Submit form</button>` : ""}
     ${translate && menuFeatures.translate ? `<button type="button" id="fx-lang-open" aria-haspopup="dialog">Translate</button>` : ""}
     ${menuFeatures.download ? `<button type="button" id="fx-dl-open" aria-haspopup="dialog">Download</button>` : ""}
@@ -1191,12 +1188,12 @@ html.fx-screen-reader .fx-text{position:static!important;display:block!important
 <div class="fx-shell">
   ${showThumbs ? `<nav class="fx-rail" aria-label="Page thumbnails"><ul>${thumbs}</ul></nav>` : ""}
   <main class="fx-stage" id="fx-content" role="main" tabindex="-1">
-    ${showOriginalPdf ? `<section id="fx-original" class="fx-original" aria-label="Original PDF" hidden>
+    ${showOriginalPdf ? `<section id="fx-original" class="fx-original" aria-label="Original PDF">
       <p class="fx-status" id="fx-op-status" aria-live="polite">The original PDF is rendered here with pdf.js.</p>
       <div id="fx-op-pages" role="group" aria-label="Original PDF pages"></div>
       <p class="fx-note">This is the unmodified original PDF with CodbDocs search, readability, forms and WCAG support layered from the accessible document model.</p>
     </section>` : ""}
-    <div id="fx-accessible">
+    <div id="fx-accessible" ${showOriginalPdf ? "hidden" : ""}>
     ${body}
     </div>
   </main>
@@ -1774,7 +1771,7 @@ ${backendDataScripts}
         images:[].slice.call(page.querySelectorAll('.fx-img')).map(function(el){ return {alt:el.getAttribute('alt')||'',src:el.getAttribute('src')||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
         vectors:[].slice.call(page.querySelectorAll('.fx-vector-layer svg')).map(function(el){ return el.outerHTML; }),
         forms:[].slice.call(page.querySelectorAll('.fx-form-input')).map(function(el){ return {name:el.dataset.formName||'',type:el.dataset.formType||el.type||'',value:el.value||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
-        readableText:(page.innerText||'').replace(/\\s+/g,' ').trim()
+        scanned:page.getAttribute('data-native-text')==='0',rebuilt:page.getAttribute('data-rebuilt')==='1',readableText:(page.innerText||'').replace(/\\s+/g,' ').trim()
       };
     });
   }
@@ -1785,11 +1782,13 @@ ${backendDataScripts}
   function buildImprovePrompt(){
     return [
       'You are improving a CodbDocs PDF-to-HTML conversion.',
+      'SCANNED PAGES: a page whose convertedHtml.pages[].scanned is true has no real text in the PDF; its text is raw OCR laid over a page image, so it is flat and often garbled. Do not patch that OCR item by item. Rebuild the page as real, properly formatted document text read from originalPdf.pages[].renderedImage (OCR text is only a hint): headings h1-h6 in logical order, paragraphs with wrapped lines joined, ul/ol lists, and data tables with th headers. Match the original look (bold, italics, alignment). Never invent, summarize, reorder or drop content; keep names, numbers, dates and legal wording exactly; write [illegible] for unreadable words.',
+      'Return each rebuilt scanned page as rebuiltPages[]: {page, html} where html is a <div class="fx-rebuilt" data-rebuilt="ai"> containing only semantic markup. The host inserts it after the page .fx-canvas and sets data-rebuilt="1" on the .fx-page, which hides the flat scan and shows the formatted text; the original stays available through the Original PDF switch.',
       'Compare originalPdf.pages[].renderedImage and originalPdf.pages[].textOverlay against convertedHtml.pages[].html/text/images/vectors/forms.',
       'Update the generated HTML/CSS/IR so the accessible HTML fidelity view visually matches the original PDF as precisely as possible: page size, margins, text baselines, font sizing, line breaks, images, vectors, form positions, stacking order, and spacing.',
       'Preserve accessibility, searchable text, form semantics, ARIA labels, keyboard behavior, and WCAG/ADA overlays while improving visual fidelity.',
       'Use knowledge, elements, index, outline, forms, and rag to enrich search/retrieval context and produce better grounded results.',
-      'Return structured JSON with: summary, visualFindings, searchContextFindings, htmlPatches, cssPatches, irPatches, replacementHtml if available, updatedKnowledge, and citations/page references for every change.'
+      'Return structured JSON with: summary, visualFindings, searchContextFindings, htmlPatches, cssPatches, irPatches, rebuiltPages, replacementHtml if available, updatedKnowledge, and citations/page references for every change.'
     ].join('\\n');
   }
   function improveDocument(){
@@ -1829,28 +1828,6 @@ ${backendDataScripts}
   }
   var improveBtn=document.getElementById('fx-improve');
   if(improveBtn) improveBtn.onclick=improveDocument;
-
-  // ---- Reprocess / Reprocess + AI --------------------------------------
-  // Hidden unless the host shows them (cfg.showReprocess or a host app un-hiding them for admins).
-  // Fires 'codbdocs:reprocess' {ai} so the host can re-run the SDK conversion from the original PDF,
-  // optionally followed by an AI fidelity pass; posts to cfg.reprocessEndpoint when no host handles it.
-  function reprocessDocument(ai){
-    var detail={ai:!!ai,documentId:cfg.documentId||null,title:cfg.title||null,sourceUrl:cfg.sourceUrl||null,version:cfg.version||null};
-    var event=new CustomEvent('codbdocs:reprocess',{detail:detail,cancelable:true});
-    var unhandled=document.dispatchEvent(event);
-    if(!unhandled) return;
-    var url=safeEndpoint(cfg.reprocessEndpoint);
-    if(!url){ say('Reprocess request is ready for the host application.'); return; }
-    say(ai?'Reprocessing with AI\u2026':'Reprocessing\u2026');
-    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(detail)}).then(function(r){
-      if(!r.ok) throw new Error('The reprocess service returned '+r.status+'.'); return r.json().catch(function(){ return {}; });
-    }).then(function(res){ say(res&&res.message?String(res.message):'Reprocess started.');
-      document.dispatchEvent(new CustomEvent('codbdocs:reprocess-result',{detail:res||{}}));
-    }).catch(function(err){ say('Reprocess failed: '+(err&&err.message||err)); });
-  }
-  ['fx-reprocess','fx-reprocess-ai'].forEach(function(id){ var b=document.getElementById(id); if(!b) return;
-    if(cfg.showReprocess) b.hidden=false;
-    b.onclick=function(){ reprocessDocument(id==='fx-reprocess-ai'); }; });
 
   // ---- interactive PDF forms -------------------------------------------
   var formInputs=[], formState={}, calculating=false;

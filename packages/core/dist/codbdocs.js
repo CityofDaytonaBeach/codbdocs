@@ -1153,6 +1153,7 @@ html[data-view=reflow] .fx-reflow img{max-width:100%;height:auto}
 .fx-reflow-field :disabled,.fx-reflow-field [readonly]{background:#f0f2f4;color:#4b5563}
 html.fx-contrast body,html.fx-contrast .fx-reflow,html.fx-contrast main.fx-stage{background:#000;color:#fff}
 html.fx-contrast .fx-raster{filter:invert(1) hue-rotate(180deg)}
+.fx-page[data-rebuilt="1"]{height:auto!important;min-height:0!important}.fx-page[data-rebuilt="1"]>.fx-canvas{display:none!important}.fx-rebuilt{background:#fff;color:#1a1a1a;padding:3rem 3.5rem;font:1rem/1.6 system-ui,sans-serif;box-sizing:border-box}.fx-rebuilt h1,.fx-rebuilt h2,.fx-rebuilt h3,.fx-rebuilt h4,.fx-rebuilt h5,.fx-rebuilt h6{line-height:1.25;margin:1.2em 0 .5em}.fx-rebuilt p{margin:0 0 .75em}.fx-rebuilt ul,.fx-rebuilt ol{margin:0 0 .9em;padding-left:1.75em}.fx-rebuilt ul{list-style:disc}.fx-rebuilt ol{list-style:decimal}.fx-rebuilt table{border-collapse:collapse;width:100%;margin:0 0 1em}.fx-rebuilt th,.fx-rebuilt td{border:1px solid #9aa3ad;padding:.35em .5em;text-align:left;vertical-align:top}.fx-rebuilt th{background:#f1f2f2}html.fx-contrast .fx-rebuilt{background:#000;color:#fff}
 html.fx-contrast .fx-reflow a{color:#ffd400}
 .fx-panel{background:#fff;border-radius:12px;padding:1.4rem 1.6rem;width:min(60rem,100%);color:#16181a;
   box-shadow:0 0 0 1px rgba(0,0,0,.06),0 6px 18px rgba(15,20,30,.08)}
@@ -1974,7 +1975,7 @@ ${backendDataScripts}
         images:[].slice.call(page.querySelectorAll('.fx-img')).map(function(el){ return {alt:el.getAttribute('alt')||'',src:el.getAttribute('src')||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
         vectors:[].slice.call(page.querySelectorAll('.fx-vector-layer svg')).map(function(el){ return el.outerHTML; }),
         forms:[].slice.call(page.querySelectorAll('.fx-form-input')).map(function(el){ return {name:el.dataset.formName||'',type:el.dataset.formType||el.type||'',value:el.value||'',box:boxFor(el,canvas),style:el.getAttribute('style')||''}; }),
-        readableText:(page.innerText||'').replace(/\\s+/g,' ').trim()
+        scanned:page.getAttribute('data-native-text')==='0',rebuilt:page.getAttribute('data-rebuilt')==='1',readableText:(page.innerText||'').replace(/\\s+/g,' ').trim()
       };
     });
   }
@@ -1985,11 +1986,13 @@ ${backendDataScripts}
   function buildImprovePrompt(){
     return [
       'You are improving a CodbDocs PDF-to-HTML conversion.',
+      'SCANNED PAGES: a page whose convertedHtml.pages[].scanned is true has no real text in the PDF; its text is raw OCR laid over a page image, so it is flat and often garbled. Do not patch that OCR item by item. Rebuild the page as real, properly formatted document text read from originalPdf.pages[].renderedImage (OCR text is only a hint): headings h1-h6 in logical order, paragraphs with wrapped lines joined, ul/ol lists, and data tables with th headers. Match the original look (bold, italics, alignment). Never invent, summarize, reorder or drop content; keep names, numbers, dates and legal wording exactly; write [illegible] for unreadable words.',
+      'Return each rebuilt scanned page as rebuiltPages[]: {page, html} where html is a <div class="fx-rebuilt" data-rebuilt="ai"> containing only semantic markup. The host inserts it after the page .fx-canvas and sets data-rebuilt="1" on the .fx-page, which hides the flat scan and shows the formatted text; the original stays available through the Original PDF switch.',
       'Compare originalPdf.pages[].renderedImage and originalPdf.pages[].textOverlay against convertedHtml.pages[].html/text/images/vectors/forms.',
       'Update the generated HTML/CSS/IR so the accessible HTML fidelity view visually matches the original PDF as precisely as possible: page size, margins, text baselines, font sizing, line breaks, images, vectors, form positions, stacking order, and spacing.',
       'Preserve accessibility, searchable text, form semantics, ARIA labels, keyboard behavior, and WCAG/ADA overlays while improving visual fidelity.',
       'Use knowledge, elements, index, outline, forms, and rag to enrich search/retrieval context and produce better grounded results.',
-      'Return structured JSON with: summary, visualFindings, searchContextFindings, htmlPatches, cssPatches, irPatches, replacementHtml if available, updatedKnowledge, and citations/page references for every change.'
+      'Return structured JSON with: summary, visualFindings, searchContextFindings, htmlPatches, cssPatches, irPatches, rebuiltPages, replacementHtml if available, updatedKnowledge, and citations/page references for every change.'
     ].join('\\n');
   }
   function improveDocument(){
