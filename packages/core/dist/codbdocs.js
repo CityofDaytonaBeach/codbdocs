@@ -614,11 +614,67 @@ var CodbDocs = (() => {
       if (!out) return clean;
       return /[-\u2010-\u2015]$/.test(out) ? out.replace(/[-\u2010-\u2015]$/, "") + clean : `${out} ${clean}`;
     }, "");
-    const flushParagraph = () => {
+    const flushPara0 = () => {
       const text = joinRuns(pending);
       if (text) html += `<p>${esc(text)}</p>`;
       pending = [];
     };
+    // Column-aligned lines (member lists, schedules, rosters) become real tables in the reflow view.
+    let rowBuf = [];
+    const flushRows = () => {
+      if (!rowBuf.length) return;
+      const buf = rowBuf;
+      rowBuf = [];
+      const lines = [];
+      buf.forEach((r) => {
+        const l = lines.find((L) => Math.abs(L.top - r.top) < Math.max(3, r.fontSize * 0.45));
+        if (l) l.runs.push(r); else lines.push({ top: r.top, runs: [r] });
+      });
+      lines.sort((x, y) => x.top - y.top);
+      lines.forEach((L) => {
+        L.runs.sort((x, y) => x.left - y.left);
+        const cells = [];
+        L.runs.forEach((r) => {
+          const c = cells[cells.length - 1];
+          if (c && r.left - c.right < r.fontSize * 1.5) { c.text += " " + r.text; c.right = Math.max(c.right, r.right); }
+          else cells.push({ text: r.text, left: r.left, right: r.right, fontSize: r.fontSize });
+        });
+        L.cells = cells;
+      });
+      let i = 0;
+      while (i < lines.length) {
+        const first = lines[i];
+        let j = i;
+        const cols = first.cells.length >= 2 ? first.cells.map((c) => c.left) : null;
+        if (cols) {
+          while (j + 1 < lines.length) {
+            const nx = lines[j + 1];
+            const fs = first.cells[0].fontSize || 12;
+            if (nx.cells.length < 2 || nx.top - lines[j].top > fs * 2.6) break;
+            if (!nx.cells.every((c) => cols.some((x) => Math.abs(x - c.left) < Math.max(14, fs)))) break;
+            j++;
+          }
+        }
+        if (cols && j - i >= 2) {
+          flushPara0();
+          const rows = lines.slice(i, j + 1).map((L) => {
+            const row = cols.map(() => "");
+            L.cells.forEach((c) => {
+              let k = 0, d = Infinity;
+              cols.forEach((x, n) => { const dd = Math.abs(x - c.left); if (dd < d) { d = dd; k = n; } });
+              row[k] = row[k] ? row[k] + " " + c.text : c.text;
+            });
+            return row;
+          });
+          html += `<div class="fx-tablewrap fx-layout-table" tabindex="0" role="group" aria-label="Table"><table class="fx-datatable"><tbody>` + rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>`;
+          i = j + 1;
+        } else {
+          first.runs.forEach((r) => pushParagraphRun(r.o, r.text));
+          i++;
+        }
+      }
+    };
+    const flushParagraph = () => { flushRows(); flushPara0(); };
     const pushParagraphRun = (o, text) => {
       const bbox = Array.isArray(o.bbox) ? o.bbox : [];
       const fontSize = num(o.raw == null ? void 0 : o.raw.fontSize, 12) || 12;
@@ -697,7 +753,11 @@ var CodbDocs = (() => {
         flushParagraph();
         html += `<p><a href="${esc(((_o = o.raw) == null ? void 0 : _o.href) || ((_p = o.raw) == null ? void 0 : _p.url) || "#")}" target="_blank" rel="noopener">${esc(text)}</a></p>`;
       } else {
-        pushParagraphRun(o, text);
+        const bb = Array.isArray(o.bbox) ? o.bbox : [];
+        const fs = num(o.raw == null ? void 0 : o.raw.fontSize, 12) || 12;
+        const lft = num(bb[0]);
+        const w = num(bb[2]) || String(text).length * fs * 0.5;
+        rowBuf.push({ o, text, top: cssTop(pageHeight, bb, fs), left: lft, right: lft + w, fontSize: fs });
       }
     }
     flushParagraph();
